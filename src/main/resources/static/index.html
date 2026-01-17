@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Ticketing MVP</title>
+	<style>
+		body { font-family: Arial, sans-serif; margin: 24px; }
+		section { margin-bottom: 16px; }
+		button { margin-left: 8px; }
+		.list { margin-top: 8px; }
+	</style>
+</head>
+<body>
+	<h1>Concert Ticketing MVP</h1>
+
+	<section>
+		<label>User ID: <input id="userId" placeholder="user-123"></label>
+	</section>
+
+	<section>
+		<button id="loadConcerts">Load concerts</button>
+		<div id="concerts" class="list"></div>
+	</section>
+
+	<section>
+		<label>Concert ID: <input id="concertId" placeholder="1"></label>
+		<button id="loadSeats">Load seats</button>
+		<div id="seats" class="list"></div>
+	</section>
+
+	<section>
+		<label>Seat ID: <input id="seatId" placeholder="1"></label>
+		<button id="holdSeat">Hold seat</button>
+		<div id="holdResult" class="list"></div>
+	</section>
+
+	<section>
+		<label>Hold token: <input id="holdToken" placeholder="token"></label>
+		<button id="reserveSeat">Reserve</button>
+		<div id="reserveResult" class="list"></div>
+	</section>
+
+	<script src="app.js"></script>
+</body>
+</html>
