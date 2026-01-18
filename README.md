@@ -1,41 +1,42 @@
-﻿# Ticketing
+# Ticketing
 
-肄섏꽌???덈ℓ 諛깆뿏??Spring Boot + JPA + MySQL + Redis)? 濡쒓렇??湲곕컲 ?꾨줎?몃? ?ы븿??MVP ?ㅼ펷?덊넠?낅땲??
+콘서트 예매 백엔드(Spring Boot + JPA + MySQL + Redis)와 로그인 기반 프론트를 포함한 MVP 스켈레톤입니다.
 
-## ?먮쫫??
+## 흐름도
+
 ```mermaid
 flowchart TD
-    A[釉뚮씪?곗?] -->|濡쒓렇???뚯썝媛?? B[Spring Security]
-    B -->|?몄쬆 ?깃났| C[?쒗뵆由??붾㈃]
-    C -->|API ?붿껌| D[REST API]
-    D --> E[?쒕퉬??
+    A[브라우저] -->|로그인/회원가입| B[Spring Security]
+    B -->|인증 성공| C[템플릿 화면]
+    C -->|API 요청| D[REST API]
+    D --> E[서비스]
     E --> F[(MySQL)]
     E --> G[(Redis)]
-    G -->|罹먯떆/?? E
-    E --> H[?ㅼ?以꾨윭]
-    H -->|留뚮즺 ????뺣━| F
+    G -->|캐시/락| E
+    E --> H[스케줄러]
+    H -->|만료 홀드 정리| F
 ```
 
-## ?꾪궎?띿쿂
+## 아키텍처
 
 ```mermaid
 flowchart LR
-    FE[?뺤쟻/?쒗뵆由??꾨줎?? --> API[Spring Boot API]
+    FE[정적/템플릿 프론트] --> API[Spring Boot API]
     API --> JPA[JPA/Hibernate]
     JPA --> DB[(MySQL)]
     API --> R[(Redis)]
-    API --> S[?ㅼ?以꾨윭]
+    API --> S[스케줄러]
     S --> DB
 ```
 
-### 二쇱슂 而댄룷?뚰듃
-- **API/?쒕퉬??*: 肄섏꽌??醫뚯꽍 議고쉶, ??? ?덉빟 ?뺤젙
+### 주요 컴포넌트
+- **API/서비스**: 콘서트/좌석 조회, 홀드, 예약 확정
 - **MySQL**: `concert`, `seat`, `seat_hold`, `reservation`, `user_account`
-- **Redis**: 罹먯떆(肄섏꽌??醫뚯꽍), 醫뚯꽍 ?? ?湲곗뿴 ?좏겙(?뺤옣)
-- **?ㅼ?以꾨윭**: 留뚮즺??????뺣━
-- **蹂댁븞**: ??濡쒓렇??湲곕컲 ?몄쬆
+- **Redis**: 캐시(콘서트/좌석), 좌석 락, 대기열 토큰(확장)
+- **스케줄러**: 만료된 홀드 정리
+- **보안**: 폼 로그인 기반 인증
 
-## ERD(珥덉븞)
+## ERD(초안)
 
 ```mermaid
 erDiagram
@@ -89,10 +90,10 @@ erDiagram
     }
 ```
 
-## ?ㅽ뻾 ?먮쫫 ?붿빟
-1. 濡쒓렇???뚯썝媛????`/app` ?묎렐
-2. `/api/concerts`濡?肄섏꽌??紐⑸줉 議고쉶(罹먯떆 ?ъ슜)
-3. `/api/concerts/{id}/seats`濡?醫뚯꽍 議고쉶(罹먯떆 ?ъ슜)
-4. `/api/holds`濡?醫뚯꽍 ???Redis ???곸슜)
-5. `/api/reservations`濡??덉빟 ?뺤젙
-6. ?ㅼ?以꾨윭媛 留뚮즺????쒕? ?뺣━
+## 실행 흐름 요약
+1. 로그인/회원가입 후 `/app` 접근
+2. `/api/concerts`로 콘서트 목록 조회(캐시 사용)
+3. `/api/concerts/{id}/seats`로 좌석 조회(캐시 사용)
+4. `/api/holds`로 좌석 홀드(Redis 락 적용)
+5. `/api/reservations`로 예약 확정
+6. 스케줄러가 만료된 홀드를 정리
