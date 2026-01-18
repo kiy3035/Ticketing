@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ko">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>회원가입 | 콘서트 예매</title>
+	<link rel="stylesheet" href="/css/app.css">
+</head>
+<body class="auth">
+	<div class="auth-card">
+		<!-- 회원가입 제목 -->
+		<h1>회원가입</h1>
+		<p class="helper">간단한 정보로 빠르게 계정을 만들 수 있어요.</p>
+
+		<!-- 상태 메시지 -->
+		<p id="statusError" class="status error" hidden></p>
+		<p id="statusInfo" class="status info">아이디 4~20자, 비밀번호 6~50자</p>
+
+		<!-- 회원가입 폼 -->
+		<form id="signupForm">
+			<label>
+				<span>아이디</span>
+				<input id="username" type="text" placeholder="4~20자" minlength="4" maxlength="20" required>
+			</label>
+			<label>
+				<span>비밀번호</span>
+				<input id="password" type="password" placeholder="6~50자" minlength="6" maxlength="50" required>
+			</label>
+			<button type="submit" class="primary">회원가입</button>
+		</form>
+
+		<!-- 로그인 이동 -->
+		<p class="helper">이미 계정이 있나요? <a href="/login.html">로그인</a></p>
+	</div>
+
+	<script src="/js/signup.js"></script>
+</body>
+</html>

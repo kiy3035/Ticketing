@@ -1,5 +1,7 @@
 // 콘서트 목록을 불러와 카드로 렌더링한다.
 const listEl = document.getElementById('concertList');
+const userNameEl = document.getElementById('userName');
+const logoutBtn = document.getElementById('logoutBtn');
 
 const formatDate = (value) => {
 	const date = new Date(value);
@@ -18,9 +20,19 @@ const renderConcerts = (concerts) => {
 			<div class="meta">${concert.venue}</div>
 			<div class="meta">${formatDate(concert.startAt)} ~ ${formatDate(concert.endAt)}</div>
 			<div class="meta">상태: ${concert.status}</div>
-			<a class="primary" href="/app/concert/${concert.id}">좌석 보기</a>
+			<a class="primary" href="/concert.html?concertId=${concert.id}">좌석 보기</a>
 		</div>
 	`).join('');
+};
+
+const loadUser = async () => {
+	try {
+		const res = await fetch('/api/auth/me');
+		const name = await res.text();
+		userNameEl.textContent = name;
+	} catch (error) {
+		userNameEl.textContent = 'user';
+	}
 };
 
 const loadConcerts = async () => {
@@ -34,4 +46,15 @@ const loadConcerts = async () => {
 	}
 };
 
+const logout = async () => {
+	try {
+		await fetch('/logout', { method: 'POST' });
+	} finally {
+		window.location.href = '/login.html?logout';
+	}
+};
+
+logoutBtn.addEventListener('click', logout);
+
+loadUser();
 loadConcerts();

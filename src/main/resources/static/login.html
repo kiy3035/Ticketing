@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<html lang="ko">
 <head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
@@ -10,15 +10,15 @@
 	<div class="auth-card">
 		<!-- 로그인 제목 -->
 		<h1>콘서트 예매 로그인</h1>
+		<p class="helper">안전한 예매를 위해 로그인 후 이용하세요.</p>
 
 		<!-- 상태 메시지 -->
-		<p class="status ok" th:if="${param.signup}">회원가입이 완료되었습니다. 로그인하세요.</p>
-		<p class="status error" th:if="${param.error}">아이디 또는 비밀번호가 올바르지 않습니다.</p>
-		<p class="status info" th:if="${param.logout}">로그아웃되었습니다.</p>
+		<p id="statusOk" class="status ok" hidden>회원가입이 완료되었습니다. 로그인하세요.</p>
+		<p id="statusError" class="status error" hidden>아이디 또는 비밀번호가 올바르지 않습니다.</p>
+		<p id="statusLogout" class="status info" hidden>로그아웃되었습니다.</p>
 
 		<!-- 로그인 폼 -->
 		<form method="post" action="/login">
-			<input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
 			<label>
 				<span>아이디</span>
 				<input type="text" name="username" placeholder="아이디" required>
@@ -31,7 +31,9 @@
 		</form>
 
 		<!-- 회원가입 이동 -->
-		<p class="helper">계정이 없나요? <a href="/signup">회원가입</a></p>
+		<p class="helper">계정이 없나요? <a href="/signup.html">회원가입</a></p>
 	</div>
+
+	<script src="/js/login.js"></script>
 </body>
 </html>

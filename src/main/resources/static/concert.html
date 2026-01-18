@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ko">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>좌석 선택 | 콘서트 예매</title>
+	<link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+	<header class="topbar">
+		<a class="brand" href="/app.html">
+			<span class="logo">CT</span>
+			<span>Concert Ticketing</span>
+		</a>
+		<nav class="nav">
+			<span>좌석 선택</span>
+			<span>할인/쿠폰</span>
+			<span>공연 정보</span>
+		</nav>
+		<div class="user">
+			<span id="userName" class="badge">user</span>
+			<button id="logoutBtn" class="ghost">로그아웃</button>
+		</div>
+	</header>
+
+	<main class="container">
+		<section class="hero">
+			<div class="hero-card">
+				<h1 id="concertTitle">콘서트 상세</h1>
+				<p id="concertMeta">좌석을 선택해 예매를 진행하세요.</p>
+				<div class="hero-actions">
+					<button class="primary">빠른 예매</button>
+					<button class="outline">좌석 배치도</button>
+				</div>
+			</div>
+			<div class="stats">
+				<div class="stat">
+					<div class="label">남은 좌석</div>
+					<div class="value">1,240</div>
+				</div>
+				<div class="stat">
+					<div class="label">평균 대기</div>
+					<div class="value">2분</div>
+				</div>
+				<div class="stat">
+					<div class="label">현재 가격대</div>
+					<div class="value">55,000원</div>
+				</div>
+			</div>
+		</section>
+
+		<section>
+			<h2>좌석 현황</h2>
+			<div id="seatGrid" class="seat-grid"></div>
+			<div class="legend">
+				<span><i class="dot available"></i>예약 가능</span>
+				<span><i class="dot held"></i>임시 홀드</span>
+				<span><i class="dot reserved"></i>예약 완료</span>
+			</div>
+		</section>
+
+		<section class="panel">
+			<h2>예약 진행</h2>
+			<p>선택한 좌석을 홀드한 뒤 예약 확정을 진행하세요.</p>
+			<div class="row">
+				<input id="holdToken" placeholder="홀드 토큰" readonly>
+				<button id="reserveBtn" class="primary">예약 확정</button>
+			</div>
+			<div id="actionResult" class="status info"></div>
+		</section>
+	</main>
+
+	<script src="/js/concert.js"></script>
+</body>
+</html>

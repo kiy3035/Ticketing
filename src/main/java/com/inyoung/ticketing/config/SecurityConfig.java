@@ -2,7 +2,6 @@ package com.inyoung.ticketing.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -18,15 +17,17 @@ public class SecurityConfig {
 		http
 			// 접근 제어 규칙 정의
 			.authorizeHttpRequests(auth -> auth
-				.requestMatchers("/login", "/signup", "/css/**", "/js/**", "/images/**").permitAll()
+				.requestMatchers("/", "/index.html").permitAll()
+				.requestMatchers("/login.html", "/signup.html", "/css/**", "/js/**", "/images/**").permitAll()
+				.requestMatchers("/login", "/logout").permitAll()
 				.requestMatchers("/api/auth/**").permitAll()
-				.requestMatchers("/", "/app/**", "/api/**").authenticated()
+				.requestMatchers("/app.html", "/concert.html", "/api/**").authenticated()
 				.anyRequest().authenticated()
 			)
 			// 커스텀 로그인 페이지 사용
 			.formLogin(form -> form
-				.loginPage("/login")
-				.defaultSuccessUrl("/app", true)
+				.loginPage("/login.html")
+				.defaultSuccessUrl("/app.html", true)
 				.permitAll()
 			)
 			// 로그아웃 설정
@@ -35,9 +36,8 @@ public class SecurityConfig {
 				.logoutSuccessUrl("/login?logout")
 				.permitAll()
 			)
-			// API는 CSRF 제외 (간단한 프론트 호출용)
-			.csrf(csrf -> csrf.ignoringRequestMatchers("/api/**"))
-			.httpBasic(Customizer.withDefaults());
+			// 단순 데모용으로 CSRF 비활성화
+			.csrf(csrf -> csrf.disable());
 
 		return http.build();
 	}

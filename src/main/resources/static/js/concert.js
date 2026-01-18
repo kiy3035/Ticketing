@@ -1,13 +1,15 @@
 // 콘서트 상세 페이지에서 좌석과 예약 흐름을 처리한다.
-const container = document.querySelector('main.container');
 const seatGrid = document.getElementById('seatGrid');
 const holdTokenInput = document.getElementById('holdToken');
 const reserveBtn = document.getElementById('reserveBtn');
 const actionResult = document.getElementById('actionResult');
 const concertTitle = document.getElementById('concertTitle');
 const concertMeta = document.getElementById('concertMeta');
+const userNameEl = document.getElementById('userName');
+const logoutBtn = document.getElementById('logoutBtn');
 
-const concertId = container?.dataset?.concertId;
+const params = new URLSearchParams(window.location.search);
+const concertId = params.get('concertId');
 
 const renderSeats = (seats) => {
 	if (!seats.length) {
@@ -26,6 +28,7 @@ const renderSeats = (seats) => {
 
 const loadConcertDetail = async () => {
 	if (!concertId) {
+		seatGrid.innerHTML = '<div class="status error">잘못된 접근입니다.</div>';
 		return;
 	}
 
@@ -93,6 +96,24 @@ const reserveSeat = async () => {
 	}
 };
 
+const loadUser = async () => {
+	try {
+		const res = await fetch('/api/auth/me');
+		const name = await res.text();
+		userNameEl.textContent = name;
+	} catch (error) {
+		userNameEl.textContent = 'user';
+	}
+};
+
+const logout = async () => {
+	try {
+		await fetch('/logout', { method: 'POST' });
+	} finally {
+		window.location.href = '/login.html?logout';
+	}
+};
+
 seatGrid.addEventListener('click', (event) => {
 	const button = event.target.closest('button.seat');
 	if (!button || button.disabled) {
@@ -102,5 +123,7 @@ seatGrid.addEventListener('click', (event) => {
 });
 
 reserveBtn.addEventListener('click', reserveSeat);
+logoutBtn.addEventListener('click', logout);
 
+loadUser();
 loadConcertDetail();

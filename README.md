@@ -7,7 +7,7 @@
 ```mermaid
 flowchart TD
     A[브라우저] -->|로그인/회원가입| B[Spring Security]
-    B -->|인증 성공| C[템플릿 화면]
+    B -->|인증 성공| C[정적 화면]
     C -->|API 요청| D[REST API]
     D --> E[서비스]
     E --> F[(MySQL)]
@@ -21,7 +21,7 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    FE[정적/템플릿 프론트] --> API[Spring Boot API]
+    FE[정적 프론트] --> API[Spring Boot API]
     API --> JPA[JPA/Hibernate]
     JPA --> DB[(MySQL)]
     API --> R[(Redis)]
@@ -31,7 +31,7 @@ flowchart LR
 
 ### 주요 컴포넌트
 - **API/서비스**: 콘서트/좌석 조회, 홀드, 예약 확정
-- **MySQL**: `concert`, `seat`, `seat_hold`, `reservation`, `user_account`
+- **MySQL**: `concert`, `seat`, `seat_hold`, `reservation`, `users`
 - **Redis**: 캐시(콘서트/좌석), 좌석 락, 대기열 토큰(확장)
 - **스케줄러**: 만료된 홀드 정리
 - **보안**: 폼 로그인 기반 인증
@@ -45,8 +45,8 @@ erDiagram
     CONCERT ||--o{ RESERVATION : reserves
     SEAT ||--o{ SEAT_HOLD : holds
     SEAT ||--o{ RESERVATION : reserves
-    USER_ACCOUNT ||--o{ SEAT_HOLD : creates
-    USER_ACCOUNT ||--o{ RESERVATION : makes
+    USERS ||--o{ SEAT_HOLD : creates
+    USERS ||--o{ RESERVATION : makes
 
     CONCERT {
         BIGINT id PK
@@ -82,10 +82,10 @@ erDiagram
         STRING status
         DATETIME reserved_at
     }
-    USER_ACCOUNT {
+    USERS {
         BIGINT id PK
         STRING username
-        STRING password_hash
+        STRING pw
         DATETIME created_at
     }
 ```
