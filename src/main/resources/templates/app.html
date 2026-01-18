@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>콘서트 목록 | 콘서트 예매</title>
+	<link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+	<header class="topbar">
+		<div class="brand">Concert Ticketing</div>
+		<div class="user">
+			<span class="badge" th:text="${username}">user</span>
+			<form method="post" action="/logout">
+				<input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+				<button type="submit" class="ghost">로그아웃</button>
+			</form>
+		</div>
+	</header>
+
+	<main class="container">
+		<!-- 메인 소개 영역 -->
+		<section class="hero">
+			<h1>지금 예매 가능한 콘서트</h1>
+			<p>실시간 좌석 현황을 확인하고 빠르게 예약하세요.</p>
+		</section>
+
+		<!-- 콘서트 카드 목록 -->
+		<section>
+			<div id="concertList" class="card-grid"></div>
+		</section>
+	</main>
+
+	<script src="/js/app.js"></script>
+</body>
+</html>

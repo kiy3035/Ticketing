@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>좌석 선택 | 콘서트 예매</title>
+	<link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+	<header class="topbar">
+		<a class="brand" href="/app">Concert Ticketing</a>
+		<div class="user">
+			<span class="badge" th:text="${username}">user</span>
+			<form method="post" action="/logout">
+				<input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+				<button type="submit" class="ghost">로그아웃</button>
+			</form>
+		</div>
+	</header>
+
+	<main class="container" th:attr="data-concert-id=${concertId}">
+		<!-- 콘서트 상세 헤더 -->
+		<section class="hero">
+			<h1 id="concertTitle">콘서트 상세</h1>
+			<p id="concertMeta">좌석을 선택해 예매를 진행하세요.</p>
+		</section>
+
+		<!-- 좌석 목록 -->
+		<section>
+			<h2>좌석 현황</h2>
+			<div id="seatGrid" class="seat-grid"></div>
+		</section>
+
+		<!-- 홀드/예약 결과 -->
+		<section class="panel">
+			<h2>예약 진행</h2>
+			<p>선택한 좌석을 홀드한 뒤 예약 확정을 진행하세요.</p>
+			<div class="row">
+				<input id="holdToken" placeholder="홀드 토큰" readonly>
+				<button id="reserveBtn" class="primary">예약 확정</button>
+			</div>
+			<div id="actionResult" class="status info"></div>
+		</section>
+	</main>
+
+	<script src="/js/concert.js"></script>
+</body>
+</html>

@@ -4,6 +4,7 @@ import com.inyoung.ticketing.dto.ReservationRequest;
 import com.inyoung.ticketing.dto.ReservationResponse;
 import com.inyoung.ticketing.service.ReservationService;
 import jakarta.validation.Valid;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -22,7 +23,7 @@ public class ReservationController {
 
 	// 홀드 토큰으로 예약 확정
 	@PostMapping
-	public ReservationResponse confirm(@Valid @RequestBody ReservationRequest request) {
-		return reservationService.confirm(request);
+	public ReservationResponse confirm(Authentication authentication, @Valid @RequestBody ReservationRequest request) {
+		return reservationService.confirm(request, authentication.getName());
 	}
 }

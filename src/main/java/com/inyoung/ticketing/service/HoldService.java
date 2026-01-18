@@ -41,7 +41,7 @@ public class HoldService {
 
 	@Transactional
 	// 좌석을 홀드 상태로 전환하고 홀드 토큰을 발급
-	public HoldResponse createHold(HoldCreateRequest request) {
+	public HoldResponse createHold(HoldCreateRequest request, String userId) {
 		Seat seat = seatRepository.findById(request.getSeatId())
 			.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Seat not found"));
 
@@ -66,7 +66,7 @@ public class HoldService {
 			SeatHold hold = new SeatHold();
 			hold.setConcert(seat.getConcert());
 			hold.setSeat(seat);
-			hold.setUserId(request.getUserId());
+			hold.setUserId(userId);
 			hold.setHoldToken(UUID.randomUUID().toString());
 			hold.setExpiresAt(Instant.now().plusSeconds(properties.getHold().getTtlSeconds()));
 

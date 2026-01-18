@@ -4,6 +4,7 @@ import com.inyoung.ticketing.dto.HoldCreateRequest;
 import com.inyoung.ticketing.dto.HoldResponse;
 import com.inyoung.ticketing.service.HoldService;
 import jakarta.validation.Valid;
+import org.springframework.security.core.Authentication;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -25,8 +26,8 @@ public class HoldController {
 
 	// 좌석 홀드 생성
 	@PostMapping
-	public HoldResponse createHold(@Valid @RequestBody HoldCreateRequest request) {
-		return holdService.createHold(request);
+	public HoldResponse createHold(Authentication authentication, @Valid @RequestBody HoldCreateRequest request) {
+		return holdService.createHold(request, authentication.getName());
 	}
 
 	// 홀드 취소

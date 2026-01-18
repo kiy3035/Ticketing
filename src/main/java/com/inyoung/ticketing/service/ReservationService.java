@@ -42,7 +42,7 @@ public class ReservationService {
 
 	@Transactional
 	// 홀드를 검증하고 예약 확정 처리
-	public ReservationResponse confirm(ReservationRequest request) {
+	public ReservationResponse confirm(ReservationRequest request, String userId) {
 		SeatHold hold = seatHoldRepository.findByHoldToken(request.getHoldToken())
 			.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hold not found"));
 
@@ -61,7 +61,7 @@ public class ReservationService {
 			if (seat.getStatus() != SeatStatus.HELD) {
 				throw new ResponseStatusException(HttpStatus.CONFLICT, "Seat not held");
 			}
-			if (!hold.getUserId().equals(request.getUserId())) {
+			if (!hold.getUserId().equals(userId)) {
 				throw new ResponseStatusException(HttpStatus.CONFLICT, "Hold owner mismatch");
 			}
 
@@ -71,7 +71,7 @@ public class ReservationService {
 			Reservation reservation = new Reservation();
 			reservation.setConcert(hold.getConcert());
 			reservation.setSeat(seat);
-			reservation.setUserId(request.getUserId());
+			reservation.setUserId(userId);
 			reservation.setStatus(ReservationStatus.CONFIRMED);
 
 			Reservation saved = reservationRepository.save(reservation);
