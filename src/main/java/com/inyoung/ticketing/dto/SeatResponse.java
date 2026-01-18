@@ -3,6 +3,7 @@ package com.inyoung.ticketing.dto;
 import com.inyoung.ticketing.domain.Seat;
 import com.inyoung.ticketing.domain.SeatStatus;
 
+// 좌석 응답 DTO
 public class SeatResponse {
 	private Long id;
 	private String section;
@@ -10,6 +11,7 @@ public class SeatResponse {
 	private Long price;
 	private SeatStatus status;
 
+	// 엔티티에서 응답 DTO로 변환
 	public SeatResponse(Seat seat) {
 		this.id = seat.getId();
 		this.section = seat.getSection();
@@ -18,22 +20,27 @@ public class SeatResponse {
 		this.status = seat.getStatus();
 	}
 
+	// 좌석 ID
 	public Long getId() {
 		return id;
 	}
 
+	// 구역
 	public String getSection() {
 		return section;
 	}
 
+	// 좌석 번호
 	public String getSeatNo() {
 		return seatNo;
 	}
 
+	// 가격
 	public Long getPrice() {
 		return price;
 	}
 
+	// 좌석 상태
 	public SeatStatus getStatus() {
 		return status;
 	}

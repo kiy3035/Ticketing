@@ -1,8 +1,10 @@
+// 결과 출력 영역 DOM 캐시
 const concertsEl = document.getElementById('concerts');
 const seatsEl = document.getElementById('seats');
 const holdResultEl = document.getElementById('holdResult');
 const reserveResultEl = document.getElementById('reserveResult');
 
+// 콘서트 목록 조회 버튼 핸들러
 document.getElementById('loadConcerts').addEventListener('click', async () => {
 	concertsEl.textContent = 'Loading...';
 	const res = await fetch('/api/concerts');
@@ -10,6 +12,7 @@ document.getElementById('loadConcerts').addEventListener('click', async () => {
 	concertsEl.textContent = JSON.stringify(data, null, 2);
 });
 
+// 좌석 목록 조회 버튼 핸들러
 document.getElementById('loadSeats').addEventListener('click', async () => {
 	const concertId = document.getElementById('concertId').value.trim();
 	if (!concertId) {
@@ -22,6 +25,7 @@ document.getElementById('loadSeats').addEventListener('click', async () => {
 	seatsEl.textContent = JSON.stringify(data, null, 2);
 });
 
+// 좌석 홀드 요청 버튼 핸들러
 document.getElementById('holdSeat').addEventListener('click', async () => {
 	const userId = document.getElementById('userId').value.trim();
 	const concertId = document.getElementById('concertId').value.trim();
@@ -40,6 +44,7 @@ document.getElementById('holdSeat').addEventListener('click', async () => {
 	holdResultEl.textContent = JSON.stringify(data, null, 2);
 });
 
+// 예약 확정 버튼 핸들러
 document.getElementById('reserveSeat').addEventListener('click', async () => {
 	const userId = document.getElementById('userId').value.trim();
 	const holdToken = document.getElementById('holdToken').value.trim();

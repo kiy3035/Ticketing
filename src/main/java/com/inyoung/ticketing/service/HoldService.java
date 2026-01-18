@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+// 좌석 홀드 생성/취소 서비스
 @Service
 public class HoldService {
 	private final SeatRepository seatRepository;
@@ -25,6 +26,7 @@ public class HoldService {
 	private final LockService lockService;
 	private final TicketingProperties properties;
 
+	// 리포지토리/락/설정 주입
 	public HoldService(
 		SeatRepository seatRepository,
 		SeatHoldRepository seatHoldRepository,
@@ -38,6 +40,7 @@ public class HoldService {
 	}
 
 	@Transactional
+	// 좌석을 홀드 상태로 전환하고 홀드 토큰을 발급
 	public HoldResponse createHold(HoldCreateRequest request) {
 		Seat seat = seatRepository.findById(request.getSeatId())
 			.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Seat not found"));
@@ -70,11 +73,13 @@ public class HoldService {
 			SeatHold saved = seatHoldRepository.save(hold);
 			return new HoldResponse(saved);
 		} finally {
+			// 락 해제
 			lockService.unlock(lockKey, lockToken.get());
 		}
 	}
 
 	@Transactional
+	// 홀드 취소 및 좌석 상태 복원
 	public void cancelHold(Long holdId) {
 		SeatHold hold = seatHoldRepository.findById(holdId)
 			.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hold not found"));

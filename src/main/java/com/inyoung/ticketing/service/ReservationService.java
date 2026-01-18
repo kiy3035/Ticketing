@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+// 좌석 예약 확정 서비스
 @Service
 public class ReservationService {
 	private final SeatHoldRepository seatHoldRepository;
@@ -26,6 +27,7 @@ public class ReservationService {
 	private final ReservationRepository reservationRepository;
 	private final LockService lockService;
 
+	// 리포지토리/락 주입
 	public ReservationService(
 		SeatHoldRepository seatHoldRepository,
 		SeatRepository seatRepository,
@@ -39,6 +41,7 @@ public class ReservationService {
 	}
 
 	@Transactional
+	// 홀드를 검증하고 예약 확정 처리
 	public ReservationResponse confirm(ReservationRequest request) {
 		SeatHold hold = seatHoldRepository.findByHoldToken(request.getHoldToken())
 			.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hold not found"));
@@ -76,6 +79,7 @@ public class ReservationService {
 
 			return new ReservationResponse(saved);
 		} finally {
+			// 락 해제
 			lockService.unlock(lockKey, lockToken.get());
 		}
 	}

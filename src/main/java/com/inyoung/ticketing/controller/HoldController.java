@@ -12,20 +12,24 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+// 홀드 생성/취소 API 컨트롤러
 @RestController
 @RequestMapping("/api/holds")
 public class HoldController {
 	private final HoldService holdService;
 
+	// 서비스 주입
 	public HoldController(HoldService holdService) {
 		this.holdService = holdService;
 	}
 
+	// 좌석 홀드 생성
 	@PostMapping
 	public HoldResponse createHold(@Valid @RequestBody HoldCreateRequest request) {
 		return holdService.createHold(request);
 	}
 
+	// 홀드 취소
 	@DeleteMapping("/{holdId}")
 	public ResponseEntity<Void> cancelHold(@PathVariable Long holdId) {
 		holdService.cancelHold(holdId);

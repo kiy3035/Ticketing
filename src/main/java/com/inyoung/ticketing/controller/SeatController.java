@@ -8,15 +8,18 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+// 좌석 조회 API 컨트롤러
 @RestController
 @RequestMapping("/api/concerts/{concertId}/seats")
 public class SeatController {
 	private final SeatService seatService;
 
+	// 서비스 주입
 	public SeatController(SeatService seatService) {
 		this.seatService = seatService;
 	}
 
+	// 콘서트별 좌석 목록 조회
 	@GetMapping
 	public List<SeatResponse> listSeats(@PathVariable Long concertId) {
 		return seatService.listSeats(concertId);
