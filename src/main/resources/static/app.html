@@ -18,6 +18,19 @@
 			<span>고객센터</span>
 		</nav>
 		<div class="user">
+			<div class="notifications">
+				<button id="notificationBell" class="ghost bell" aria-label="알림 열기">
+					<svg class="bell-icon" viewBox="0 0 24 24" aria-hidden="true">
+						<path d="M12 22a2.5 2.5 0 0 0 2.45-2H9.55A2.5 2.5 0 0 0 12 22Z"/>
+						<path d="M18 16v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1l-2-2Z"/>
+					</svg>
+					<span id="notificationCount" class="badge count hidden">0</span>
+				</button>
+				<div id="notificationPanel" class="notification-panel">
+					<div class="notification-header">알림</div>
+					<ul id="notificationList" class="notification-list"></ul>
+				</div>
+			</div>
 			<span id="userName" class="badge">user</span>
 			<button id="logoutBtn" class="ghost">로그아웃</button>
 		</div>
@@ -36,15 +49,15 @@
 			<div class="stats">
 				<div class="stat">
 					<div class="label">실시간 접속자</div>
-					<div class="value">12,845</div>
+					<div id="statActiveUsers" class="value">-</div>
 				</div>
 				<div class="stat">
 					<div class="label">오늘 오픈</div>
-					<div class="value">8 공연</div>
+					<div id="statTodayOpen" class="value">-</div>
 				</div>
 				<div class="stat">
 					<div class="label">예약 성공률</div>
-					<div class="value">98.4%</div>
+					<div id="statSuccessRate" class="value">-</div>
 				</div>
 			</div>
 		</section>
@@ -54,7 +67,7 @@
 			<span class="chip">아이돌</span>
 			<span class="chip">밴드</span>
 			<span class="chip">힙합</span>
-			<span class="chip">페스티벌</span>
+			<span class="chip">클래식</span>
 		</section>
 
 		<section>
@@ -62,6 +75,7 @@
 		</section>
 	</main>
 
+	<script src="/js/notifications.js"></script>
 	<script src="/js/app.js"></script>
 </body>
 </html>

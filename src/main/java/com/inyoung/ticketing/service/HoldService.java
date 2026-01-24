@@ -5,13 +5,15 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 import com.inyoung.ticketing.config.TicketingProperties;
+import com.inyoung.ticketing.event.SeatHoldEventPublisher;
+import com.inyoung.ticketing.event.SeatHoldEventType;
 import com.inyoung.ticketing.domain.Seat;
-import com.inyoung.ticketing.domain.SeatHold;
 import com.inyoung.ticketing.domain.SeatStatus;
 import com.inyoung.ticketing.dto.HoldCreateRequest;
 import com.inyoung.ticketing.dto.HoldResponse;
+import com.inyoung.ticketing.hold.HoldInfo;
+import com.inyoung.ticketing.hold.HoldStore;
 import com.inyoung.ticketing.lock.LockService;
-import com.inyoung.ticketing.repository.SeatHoldRepository;
 import com.inyoung.ticketing.repository.SeatRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -22,21 +24,24 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class HoldService {
 	private final SeatRepository seatRepository;
-	private final SeatHoldRepository seatHoldRepository;
 	private final LockService lockService;
 	private final TicketingProperties properties;
+	private final HoldStore holdStore;
+	private final SeatHoldEventPublisher eventPublisher;
 
 	// 리포지토리/락/설정 주입
 	public HoldService(
 		SeatRepository seatRepository,
-		SeatHoldRepository seatHoldRepository,
 		LockService lockService,
-		TicketingProperties properties
+		TicketingProperties properties,
+		HoldStore holdStore,
+		SeatHoldEventPublisher eventPublisher
 	) {
 		this.seatRepository = seatRepository;
-		this.seatHoldRepository = seatHoldRepository;
 		this.lockService = lockService;
 		this.properties = properties;
+		this.holdStore = holdStore;
+		this.eventPublisher = eventPublisher;
 	}
 
 	@Transactional
@@ -56,22 +61,24 @@ public class HoldService {
 		}
 
 		try {
-			if (seat.getStatus() != SeatStatus.AVAILABLE) {
-				throw new ResponseStatusException(HttpStatus.CONFLICT, "Seat not available");
+			if (seat.getStatus() == SeatStatus.RESERVED) {
+				throw new ResponseStatusException(HttpStatus.CONFLICT, "Seat already reserved");
 			}
-
-			seat.setStatus(SeatStatus.HELD);
-			seatRepository.save(seat);
-
-			SeatHold hold = new SeatHold();
-			hold.setConcert(seat.getConcert());
-			hold.setSeat(seat);
-			hold.setUserId(userId);
-			hold.setHoldToken(UUID.randomUUID().toString());
-			hold.setExpiresAt(Instant.now().plusSeconds(properties.getHold().getTtlSeconds()));
-
-			SeatHold saved = seatHoldRepository.save(hold);
-			return new HoldResponse(saved);
+			String holdToken = UUID.randomUUID().toString();
+			Instant expiresAt = Instant.now().plusSeconds(properties.getHold().getTtlSeconds());
+			HoldInfo info = new HoldInfo(
+				holdToken,
+				seat.getConcert().getId(),
+				seat.getId(),
+				userId,
+				expiresAt
+			);
+			boolean created = holdStore.createHold(info, Duration.ofSeconds(properties.getHold().getTtlSeconds()));
+			if (!created) {
+				throw new ResponseStatusException(HttpStatus.CONFLICT, "Seat already held");
+			}
+			eventPublisher.publish(SeatHoldEventType.HOLD_CREATED, info);
+			return new HoldResponse(holdToken, expiresAt);
 		} finally {
 			// 락 해제
 			lockService.unlock(lockKey, lockToken.get());
@@ -80,16 +87,13 @@ public class HoldService {
 
 	@Transactional
 	// 홀드 취소 및 좌석 상태 복원
-	public void cancelHold(Long holdId) {
-		SeatHold hold = seatHoldRepository.findById(holdId)
+	public void cancelHold(String holdToken, String userId) {
+		HoldInfo info = holdStore.getHold(holdToken)
 			.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hold not found"));
-
-		Seat seat = hold.getSeat();
-		if (seat.getStatus() == SeatStatus.HELD) {
-			seat.setStatus(SeatStatus.AVAILABLE);
-			seatRepository.save(seat);
+		if (!info.getUserId().equals(userId)) {
+			throw new ResponseStatusException(HttpStatus.CONFLICT, "Hold owner mismatch");
 		}
-
-		seatHoldRepository.delete(hold);
+		holdStore.releaseHold(holdToken);
+		eventPublisher.publish(SeatHoldEventType.HOLD_CANCELED, info);
 	}
 }

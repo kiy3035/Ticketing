@@ -2,6 +2,9 @@
 const listEl = document.getElementById('concertList');
 const userNameEl = document.getElementById('userName');
 const logoutBtn = document.getElementById('logoutBtn');
+const statActiveUsers = document.getElementById('statActiveUsers');
+const statTodayOpen = document.getElementById('statTodayOpen');
+const statSuccessRate = document.getElementById('statSuccessRate');
 
 const formatDate = (value) => {
 	const date = new Date(value);
@@ -46,6 +49,20 @@ const loadConcerts = async () => {
 	}
 };
 
+const loadMetrics = async () => {
+	try {
+		const res = await fetch('/api/metrics');
+		const data = await res.json();
+		statActiveUsers.textContent = data.activeUsers.toLocaleString();
+		statTodayOpen.textContent = `${data.todayOpen} 공연`;
+		statSuccessRate.textContent = `${data.successRate.toFixed(1)}%`;
+	} catch (error) {
+		statActiveUsers.textContent = '-';
+		statTodayOpen.textContent = '-';
+		statSuccessRate.textContent = '-';
+	}
+};
+
 const logout = async () => {
 	try {
 		await fetch('/logout', { method: 'POST' });
@@ -58,3 +75,6 @@ logoutBtn.addEventListener('click', logout);
 
 loadUser();
 loadConcerts();
+loadMetrics();
+
+setInterval(loadMetrics, 5000);

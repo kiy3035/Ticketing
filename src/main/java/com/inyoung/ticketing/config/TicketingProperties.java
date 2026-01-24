@@ -6,10 +6,15 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "ticketing")
 public class TicketingProperties {
 	private Hold hold = new Hold();
+	private Kafka kafka = new Kafka();
 
 	// 홀드 관련 설정 접근자
 	public Hold getHold() {
 		return hold;
+	}
+
+	public Kafka getKafka() {
+		return kafka;
 	}
 
 	// 홀드 설정 묶음
@@ -35,6 +40,19 @@ public class TicketingProperties {
 		// 홀드 정리 스케줄러 주기 설정
 		public void setCleanupIntervalMs(long cleanupIntervalMs) {
 			this.cleanupIntervalMs = cleanupIntervalMs;
+		}
+	}
+
+	// Kafka 설정 묶음
+	public static class Kafka {
+		private String holdTopic = "ticketing.seat-hold-events";
+
+		public String getHoldTopic() {
+			return holdTopic;
+		}
+
+		public void setHoldTopic(String holdTopic) {
+			this.holdTopic = holdTopic;
 		}
 	}
 }

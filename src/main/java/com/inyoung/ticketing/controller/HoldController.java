@@ -31,9 +31,9 @@ public class HoldController {
 	}
 
 	// 홀드 취소
-	@DeleteMapping("/{holdId}")
-	public ResponseEntity<Void> cancelHold(@PathVariable Long holdId) {
-		holdService.cancelHold(holdId);
+	@DeleteMapping("/{holdToken}")
+	public ResponseEntity<Void> cancelHold(Authentication authentication, @PathVariable String holdToken) {
+		holdService.cancelHold(holdToken, authentication.getName());
 		return ResponseEntity.noContent().build();
 	}
 }

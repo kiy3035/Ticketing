@@ -35,4 +35,10 @@ public class QueueService {
 		Long rank = redisTemplate.opsForZSet().rank(QUEUE_RANK_KEY, token);
 		return rank != null ? rank + 1 : null;
 	}
+
+	// 대기열 사용자 수
+	public long countWaiting() {
+		Long size = redisTemplate.opsForZSet().size(QUEUE_RANK_KEY);
+		return size == null ? 0 : size;
+	}
 }

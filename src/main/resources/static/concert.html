@@ -18,6 +18,19 @@
 			<span>공연 정보</span>
 		</nav>
 		<div class="user">
+			<div class="notifications">
+				<button id="notificationBell" class="ghost bell" aria-label="알림 열기">
+					<svg class="bell-icon" viewBox="0 0 24 24" aria-hidden="true">
+						<path d="M12 22a2.5 2.5 0 0 0 2.45-2H9.55A2.5 2.5 0 0 0 12 22Z"/>
+						<path d="M18 16v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1l-2-2Z"/>
+					</svg>
+					<span id="notificationCount" class="badge count hidden">0</span>
+				</button>
+				<div id="notificationPanel" class="notification-panel">
+					<div class="notification-header">알림</div>
+					<ul id="notificationList" class="notification-list"></ul>
+				</div>
+			</div>
 			<span id="userName" class="badge">user</span>
 			<button id="logoutBtn" class="ghost">로그아웃</button>
 		</div>
@@ -36,22 +49,25 @@
 			<div class="stats">
 				<div class="stat">
 					<div class="label">남은 좌석</div>
-					<div class="value">1,240</div>
+					<div id="statRemainingSeats" class="value">-</div>
 				</div>
 				<div class="stat">
 					<div class="label">평균 대기</div>
-					<div class="value">2분</div>
+					<div id="statAvgWait" class="value">-</div>
 				</div>
 				<div class="stat">
 					<div class="label">현재 가격대</div>
-					<div class="value">55,000원</div>
+					<div id="statCurrentPrice" class="value">-</div>
 				</div>
 			</div>
 		</section>
 
 		<section>
 			<h2>좌석 현황</h2>
-			<div id="seatGrid" class="seat-grid"></div>
+			<div class="seat-wrapper">
+				<div class="stage">STAGE</div>
+				<div id="seatGrid" class="seat-map"></div>
+			</div>
 			<div class="legend">
 				<span><i class="dot available"></i>예약 가능</span>
 				<span><i class="dot held"></i>임시 홀드</span>
@@ -63,13 +79,14 @@
 			<h2>예약 진행</h2>
 			<p>선택한 좌석을 홀드한 뒤 예약 확정을 진행하세요.</p>
 			<div class="row">
-				<input id="holdToken" placeholder="홀드 토큰" readonly>
-				<button id="reserveBtn" class="primary">예약 확정</button>
+				<input id="holdToken" type="hidden" aria-hidden="true">
+				<button id="reserveBtn" class="primary">예매하기</button>
 			</div>
 			<div id="actionResult" class="status info"></div>
 		</section>
 	</main>
 
+	<script src="/js/notifications.js"></script>
 	<script src="/js/concert.js"></script>
 </body>
 </html>

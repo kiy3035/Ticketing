@@ -1,0 +1,76 @@
+package com.inyoung.ticketing.config;
+
+import java.util.HashMap;
+import java.util.Map;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.inyoung.ticketing.event.SeatHoldEvent;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.common.serialization.StringSerializer;
+import org.springframework.boot.autoconfigure.kafka.KafkaProperties;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.kafka.annotation.EnableKafka;
+import org.springframework.kafka.core.ConsumerFactory;
+import org.springframework.kafka.core.DefaultKafkaProducerFactory;
+import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.core.ProducerFactory;
+import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
+import org.springframework.kafka.support.serializer.JsonDeserializer;
+import org.springframework.kafka.support.serializer.JsonSerializer;
+import org.apache.kafka.common.serialization.StringDeserializer;
+
+// Kafka 프로듀서 설정
+@Configuration
+@EnableKafka
+public class KafkaConfig {
+	@Bean
+	public ProducerFactory<String, SeatHoldEvent> seatHoldProducerFactory(
+		KafkaProperties kafkaProperties,
+		ObjectMapper objectMapper
+	) {
+		Map<String, Object> configs = new HashMap<>(kafkaProperties.buildProducerProperties());
+		configs.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+		configs.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
+		return new DefaultKafkaProducerFactory<>(
+			configs,
+			new StringSerializer(),
+			new JsonSerializer<>(objectMapper)
+		);
+	}
+
+	@Bean
+	public KafkaTemplate<String, SeatHoldEvent> seatHoldKafkaTemplate(
+		ProducerFactory<String, SeatHoldEvent> seatHoldProducerFactory
+	) {
+		return new KafkaTemplate<>(seatHoldProducerFactory);
+	}
+
+	@Bean
+	public ConsumerFactory<String, SeatHoldEvent> seatHoldConsumerFactory(
+		KafkaProperties kafkaProperties,
+		ObjectMapper objectMapper
+	) {
+		Map<String, Object> configs = new HashMap<>(kafkaProperties.buildConsumerProperties());
+		configs.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+		configs.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, JsonDeserializer.class);
+		configs.put(JsonDeserializer.TRUSTED_PACKAGES, "com.inyoung.ticketing.event");
+		configs.put(JsonDeserializer.VALUE_DEFAULT_TYPE, SeatHoldEvent.class.getName());
+		return new DefaultKafkaConsumerFactory<>(
+			configs,
+			new StringDeserializer(),
+			new JsonDeserializer<>(SeatHoldEvent.class, objectMapper, false)
+		);
+	}
+
+	@Bean
+	public ConcurrentKafkaListenerContainerFactory<String, SeatHoldEvent> seatHoldKafkaListenerFactory(
+		ConsumerFactory<String, SeatHoldEvent> seatHoldConsumerFactory
+	) {
+		ConcurrentKafkaListenerContainerFactory<String, SeatHoldEvent> factory =
+			new ConcurrentKafkaListenerContainerFactory<>();
+		factory.setConsumerFactory(seatHoldConsumerFactory);
+		return factory;
+	}
+}

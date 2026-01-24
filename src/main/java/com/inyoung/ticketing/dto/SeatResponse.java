@@ -20,6 +20,14 @@ public class SeatResponse {
 		this.status = seat.getStatus();
 	}
 
+	public SeatResponse(Seat seat, SeatStatus status) {
+		this.id = seat.getId();
+		this.section = seat.getSection();
+		this.seatNo = seat.getSeatNo();
+		this.price = seat.getPrice();
+		this.status = status;
+	}
+
 	// 좌석 ID
 	public Long getId() {
 		return id;

@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ko">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>결제 | 콘서트 예매</title>
+	<link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+	<header class="topbar">
+		<a class="brand" href="/app.html">
+			<span class="logo">CT</span>
+			<span>Concert Ticketing</span>
+		</a>
+		<nav class="nav">
+			<span>좌석 선택</span>
+			<span>결제</span>
+			<span>완료</span>
+		</nav>
+		<div class="user">
+			<div class="notifications">
+				<button id="notificationBell" class="ghost bell" aria-label="알림 열기">
+					<svg class="bell-icon" viewBox="0 0 24 24" aria-hidden="true">
+						<path d="M12 22a2.5 2.5 0 0 0 2.45-2H9.55A2.5 2.5 0 0 0 12 22Z"/>
+						<path d="M18 16v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1l-2-2Z"/>
+					</svg>
+					<span id="notificationCount" class="badge count hidden">0</span>
+				</button>
+				<div id="notificationPanel" class="notification-panel">
+					<div class="notification-header">알림</div>
+					<ul id="notificationList" class="notification-list"></ul>
+				</div>
+			</div>
+			<span id="userName" class="badge">user</span>
+			<button id="logoutBtn" class="ghost">로그아웃</button>
+		</div>
+	</header>
+
+	<main class="container">
+		<section class="payment-hero">
+			<div class="payment-hero-card">
+				<span class="chip">Secure Checkout</span>
+				<h1>결제 정보를 확인해주세요</h1>
+				<p>선택한 콘서트와 좌석 정보를 확인하고 결제를 진행하세요.</p>
+			</div>
+			<div class="payment-badges">
+				<div class="payment-badge">
+					<span class="label">결제 진행 단계</span>
+					<strong>Step 2 / 3</strong>
+				</div>
+				<div class="payment-badge">
+					<span class="label">보안 결제</span>
+					<strong>SSL 적용</strong>
+				</div>
+			</div>
+		</section>
+
+		<section class="payment-grid">
+			<div class="panel payment-panel">
+				<div class="panel-header">
+					<h2>예매 요약</h2>
+					<span class="helper">실제 결제 전 최종 확인 단계입니다.</span>
+				</div>
+				<div class="summary">
+					<div class="summary-item">
+						<span class="label">콘서트</span>
+						<span id="payConcertTitle">-</span>
+					</div>
+					<div class="summary-item">
+						<span class="label">공연 정보</span>
+						<span id="payConcertMeta">-</span>
+					</div>
+					<div class="summary-item">
+						<span class="label">좌석</span>
+						<span id="paySeatInfo">-</span>
+					</div>
+					<div class="summary-item total">
+						<span class="label">총 결제 금액</span>
+						<span id="paySeatPrice" class="price">-</span>
+					</div>
+				</div>
+				<div id="payResult" class="status info"></div>
+			</div>
+			<aside class="panel payment-side">
+				<h3>결제 진행</h3>
+				<p class="helper">결제 버튼을 누르면 예약이 확정됩니다.</p>
+				<div class="pay-actions">
+					<button id="payBtn" class="primary">결제하기</button>
+					<a class="ghost" href="/concert.html?concertId=" id="backToSeat">좌석 다시 선택</a>
+				</div>
+				<div class="payment-note">
+					<span class="label">안내</span>
+					<p>결제 완료 후 취소/환불 정책에 따라 처리됩니다.</p>
+				</div>
+			</aside>
+		</section>
+	</main>
+
+	<script src="/js/notifications.js"></script>
+	<script src="/js/payment.js"></script>
+</body>
+</html>

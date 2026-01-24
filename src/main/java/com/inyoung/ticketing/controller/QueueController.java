@@ -42,4 +42,10 @@ public class QueueController {
 		}
 		return new QueueStatusResponse(token, rank);
 	}
+
+	// 대기열 현재 인원수 조회
+	@GetMapping("/count")
+	public long count() {
+		return queueService.countWaiting();
+	}
 }
