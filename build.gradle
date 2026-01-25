@@ -39,6 +39,7 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-security'
 	implementation 'org.springframework.kafka:spring-kafka:3.3.1'
 	implementation 'org.apache.kafka:kafka-clients:3.8.1'
+	implementation 'org.springframework.session:spring-session-data-redis:3.3.1'
 	implementation 'me.paulschwarz:spring-dotenv:4.0.0'
 	implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
 	compileOnly 'org.projectlombok:lombok'

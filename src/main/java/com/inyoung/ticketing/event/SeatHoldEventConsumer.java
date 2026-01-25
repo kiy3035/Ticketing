@@ -1,6 +1,8 @@
 package com.inyoung.ticketing.event;
 
 import java.time.Instant;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.inyoung.ticketing.domain.Seat;
 import com.inyoung.ticketing.dto.NotificationItem;
 import com.inyoung.ticketing.repository.SeatRepository;
@@ -13,17 +15,24 @@ import org.springframework.stereotype.Component;
 public class SeatHoldEventConsumer {
 	private final NotificationService notificationService;
 	private final SeatRepository seatRepository;
+	private final ObjectMapper objectMapper;
 
 	public SeatHoldEventConsumer(
 		NotificationService notificationService,
-		SeatRepository seatRepository
+		SeatRepository seatRepository,
+		ObjectMapper objectMapper
 	) {
 		this.notificationService = notificationService;
 		this.seatRepository = seatRepository;
+		this.objectMapper = objectMapper;
 	}
 
-	@KafkaListener(topics = { "ticketing.seat-hold-events" })
-	public void handleSeatHoldEvent(SeatHoldEvent event) {
+	@KafkaListener(
+		topics = { "ticketing.seat-hold-events" },
+		containerFactory = "seatHoldKafkaListenerFactory"
+	)
+	public void handleSeatHoldEvent(String payload) {
+		SeatHoldEvent event = parseEvent(payload);
 		if (event == null || event.getType() != SeatHoldEventType.HOLD_EXPIRED) {
 			return;
 		}
@@ -44,5 +53,16 @@ public class SeatHoldEventConsumer {
 
 	private String formatSeatMessage(Seat seat) {
 		return "예약이 만료되었습니다. " + seat.getSection() + "구역 " + seat.getSeatNo();
+	}
+
+	private SeatHoldEvent parseEvent(String payload) {
+		if (payload == null || payload.isBlank()) {
+			return null;
+		}
+		try {
+			return objectMapper.readValue(payload, SeatHoldEvent.class);
+		} catch (JsonProcessingException e) {
+			return null;
+		}
 	}
 }

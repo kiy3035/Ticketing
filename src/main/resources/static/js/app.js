@@ -5,6 +5,11 @@ const logoutBtn = document.getElementById('logoutBtn');
 const statActiveUsers = document.getElementById('statActiveUsers');
 const statTodayOpen = document.getElementById('statTodayOpen');
 const statSuccessRate = document.getElementById('statSuccessRate');
+const categoryButtons = document.querySelectorAll('.chip[data-category]');
+const searchInput = document.getElementById('searchInput');
+let allConcerts = [];
+let selectedCategory = 'ALL';
+let searchTimer = null;
 
 const formatDate = (value) => {
 	const date = new Date(value);
@@ -28,6 +33,17 @@ const renderConcerts = (concerts) => {
 	`).join('');
 };
 
+const buildQueryString = (query, category) => {
+	const params = new URLSearchParams();
+	if (query) {
+		params.set('query', query);
+	}
+	if (category && category !== 'ALL') {
+		params.set('category', category);
+	}
+	return params.toString();
+};
+
 const loadUser = async () => {
 	try {
 		const res = await fetch('/api/auth/me');
@@ -41,9 +57,12 @@ const loadUser = async () => {
 const loadConcerts = async () => {
 	listEl.innerHTML = '<div class="status info">콘서트 정보를 불러오는 중...</div>';
 	try {
-		const res = await fetch('/api/concerts');
+		const query = searchInput ? searchInput.value.trim() : '';
+		const qs = buildQueryString(query, selectedCategory);
+		const res = await fetch(qs ? `/api/concerts?${qs}` : '/api/concerts');
 		const data = await res.json();
-		renderConcerts(data);
+		allConcerts = Array.isArray(data) ? data : [];
+		renderConcerts(allConcerts);
 	} catch (error) {
 		listEl.innerHTML = '<div class="status error">콘서트 정보를 불러오지 못했습니다.</div>';
 	}
@@ -72,6 +91,23 @@ const logout = async () => {
 };
 
 logoutBtn.addEventListener('click', logout);
+categoryButtons.forEach((button) => {
+	button.addEventListener('click', () => {
+		categoryButtons.forEach((item) => item.classList.remove('active'));
+		button.classList.add('active');
+		selectedCategory = button.dataset.category;
+		loadConcerts();
+	});
+});
+
+if (searchInput) {
+	searchInput.addEventListener('input', () => {
+		if (searchTimer) {
+			clearTimeout(searchTimer);
+		}
+		searchTimer = setTimeout(loadConcerts, 300);
+	});
+}
 
 loadUser();
 loadConcerts();

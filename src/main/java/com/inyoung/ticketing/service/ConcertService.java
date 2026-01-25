@@ -3,6 +3,7 @@ package com.inyoung.ticketing.service;
 import java.util.List;
 import java.util.stream.Collectors;
 import com.inyoung.ticketing.cache.CacheNames;
+import com.inyoung.ticketing.domain.ConcertCategory;
 import com.inyoung.ticketing.dto.ConcertResponse;
 import com.inyoung.ticketing.repository.ConcertRepository;
 import org.springframework.cache.annotation.Cacheable;
@@ -19,10 +20,24 @@ public class ConcertService {
 	}
 
 	// 콘서트 목록 캐시 조회
-	@Cacheable(cacheNames = CacheNames.CONCERT_LIST)
-	public List<ConcertResponse> listConcerts() {
-		return concertRepository.findAll().stream()
+	@Cacheable(cacheNames = CacheNames.CONCERT_LIST, key = "'q:' + (#query ?: '') + ':c:' + (#category ?: '')")
+	public List<ConcertResponse> listConcerts(String query, String category) {
+		String trimmed = query == null ? null : query.trim();
+		String normalizedQuery = (trimmed == null || trimmed.isBlank()) ? null : trimmed;
+		ConcertCategory concertCategory = parseCategory(category);
+		return concertRepository.searchConcerts(concertCategory, normalizedQuery).stream()
 			.map(ConcertResponse::new)
 			.collect(Collectors.toList());
+	}
+
+	private ConcertCategory parseCategory(String category) {
+		if (category == null || category.isBlank() || "ALL".equalsIgnoreCase(category)) {
+			return null;
+		}
+		try {
+			return ConcertCategory.valueOf(category.toUpperCase());
+		} catch (IllegalArgumentException ex) {
+			return null;
+		}
 	}
 }

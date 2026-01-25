@@ -2,6 +2,7 @@ package com.inyoung.ticketing.dto;
 
 import java.time.Instant;
 import com.inyoung.ticketing.domain.Concert;
+import com.inyoung.ticketing.domain.ConcertCategory;
 import com.inyoung.ticketing.domain.ConcertStatus;
 
 // 콘서트 응답 DTO
@@ -12,6 +13,7 @@ public class ConcertResponse {
 	private Instant startAt;
 	private Instant endAt;
 	private ConcertStatus status;
+	private ConcertCategory category;
 
 	// 엔티티에서 응답 DTO로 변환
 	public ConcertResponse(Concert concert) {
@@ -21,6 +23,7 @@ public class ConcertResponse {
 		this.startAt = concert.getStartAt();
 		this.endAt = concert.getEndAt();
 		this.status = concert.getStatus();
+		this.category = concert.getCategory();
 	}
 
 	// 콘서트 ID
@@ -51,5 +54,10 @@ public class ConcertResponse {
 	// 진행 상태
 	public ConcertStatus getStatus() {
 		return status;
+	}
+
+	// 카테고리
+	public ConcertCategory getCategory() {
+		return category;
 	}
 }

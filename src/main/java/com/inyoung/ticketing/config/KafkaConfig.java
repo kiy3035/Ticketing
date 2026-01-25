@@ -4,7 +4,6 @@ import java.util.HashMap;
 import java.util.Map;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.inyoung.ticketing.event.SeatHoldEvent;
-import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.boot.autoconfigure.kafka.KafkaProperties;
@@ -17,7 +16,6 @@ import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.core.ProducerFactory;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
-import org.springframework.kafka.support.serializer.JsonDeserializer;
 import org.springframework.kafka.support.serializer.JsonSerializer;
 import org.apache.kafka.common.serialization.StringDeserializer;
 
@@ -48,27 +46,24 @@ public class KafkaConfig {
 	}
 
 	@Bean
-	public ConsumerFactory<String, SeatHoldEvent> seatHoldConsumerFactory(
-		KafkaProperties kafkaProperties,
-		ObjectMapper objectMapper
+	public ConsumerFactory<String, String> seatHoldConsumerFactory(
+		KafkaProperties kafkaProperties
 	) {
 		Map<String, Object> configs = new HashMap<>(kafkaProperties.buildConsumerProperties());
-		configs.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
-		configs.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, JsonDeserializer.class);
-		configs.put(JsonDeserializer.TRUSTED_PACKAGES, "com.inyoung.ticketing.event");
-		configs.put(JsonDeserializer.VALUE_DEFAULT_TYPE, SeatHoldEvent.class.getName());
+		configs.put("key.deserializer", StringDeserializer.class);
+		configs.put("value.deserializer", StringDeserializer.class);
 		return new DefaultKafkaConsumerFactory<>(
 			configs,
 			new StringDeserializer(),
-			new JsonDeserializer<>(SeatHoldEvent.class, objectMapper, false)
+			new StringDeserializer()
 		);
 	}
 
 	@Bean
-	public ConcurrentKafkaListenerContainerFactory<String, SeatHoldEvent> seatHoldKafkaListenerFactory(
-		ConsumerFactory<String, SeatHoldEvent> seatHoldConsumerFactory
+	public ConcurrentKafkaListenerContainerFactory<String, String> seatHoldKafkaListenerFactory(
+		ConsumerFactory<String, String> seatHoldConsumerFactory
 	) {
-		ConcurrentKafkaListenerContainerFactory<String, SeatHoldEvent> factory =
+		ConcurrentKafkaListenerContainerFactory<String, String> factory =
 			new ConcurrentKafkaListenerContainerFactory<>();
 		factory.setConsumerFactory(seatHoldConsumerFactory);
 		return factory;

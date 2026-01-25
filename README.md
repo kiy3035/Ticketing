@@ -68,6 +68,7 @@ sequenceDiagram
 - **Kafka**: 홀드 생성/해제/만료/예약 확정 이벤트 스트리밍
 - **스케줄러**: 만료된 홀드 이벤트 발행
 - **알림 소비자**: 만료 이벤트 수신 → 사용자 알림 저장(Redis)
+- **세션**: Redis 기반 세션 스토어(Spring Session)
 - **보안**: 폼 로그인 기반 인증
 
 ## 환경 설정
@@ -166,8 +167,95 @@ docker compose up -d
   - 분산 락: `lock:seat:{seatId}`
   - 좌석 상태 오버레이: DB의 `RESERVED` + Redis의 `HELD`
   - 알림 저장: `notify:user:{userId}`
+  - 세션 저장: `ticketing:sessions:*`
 - **Kafka**
   - 이벤트 스트림: `HOLD_CREATED`, `HOLD_CANCELED`, `HOLD_EXPIRED`, `RESERVATION_CONFIRMED`
+
+## Redis/Kafka 저장 문서
+
+### 1) 로그인
+**Redis**
+- 키: `active:users` (ZSET)
+- 값: member=`{userId}`, score=`현재시각(ms)`
+
+**Kafka**
+- 없음
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant API as API
+    participant R as Redis
+    U->>API: 로그인 성공
+    API->>R: ZADD active:users score now, member userId
+```
+
+### 2) 좌석 HOLD (`POST /api/holds`)
+**Redis**
+- `hold:seat:{seatId}` -> holdToken (TTL)
+- `hold:token:{holdToken}` -> 홀드 JSON payload (TTL)
+- `hold:expires` (ZSET) -> score=만료시각(ms), member=payload
+
+**Kafka**
+- `HOLD_CREATED` 이벤트 1건 발행
+
+```mermaid
+sequenceDiagram
+    participant FE as Frontend
+    participant API as API
+    participant R as Redis
+    participant K as Kafka
+    FE->>API: POST /api/holds
+    API->>R: SET hold:seat:{seatId} holdToken (TTL)
+    API->>R: SET hold:token:{holdToken} payload (TTL)
+    API->>R: ZADD hold:expires expiresAt payload
+    API->>K: HOLD_CREATED
+```
+
+### 3) 결제/예약 확정 (`POST /api/reservations`)
+**Redis**
+- 홀드 키 제거
+  - `DEL hold:seat:{seatId}`
+  - `DEL hold:token:{holdToken}`
+  - `ZREM hold:expires payload`
+
+**Kafka**
+- `RESERVATION_CONFIRMED` 이벤트 1건 발행
+
+```mermaid
+sequenceDiagram
+    participant FE as Frontend
+    participant API as API
+    participant R as Redis
+    participant K as Kafka
+    FE->>API: POST /api/reservations
+    API->>R: DEL hold:seat, hold:token
+    API->>R: ZREM hold:expires
+    API->>K: RESERVATION_CONFIRMED
+```
+
+### 4) 홀드 만료 (스케줄러)
+**Redis**
+- `hold:expires`에서 만료 항목 조회 후 제거
+
+**Kafka**
+- `HOLD_EXPIRED` 이벤트 발행
+
+**알림 저장 (Redis)**
+- `notify:user:{userId}` <- 알림 JSON 리스트 (LPUSH)
+
+```mermaid
+sequenceDiagram
+    participant SCH as Scheduler
+    participant R as Redis
+    participant K as Kafka
+    participant CON as Consumer
+    SCH->>R: 만료 항목 조회
+    SCH->>R: 만료 홀드 제거
+    SCH->>K: HOLD_EXPIRED
+    K->>CON: 이벤트 전달
+    CON->>R: LPUSH notify:user:{userId}
+```
 
 ## ERD(초안)
 
@@ -220,6 +308,7 @@ erDiagram
 - 알림: `notify:user:{userId}` (최대 50개, TTL 7일)
 - 대기열: `queue:rank`, `queue:token:{token}`
 - 접속자: `active:users` (5분 윈도우)
+- 세션: `ticketing:sessions:*` (Spring Session)
 
 ## 대기열 시스템
 - `GET /api/queue/ticket?userId=...` : 대기열 토큰 발급
@@ -234,6 +323,15 @@ erDiagram
 
 ## 활성 사용자 추적
 로그인/로그아웃 시점에 Redis ZSet으로 실시간 접속자를 기록합니다.
+
+## 세션 관리 (Redis)
+현재는 **Spring Session + Redis**로 서버 세션을 외부화합니다.
+- 세션 저장소: Redis
+- 네임스페이스: `ticketing:sessions`
+- 만료 시간: `server.servlet.session.timeout` (기본 30분)
+- 직렬화: JSON (RedisInsight에서 사람이 읽을 수 있도록 설정)
+
+세션 관련 설정은 `application.properties`에서 관리합니다.
 
 ## 프론트 예매 흐름
 1. `/app.html`에서 콘서트 목록/지표/알림 폴링

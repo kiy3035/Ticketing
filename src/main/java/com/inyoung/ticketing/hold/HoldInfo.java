@@ -1,6 +1,7 @@
 package com.inyoung.ticketing.hold;
 
 import java.time.Instant;
+import com.fasterxml.jackson.annotation.JsonFormat;
 
 // Redis에 저장되는 홀드 정보
 public class HoldInfo {
@@ -8,6 +9,7 @@ public class HoldInfo {
 	private Long concertId;
 	private Long seatId;
 	private String userId;
+	@JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSXXX", timezone = "Asia/Seoul")
 	private Instant expiresAt;
 
 	public HoldInfo() {

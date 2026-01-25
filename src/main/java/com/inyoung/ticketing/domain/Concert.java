@@ -35,6 +35,10 @@ public class Concert {
 	@Column(nullable = false, length = 20)
 	private ConcertStatus status = ConcertStatus.UPCOMING;
 
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false, length = 20)
+	private ConcertCategory category;
+
 	@Column(nullable = false, updatable = false)
 	private Instant createdAt;
 
@@ -97,6 +101,16 @@ public class Concert {
 	// 진행 상태 설정
 	public void setStatus(ConcertStatus status) {
 		this.status = status;
+	}
+
+	// 카테고리
+	public ConcertCategory getCategory() {
+		return category;
+	}
+
+	// 카테고리 설정
+	public void setCategory(ConcertCategory category) {
+		this.category = category;
 	}
 
 	// 생성 시각
