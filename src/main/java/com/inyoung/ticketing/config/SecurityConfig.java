@@ -1,7 +1,7 @@
 package com.inyoung.ticketing.config;
 
 import java.io.IOException;
-import com.inyoung.ticketing.service.ActiveUserTracker;
+import com.inyoung.ticketing.metrics.service.ActiveUserTracker;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -28,7 +28,7 @@ public class SecurityConfig {
 				.requestMatchers("/", "/index.html").permitAll()
 				.requestMatchers("/login.html", "/signup.html", "/css/**", "/js/**", "/images/**").permitAll()
 				.requestMatchers("/login", "/logout").permitAll()
-				.requestMatchers("/api/auth/**").permitAll()
+				.requestMatchers("/api/auth/signup").permitAll()
 				.requestMatchers("/app.html", "/concert.html", "/api/**").authenticated()
 				.anyRequest().authenticated()
 			)

@@ -1,7 +1,5 @@
 // 콘서트 목록을 불러와 카드로 렌더링한다.
 const listEl = document.getElementById('concertList');
-const userNameEl = document.getElementById('userName');
-const logoutBtn = document.getElementById('logoutBtn');
 const statActiveUsers = document.getElementById('statActiveUsers');
 const statTodayOpen = document.getElementById('statTodayOpen');
 const statSuccessRate = document.getElementById('statSuccessRate');
@@ -10,6 +8,8 @@ const searchInput = document.getElementById('searchInput');
 let allConcerts = [];
 let selectedCategory = 'ALL';
 let searchTimer = null;
+const concertCache = new Map();
+const CACHE_TTL_MS = 30000;
 
 const formatDate = (value) => {
 	const date = new Date(value);
@@ -33,6 +33,40 @@ const renderConcerts = (concerts) => {
 	`).join('');
 };
 
+const applyClientFilters = (concerts) => {
+	const query = searchInput ? searchInput.value.trim().toLowerCase() : '';
+	return concerts.filter((concert) => {
+		const matchesCategory = selectedCategory === 'ALL' || concert.category === selectedCategory;
+		if (!matchesCategory) {
+			return false;
+		}
+		if (!query) {
+			return true;
+		}
+		const title = (concert.title || '').toLowerCase();
+		const venue = (concert.venue || '').toLowerCase();
+		return title.includes(query) || venue.includes(query);
+	});
+};
+
+const buildCacheKey = (query, category) => `${category || 'ALL'}::${query || ''}`;
+
+const getCachedConcerts = (key) => {
+	const entry = concertCache.get(key);
+	if (!entry) {
+		return null;
+	}
+	if (Date.now() - entry.timestamp > CACHE_TTL_MS) {
+		concertCache.delete(key);
+		return null;
+	}
+	return entry.data;
+};
+
+const setCachedConcerts = (key, data) => {
+	concertCache.set(key, { timestamp: Date.now(), data });
+};
+
 const buildQueryString = (query, category) => {
 	const params = new URLSearchParams();
 	if (query) {
@@ -44,25 +78,38 @@ const buildQueryString = (query, category) => {
 	return params.toString();
 };
 
-const loadUser = async () => {
-	try {
-		const res = await fetch('/api/auth/me');
-		const name = await res.text();
-		userNameEl.textContent = name;
-	} catch (error) {
-		userNameEl.textContent = 'user';
-	}
-};
-
 const loadConcerts = async () => {
 	listEl.innerHTML = '<div class="status info">콘서트 정보를 불러오는 중...</div>';
 	try {
 		const query = searchInput ? searchInput.value.trim() : '';
+		const cacheKey = buildCacheKey(query, selectedCategory);
+		const allKey = buildCacheKey('', 'ALL');
+		if (!query && selectedCategory !== 'ALL') {
+			const cachedAll = getCachedConcerts(allKey);
+			if (cachedAll) {
+				allConcerts = cachedAll;
+				renderConcerts(applyClientFilters(allConcerts));
+				return;
+			}
+		}
+		const cached = getCachedConcerts(cacheKey);
+		if (cached) {
+			allConcerts = cached;
+			renderConcerts(applyClientFilters(allConcerts));
+			return;
+		}
+
 		const qs = buildQueryString(query, selectedCategory);
-		const res = await fetch(qs ? `/api/concerts?${qs}` : '/api/concerts');
-		const data = await res.json();
-		allConcerts = Array.isArray(data) ? data : [];
-		renderConcerts(allConcerts);
+		const result = await window.fetchJson(qs ? `/api/concerts?${qs}` : '/api/concerts');
+		if (!result.ok) {
+			throw new Error('fetch failed');
+		}
+		allConcerts = Array.isArray(result.data) ? result.data : [];
+		setCachedConcerts(cacheKey, allConcerts);
+		if (!query && selectedCategory === 'ALL') {
+			setCachedConcerts(allKey, allConcerts);
+		}
+		renderConcerts(applyClientFilters(allConcerts));
 	} catch (error) {
 		listEl.innerHTML = '<div class="status error">콘서트 정보를 불러오지 못했습니다.</div>';
 	}
@@ -70,11 +117,13 @@ const loadConcerts = async () => {
 
 const loadMetrics = async () => {
 	try {
-		const res = await fetch('/api/metrics');
-		const data = await res.json();
-		statActiveUsers.textContent = data.activeUsers.toLocaleString();
-		statTodayOpen.textContent = `${data.todayOpen} 공연`;
-		statSuccessRate.textContent = `${data.successRate.toFixed(1)}%`;
+		const result = await window.fetchJson('/api/metrics');
+		if (!result.ok) {
+			throw new Error('fetch failed');
+		}
+		statActiveUsers.textContent = result.data.activeUsers.toLocaleString();
+		statTodayOpen.textContent = `${result.data.todayOpen} 공연`;
+		statSuccessRate.textContent = `${result.data.successRate.toFixed(1)}%`;
 	} catch (error) {
 		statActiveUsers.textContent = '-';
 		statTodayOpen.textContent = '-';
@@ -82,15 +131,6 @@ const loadMetrics = async () => {
 	}
 };
 
-const logout = async () => {
-	try {
-		await fetch('/logout', { method: 'POST' });
-	} finally {
-		window.location.href = '/login.html?logout';
-	}
-};
-
-logoutBtn.addEventListener('click', logout);
 categoryButtons.forEach((button) => {
 	button.addEventListener('click', () => {
 		categoryButtons.forEach((item) => item.classList.remove('active'));
@@ -109,7 +149,6 @@ if (searchInput) {
 	});
 }
 
-loadUser();
 loadConcerts();
 loadMetrics();
 

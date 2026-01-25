@@ -2,10 +2,10 @@ package com.inyoung.ticketing.scheduler;
 
 import java.time.Instant;
 import java.util.List;
-import com.inyoung.ticketing.event.SeatHoldEventPublisher;
-import com.inyoung.ticketing.event.SeatHoldEventType;
-import com.inyoung.ticketing.hold.HoldPayload;
-import com.inyoung.ticketing.hold.HoldStore;
+import com.inyoung.ticketing.hold.event.SeatHoldEventPublisher;
+import com.inyoung.ticketing.hold.event.SeatHoldEventType;
+import com.inyoung.ticketing.hold.store.HoldPayload;
+import com.inyoung.ticketing.hold.store.HoldStore;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 

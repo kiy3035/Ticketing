@@ -28,20 +28,19 @@ form.addEventListener('submit', async (event) => {
 	}
 
 	try {
-		const res = await fetch('/api/auth/signup', {
+	const result = await window.fetchJson('/api/auth/signup', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ username, password })
 		});
-
-		if (!res.ok) {
-			if (res.status === 409) {
-				throw new Error('이미 사용 중인 아이디입니다.');
-			}
-			if (res.status === 400) {
-				throw new Error('입력값 형식이 올바르지 않습니다.');
-			}
-			throw new Error('회원가입에 실패했습니다.');
+	if (!result.ok) {
+		if (result.status === 409) {
+			throw new Error('이미 사용 중인 아이디입니다.');
+		}
+		if (result.status === 400) {
+			throw new Error(result.error?.message || '입력값 형식이 올바르지 않습니다.');
+		}
+		throw new Error(result.error?.message || '회원가입에 실패했습니다.');
 		}
 
 		window.location.href = '/login.html?signup';

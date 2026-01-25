@@ -1,9 +1,13 @@
-const bellButton = document.getElementById('notificationBell');
-const notificationPanel = document.getElementById('notificationPanel');
-const notificationCount = document.getElementById('notificationCount');
-const notificationList = document.getElementById('notificationList');
+const initNotifications = () => {
+	const bellButton = document.getElementById('notificationBell');
+	const notificationPanel = document.getElementById('notificationPanel');
+	const notificationCount = document.getElementById('notificationCount');
+	const notificationList = document.getElementById('notificationList');
 
-if (bellButton && notificationPanel && notificationCount && notificationList) {
+	if (!bellButton || !notificationPanel || !notificationCount || !notificationList) {
+		return;
+	}
+
 	const renderNotifications = (items) => {
 		notificationList.innerHTML = '';
 		if (!items.length) {
@@ -37,13 +41,12 @@ if (bellButton && notificationPanel && notificationCount && notificationList) {
 
 	const fetchNotifications = async () => {
 		try {
-			const res = await fetch('/api/notifications');
-			if (!res.ok) {
+			const result = await window.fetchJson('/api/notifications');
+			if (!result.ok) {
 				return;
 			}
-			const data = await res.json();
-			updateCount(Number(data.unreadCount || 0));
-			renderNotifications(data.items || []);
+			updateCount(Number(result.data?.unreadCount || 0));
+			renderNotifications(result.data?.items || []);
 		} catch (error) {
 			// 알림 실패는 무시한다.
 		}
@@ -74,4 +77,6 @@ if (bellButton && notificationPanel && notificationCount && notificationList) {
 
 	fetchNotifications();
 	setInterval(fetchNotifications, 5000);
-}
+};
+
+window.initNotifications = initNotifications;

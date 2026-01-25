@@ -1,344 +1,57 @@
 # Ticketing
 
-콘서트 예매 백엔드(Spring Boot + JPA + MySQL + Redis + Kafka)와 로그인 기반 프론트를 포함한 MVP 스켈레톤입니다.
+백엔드 중심의 콘서트 예매 시스템입니다. Redis(세션/홀드/락/캐시)와 Kafka(이벤트 스트리밍)를 활용해 **동시성·정합성·확장성**을 고려한 설계를 구현했습니다. 로그인 기반 프론트까지 포함한 MVP이며, 실무 시나리오에 맞춘 흐름을 제공합니다.
 
-## 아키텍처
+## 포트폴리오 핵심 요약
+- **좌석 홀드/만료**: Redis TTL + 분산 락으로 경쟁 상태 해결
+- **이벤트 스트리밍**: Kafka로 HOLD/RESERVATION 이벤트 분리
+- **세션 외부화**: Spring Session + Redis
+- **캐시 계층**: 서버 Redis 캐시 + 클라이언트 캐시 하이브리드
+- **공통 응답/에러**: 성공/실패 응답 구조 통일
 
-```mermaid
-flowchart LR
-    subgraph client [Client]
-        Web[Static Web]
-    end
+## 문제 해결 포인트
+- **중복 예약 방지**: 좌석 단위 락 → 홀드 검증 → 예약 확정 순서로 경쟁 상황 제어
+- **만료 자동화**: Redis ZSET + 스케줄러로 만료 처리 및 알림 이벤트 발행
+- **관측성**: 지표 API + 캐시/보안 로그로 운영 관찰 가능
+- **확장성**: 세션/홀드/알림을 Redis로 외부화해 수평 확장 대비
 
-    subgraph api [Spring Boot API]
-        Sec[Security]
-        Ctrl[Controllers]
-        Svc[Services]
-        Sch[Schedulers]
-        Con[Kafka Consumers]
-    end
+## 핵심 기능
+- 로그인/회원가입 및 인증 기반 접근 제어
+- 콘서트 목록/카테고리/검색
+- 좌석 선택 → 홀드 → 예약 확정
+- 홀드 만료 알림(이벤트 기반)
+- 대기열 스텁, 지표 대시보드
 
-    subgraph data [Data]
-        DB[(MySQL)]
-        R[(Redis)]
-    end
+## 기술 스택
+- Spring Boot, Spring Security, Spring Data JPA
+- MySQL, Redis, Kafka
+- Static Frontend (Vanilla JS)
 
-    subgraph stream [Streaming]
-        K[Kafka]
-    end
-
-    Web --> Ctrl
-    Sec --> Ctrl
-    Ctrl --> Svc
-    Svc --> DB
-    Svc --> R
-    Svc --> K
-    Sch --> K
-    K --> Con
-    Con --> R
-```
-
-### 핵심 흐름 (Hold 만료 알림)
-
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant FE as Frontend
-    participant API as API
-    participant R as Redis
-    participant K as Kafka
-    participant SCH as Scheduler
-
-    U->>FE: 좌석 선택 후 예매하기
-    FE->>API: POST /api/holds
-    API->>R: hold:seat, hold:token, hold:expires (TTL)
-    API->>K: HOLD_CREATED
-
-    SCH->>R: 만료 홀드 스캔
-    SCH->>K: HOLD_EXPIRED
-    K->>API: Consumer 수신
-    API->>R: notify:user:{userId}
-    FE->>API: GET /api/notifications
-```
-
-### 주요 컴포넌트
-- **API/서비스**: 콘서트/좌석 조회, 홀드, 예약 확정
-- **MySQL**: `concert`, `seat`, `reservation`, `users`
-- **Redis**: 좌석 홀드 TTL, 분산 락, 좌석 상태 오버레이
-- **Kafka**: 홀드 생성/해제/만료/예약 확정 이벤트 스트리밍
-- **스케줄러**: 만료된 홀드 이벤트 발행
-- **알림 소비자**: 만료 이벤트 수신 → 사용자 알림 저장(Redis)
-- **세션**: Redis 기반 세션 스토어(Spring Session)
-- **보안**: 폼 로그인 기반 인증
-
-## 환경 설정
-프로젝트 루트의 `.env` 파일로 환경 변수를 관리합니다. (`.gitignore` 포함)
-
-```env
-# MySQL
-DB_URL=jdbc:mysql://localhost:3306/ticketing?useSSL=false&serverTimezone=UTC
-DB_USERNAME=root
-DB_PASSWORD=
-
-# Redis
-REDIS_HOST=localhost
-REDIS_PORT=6379
-
-# Kafka
-KAFKA_BOOTSTRAP_SERVERS=localhost:29092
-KAFKA_CONSUMER_GROUP=ticketing-notification
-```
-
-## 실행 방법
-### 인프라(Docker Compose 예시)
-Kafka/Zookeeper/Redis/Kafka UI/RedisInsight는 Docker로 실행할 수 있습니다.
-
-```yaml
-version: "3.8"
-
-services:
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.6.1
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-    ports:
-      - "2181:2181"
-
-  kafka:
-    image: confluentinc/cp-kafka:7.6.1
-    depends_on:
-      - zookeeper
-    ports:
-      - "9092:9092"
-      - "29092:29092"
-    environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-
-  kafka-ui:
-    image: provectuslabs/kafka-ui:latest
-    depends_on:
-      - kafka
-    ports:
-      - "8081:8080"
-    environment:
-      KAFKA_CLUSTERS_0_NAME: local
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
-
-  redis:
-    image: redis:7.2-alpine
-    ports:
-      - "6379:6379"
-
-  redisinsight:
-    image: redis/redisinsight:latest
-    depends_on:
-      - redis
-    ports:
-      - "5540:5540"
-```
-
-```bash
-docker compose up -d
-```
-
-### 애플리케이션 실행
+## 로컬 실행
 ```bash
 ./gradlew bootRun
 ```
 
-## 핵심 플로우
-1. 로그인/회원가입 후 `/app` 접근
-2. 콘서트 목록 조회: `GET /api/concerts`
-3. 좌석 조회: `GET /api/concerts/{id}/seats` (DB 예약 + Redis 홀드 오버레이)
-4. 홀드 생성: `POST /api/holds` (Redis TTL)
-5. 예약 확정: `POST /api/reservations` (DB 기록 + Redis 홀드 제거)
-6. 만료 홀드 스캔 → `HOLD_EXPIRED` 이벤트 발행
-7. 알림 소비자가 이벤트 수신 → Redis 알림 저장
+## 데모 시나리오
+1. 회원가입 → 로그인
+2. `/app.html`에서 카테고리/검색으로 콘서트 탐색
+3. `/concert.html?concertId=...`에서 좌석 선택
+4. 예매하기 → `/payment.html` 이동
+5. 결제하기 → 예약 확정 및 상태 갱신
+6. 홀드 만료 시 알림 패널에서 만료 알림 확인
 
-## Redis/Kafka 역할
-- **Redis**
-  - 홀드 TTL: `hold:seat:*`, `hold:token:*`, `hold:expires`
-  - 분산 락: `lock:seat:{seatId}`
-  - 좌석 상태 오버레이: DB의 `RESERVED` + Redis의 `HELD`
-  - 알림 저장: `notify:user:{userId}`
-  - 세션 저장: `ticketing:sessions:*`
-- **Kafka**
-  - 이벤트 스트림: `HOLD_CREATED`, `HOLD_CANCELED`, `HOLD_EXPIRED`, `RESERVATION_CONFIRMED`
+## 성능/캐시 전략 요약
+- **서버 캐시**: 콘서트 목록은 Redis 캐시로 응답 속도 및 DB 부하 최적화
+- **클라이언트 캐시**: 카테고리 전환은 30초 TTL 메모리 캐시로 즉시 반응
+- **세션 외부화**: Redis 세션으로 다중 인스턴스 확장 대응
 
-## Redis/Kafka 저장 문서
+## 실행 화면 스냅샷
+- `docs/assets/app-list.png` 콘서트 목록/필터
+- `docs/assets/concert-seat.png` 좌석 선택/홀드
+- `docs/assets/payment.png` 결제 요약
 
-### 1) 로그인
-**Redis**
-- 키: `active:users` (ZSET)
-- 값: member=`{userId}`, score=`현재시각(ms)`
-
-**Kafka**
-- 없음
-
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant API as API
-    participant R as Redis
-    U->>API: 로그인 성공
-    API->>R: ZADD active:users score now, member userId
-```
-
-### 2) 좌석 HOLD (`POST /api/holds`)
-**Redis**
-- `hold:seat:{seatId}` -> holdToken (TTL)
-- `hold:token:{holdToken}` -> 홀드 JSON payload (TTL)
-- `hold:expires` (ZSET) -> score=만료시각(ms), member=payload
-
-**Kafka**
-- `HOLD_CREATED` 이벤트 1건 발행
-
-```mermaid
-sequenceDiagram
-    participant FE as Frontend
-    participant API as API
-    participant R as Redis
-    participant K as Kafka
-    FE->>API: POST /api/holds
-    API->>R: SET hold:seat:{seatId} holdToken (TTL)
-    API->>R: SET hold:token:{holdToken} payload (TTL)
-    API->>R: ZADD hold:expires expiresAt payload
-    API->>K: HOLD_CREATED
-```
-
-### 3) 결제/예약 확정 (`POST /api/reservations`)
-**Redis**
-- 홀드 키 제거
-  - `DEL hold:seat:{seatId}`
-  - `DEL hold:token:{holdToken}`
-  - `ZREM hold:expires payload`
-
-**Kafka**
-- `RESERVATION_CONFIRMED` 이벤트 1건 발행
-
-```mermaid
-sequenceDiagram
-    participant FE as Frontend
-    participant API as API
-    participant R as Redis
-    participant K as Kafka
-    FE->>API: POST /api/reservations
-    API->>R: DEL hold:seat, hold:token
-    API->>R: ZREM hold:expires
-    API->>K: RESERVATION_CONFIRMED
-```
-
-### 4) 홀드 만료 (스케줄러)
-**Redis**
-- `hold:expires`에서 만료 항목 조회 후 제거
-
-**Kafka**
-- `HOLD_EXPIRED` 이벤트 발행
-
-**알림 저장 (Redis)**
-- `notify:user:{userId}` <- 알림 JSON 리스트 (LPUSH)
-
-```mermaid
-sequenceDiagram
-    participant SCH as Scheduler
-    participant R as Redis
-    participant K as Kafka
-    participant CON as Consumer
-    SCH->>R: 만료 항목 조회
-    SCH->>R: 만료 홀드 제거
-    SCH->>K: HOLD_EXPIRED
-    K->>CON: 이벤트 전달
-    CON->>R: LPUSH notify:user:{userId}
-```
-
-## ERD(초안)
-
-```mermaid
-erDiagram
-    CONCERT ||--o{ SEAT : has
-    CONCERT ||--o{ RESERVATION : reserves
-    SEAT ||--o{ RESERVATION : reserves
-    USERS ||--o{ RESERVATION : makes
-
-    CONCERT {
-        BIGINT id PK
-        STRING title
-        STRING venue
-        DATETIME start_at
-        DATETIME end_at
-        STRING status
-        DATETIME created_at
-    }
-    SEAT {
-        BIGINT id PK
-        BIGINT concert_id FK
-        STRING section
-        STRING seat_no
-        BIGINT price
-        STRING status
-    }
-    RESERVATION {
-        BIGINT id PK
-        BIGINT concert_id FK
-        BIGINT seat_id FK
-        STRING user_id
-        STRING status
-        DATETIME reserved_at
-    }
-    USERS {
-        BIGINT id PK
-        STRING username
-        STRING pw
-        DATETIME created_at
-    }
-```
-
-## 알림 API
-- `GET /api/notifications` : 알림 목록 조회(최신순) + 미확인 개수 반환
-- `DELETE /api/notifications` : 알림 목록 초기화(읽음 처리)
-
-## Redis 키 구조
-- 홀드: `hold:seat:{seatId}`, `hold:token:{holdToken}`, `hold:expires`
-- 알림: `notify:user:{userId}` (최대 50개, TTL 7일)
-- 대기열: `queue:rank`, `queue:token:{token}`
-- 접속자: `active:users` (5분 윈도우)
-- 세션: `ticketing:sessions:*` (Spring Session)
-
-## 대기열 시스템
-- `GET /api/queue/ticket?userId=...` : 대기열 토큰 발급
-- `GET /api/queue/status?token=...` : 대기 순번 조회
-- `GET /api/queue/count` : 현재 대기 인원수 조회
-
-## 메트릭스 API
-- `GET /api/metrics` : 메인 지표 조회
-  - `activeUsers`: 최근 5분간 활성 사용자 수 (Redis 기반)
-  - `todayOpen`: 오늘 오픈 공연 수
-  - `successRate`: 예약 성공률
-
-## 활성 사용자 추적
-로그인/로그아웃 시점에 Redis ZSet으로 실시간 접속자를 기록합니다.
-
-## 세션 관리 (Redis)
-현재는 **Spring Session + Redis**로 서버 세션을 외부화합니다.
-- 세션 저장소: Redis
-- 네임스페이스: `ticketing:sessions`
-- 만료 시간: `server.servlet.session.timeout` (기본 30분)
-- 직렬화: JSON (RedisInsight에서 사람이 읽을 수 있도록 설정)
-
-세션 관련 설정은 `application.properties`에서 관리합니다.
-
-## 프론트 예매 흐름
-1. `/app.html`에서 콘서트 목록/지표/알림 폴링
-2. `/concert.html?concertId=...` 좌석 선택 → 예매하기 클릭 → 홀드 생성
-3. `/payment.html?concertId=...&seatId=...&holdToken=...`에서 결제(예약 확정)
-
-## 콘서트 상세 지표 (UI 연동)
-- **남은 좌석**: 해당 콘서트의 `AVAILABLE` 좌석 수를 클라이언트에서 계산해 표시
-- **평균 대기**: `/api/queue/count`를 5초 폴링해 대기열 길이를 기반으로 추정치 표시
-- **현재 가격대**: 좌석 클릭 시 선택 좌석의 가격을 표시
+## 문서
+- [아키텍처/플로우](docs/architecture.md)
+- [API 및 응답 스키마](docs/api.md)
+- [인프라/환경 설정](docs/infra.md)
+- [Redis/Kafka/세션 구조](docs/data.md)

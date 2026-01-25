@@ -9,8 +9,6 @@ const paySeatInfo = document.getElementById('paySeatInfo');
 const paySeatPrice = document.getElementById('paySeatPrice');
 const payBtn = document.getElementById('payBtn');
 const payResult = document.getElementById('payResult');
-const userNameEl = document.getElementById('userName');
-const logoutBtn = document.getElementById('logoutBtn');
 const backToSeat = document.getElementById('backToSeat');
 
 const setStatus = (message, status = 'info') => {
@@ -33,12 +31,12 @@ const loadPaymentInfo = async () => {
 	}
 
 	try {
-		const [concertRes, seatRes] = await Promise.all([
-			fetch('/api/concerts'),
-			fetch(`/api/concerts/${concertId}/seats`)
+		const [concertResult, seatResult] = await Promise.all([
+			window.fetchJson('/api/concerts'),
+			window.fetchJson(`/api/concerts/${concertId}/seats`)
 		]);
-		const concerts = await concertRes.json();
-		const seats = await seatRes.json();
+		const concerts = Array.isArray(concertResult.data) ? concertResult.data : [];
+		const seats = Array.isArray(seatResult.data) ? seatResult.data : [];
 		const concert = concerts.find((item) => String(item.id) === String(concertId));
 		const seat = seats.find((item) => String(item.id) === String(seatId));
 
@@ -64,42 +62,21 @@ const submitPayment = async () => {
 	}
 	setStatus('결제 처리 중...');
 	try {
-		const res = await fetch('/api/reservations', {
+		const result = await window.fetchJson('/api/reservations', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ holdToken })
 		});
-		const data = await res.json();
-		if (!res.ok) {
-			throw new Error(data.message || '결제 실패');
+		if (!result.ok) {
+			throw new Error(result.error?.message || '결제 실패');
 		}
-		setStatus(`결제 완료: 예약번호 ${data.reservationId}`, 'ok');
+		setStatus(`결제 완료: 예약번호 ${result.data.reservationId}`, 'ok');
 		payBtn.disabled = true;
 	} catch (error) {
 		setStatus(`결제 실패: ${error.message}`, 'error');
 	}
 };
 
-const loadUser = async () => {
-	try {
-		const res = await fetch('/api/auth/me');
-		const name = await res.text();
-		userNameEl.textContent = name;
-	} catch (error) {
-		userNameEl.textContent = 'user';
-	}
-};
-
-const logout = async () => {
-	try {
-		await fetch('/logout', { method: 'POST' });
-	} finally {
-		window.location.href = '/login.html?logout';
-	}
-};
-
 payBtn.addEventListener('click', submitPayment);
-logoutBtn.addEventListener('click', logout);
 
-loadUser();
 loadPaymentInfo();

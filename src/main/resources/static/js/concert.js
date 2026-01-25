@@ -5,8 +5,6 @@ const reserveBtn = document.getElementById('reserveBtn');
 const actionResult = document.getElementById('actionResult');
 const concertTitle = document.getElementById('concertTitle');
 const concertMeta = document.getElementById('concertMeta');
-const userNameEl = document.getElementById('userName');
-const logoutBtn = document.getElementById('logoutBtn');
 const statRemainingSeats = document.getElementById('statRemainingSeats');
 const statAvgWait = document.getElementById('statAvgWait');
 const statCurrentPrice = document.getElementById('statCurrentPrice');
@@ -117,8 +115,8 @@ const loadConcertDetail = async () => {
 	}
 
 	try {
-		const concertRes = await fetch('/api/concerts');
-		const concerts = await concertRes.json();
+		const concertResult = await window.fetchJson('/api/concerts');
+		const concerts = Array.isArray(concertResult.data) ? concertResult.data : [];
 		const concert = concerts.find((item) => String(item.id) === String(concertId));
 		if (concert) {
 			concertTitle.textContent = concert.title;
@@ -129,8 +127,8 @@ const loadConcertDetail = async () => {
 	}
 
 	try {
-		const seatRes = await fetch(`/api/concerts/${concertId}/seats`);
-		const seats = await seatRes.json();
+		const seatResult = await window.fetchJson(`/api/concerts/${concertId}/seats`);
+		const seats = Array.isArray(seatResult.data) ? seatResult.data : [];
 		renderSeats(seats);
 	} catch (error) {
 		seatGrid.innerHTML = '<div class="status error">좌석 정보를 불러오지 못했습니다.</div>';
@@ -138,17 +136,16 @@ const loadConcertDetail = async () => {
 };
 
 const holdSeat = async (seatId) => {
-	const res = await fetch('/api/holds', {
+	const result = await window.fetchJson('/api/holds', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ concertId: Number(concertId), seatId: Number(seatId) })
 	});
-	const data = await res.json();
-	if (!res.ok) {
-		throw new Error(data.message || '홀드 실패');
+	if (!result.ok) {
+		throw new Error(result.error?.message || '홀드 실패');
 	}
-	holdTokenInput.value = data.holdToken;
-	return data;
+	holdTokenInput.value = result.data.holdToken;
+	return result.data;
 };
 
 const reserveSeat = async () => {
@@ -158,16 +155,15 @@ const reserveSeat = async () => {
 	}
 	actionResult.textContent = '예약 확정 중...';
 	try {
-		const res = await fetch('/api/reservations', {
+		const result = await window.fetchJson('/api/reservations', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ holdToken: holdTokenInput.value })
 		});
-		const data = await res.json();
-		if (!res.ok) {
-			throw new Error(data.message || '예약 실패');
+		if (!result.ok) {
+			throw new Error(result.error?.message || '예약 실패');
 		}
-		actionResult.textContent = `예약 완료: 예약번호 ${data.reservationId}`;
+		actionResult.textContent = `예약 완료: 예약번호 ${result.data.reservationId}`;
 		await loadConcertDetail();
 	} catch (error) {
 		actionResult.textContent = `예약 실패: ${error.message}`;
@@ -197,9 +193,8 @@ const startPayment = () => {
 
 const loadAvgWait = async () => {
 	try {
-		const res = await fetch('/api/queue/count');
-		const queueCount = await res.json();
-		const avgWaitMin = Math.max(1, Math.ceil(Number(queueCount) / 50));
+		const result = await window.fetchJson('/api/queue/count');
+		const avgWaitMin = Math.max(1, Math.ceil(Number(result.data) / 50));
 		statAvgWait.textContent = `${avgWaitMin}분`;
 	} catch (error) {
 		statAvgWait.textContent = '-';
@@ -215,24 +210,6 @@ const updateCurrentPrice = (seatId) => {
 	statCurrentPrice.textContent = `${seat.price.toLocaleString()}원`;
 };
 
-const loadUser = async () => {
-	try {
-		const res = await fetch('/api/auth/me');
-		const name = await res.text();
-		userNameEl.textContent = name;
-	} catch (error) {
-		userNameEl.textContent = 'user';
-	}
-};
-
-const logout = async () => {
-	try {
-		await fetch('/logout', { method: 'POST' });
-	} finally {
-		window.location.href = '/login.html?logout';
-	}
-};
-
 seatGrid.addEventListener('click', (event) => {
 	const button = event.target.closest('button.seat');
 	if (!button || button.disabled) {
@@ -244,9 +221,6 @@ seatGrid.addEventListener('click', (event) => {
 });
 
 reserveBtn.addEventListener('click', startPayment);
-logoutBtn.addEventListener('click', logout);
-
-loadUser();
 loadConcertDetail();
 loadAvgWait();
 setInterval(loadAvgWait, 5000);

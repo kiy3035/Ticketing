@@ -3,7 +3,7 @@ package com.inyoung.ticketing.config;
 import java.util.HashMap;
 import java.util.Map;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.inyoung.ticketing.event.SeatHoldEvent;
+import com.inyoung.ticketing.hold.event.SeatHoldEvent;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.boot.autoconfigure.kafka.KafkaProperties;
