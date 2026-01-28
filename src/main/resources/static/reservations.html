@@ -3,18 +3,18 @@
 <head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<title>콘서트 목록 | 콘서트 예매</title>
+	<title>예매내역 | 콘서트 예매</title>
 	<link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
 	<header class="topbar">
-		<div class="brand">
+		<a class="brand" href="/app.html">
 			<span class="logo">CT</span>
 			<span>Concert Ticketing</span>
-		</div>
+		</a>
 		<nav class="nav">
-			<a href="/app.html" class="active">콘서트</a>
-			<a href="/reservations.html">예매내역</a>
+			<a href="/app.html">콘서트</a>
+			<a href="/reservations.html" class="active">예매내역</a>
 			<span>고객센터</span>
 		</nav>
 		<div class="user">
@@ -40,44 +40,27 @@
 	<main class="container">
 		<section class="hero">
 			<div class="hero-card">
-				<h1>지금 예매 가능한 콘서트</h1>
-				<p>실시간 좌석 현황과 안전한 예약 프로세스를 제공합니다.</p>
+				<h1>예매내역</h1>
+				<p>완료된 예매 내역과 좌석 정보를 확인할 수 있습니다.</p>
 				<div class="hero-actions">
-					<button class="primary">인기 공연 보기</button>
-					<button class="outline">예매 가이드</button>
+					<a class="primary" href="/app.html">새 공연 예매</a>
+					<button class="outline" type="button">이용 안내</button>
 				</div>
 			</div>
-			<div class="stats">
-				<div class="stat">
-					<div class="label">실시간 접속자</div>
-					<div id="statActiveUsers" class="value">-</div>
-				</div>
-				<div class="stat">
-					<div class="label">오늘 오픈</div>
-					<div id="statTodayOpen" class="value">-</div>
-				</div>
-				<div class="stat">
-					<div class="label">예약 성공률</div>
-					<div id="statSuccessRate" class="value">-</div>
-				</div>
+			<div class="balance-card">
+				<div class="label">최근 예매 요약</div>
+				<div id="reservationSummary" class="balance-amount">-</div>
+				<div class="helper">최근 30일 기준으로 집계됩니다.</div>
 			</div>
 		</section>
 
-		<section class="filter-bar">
-			<div class="chip-group">
-				<button class="chip active" data-category="ALL">전체</button>
-				<button class="chip" data-category="IDOL">아이돌</button>
-				<button class="chip" data-category="BAND">밴드</button>
-				<button class="chip" data-category="HIPHOP">힙합</button>
-				<button class="chip" data-category="CLASSIC">클래식</button>
+		<section class="panel">
+			<div class="panel-header">
+				<h2>예매 리스트</h2>
+				<span class="helper">좌석 홀드/결제 이후 확정된 예약만 표시됩니다.</span>
 			</div>
-			<div class="search">
-				<input id="searchInput" type="text" placeholder="콘서트 검색">
-			</div>
-		</section>
-
-		<section>
-			<div id="concertList" class="card-grid"></div>
+			<div id="reservationList" class="reservation-list"></div>
+			<div id="reservationStatus" class="status info"></div>
 		</section>
 	</main>
 
@@ -85,6 +68,6 @@
 	<script src="/js/notifications.js"></script>
 	<script src="/js/topbar.js"></script>
 	<script src="/js/init.js"></script>
-	<script src="/js/app.js"></script>
+	<script src="/js/reservations.js"></script>
 </body>
 </html>

@@ -8,4 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface ReservationRepository extends JpaRepository<Reservation, Long> {
 	// 상태별 예약 개수
 	long countByStatus(ReservationStatus status);
+
+	// 사용자별 예약 내역 최신순 조회
+	java.util.List<Reservation> findByUserIdOrderByReservedAtDesc(String userId);
 }

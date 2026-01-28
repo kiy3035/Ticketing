@@ -3,6 +3,7 @@ package com.inyoung.ticketing.reservation.service;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import com.inyoung.ticketing.hold.event.SeatHoldEventPublisher;
 import com.inyoung.ticketing.hold.event.SeatHoldEventType;
 import com.inyoung.ticketing.hold.store.HoldInfo;
@@ -10,6 +11,7 @@ import com.inyoung.ticketing.hold.store.HoldStore;
 import com.inyoung.ticketing.lock.LockService;
 import com.inyoung.ticketing.reservation.domain.Reservation;
 import com.inyoung.ticketing.reservation.domain.ReservationStatus;
+import com.inyoung.ticketing.reservation.dto.ReservationItemResponse;
 import com.inyoung.ticketing.reservation.dto.ReservationRequest;
 import com.inyoung.ticketing.reservation.dto.ReservationResponse;
 import com.inyoung.ticketing.reservation.repository.ReservationRepository;
@@ -43,6 +45,26 @@ public class ReservationService {
 		this.lockService = lockService;
 		this.holdStore = holdStore;
 		this.eventPublisher = eventPublisher;
+	}
+
+	// 사용자 예약 내역 조회
+	@Transactional(readOnly = true)
+	public java.util.List<ReservationItemResponse> listByUser(String userId) {
+		return reservationRepository.findByUserIdOrderByReservedAtDesc(userId)
+			.stream()
+			.map(reservation -> new ReservationItemResponse(
+				reservation.getId(),
+				reservation.getConcert().getTitle(),
+				reservation.getConcert().getVenue(),
+				reservation.getConcert().getStartAt(),
+				reservation.getConcert().getEndAt(),
+				reservation.getSeat().getSection(),
+				reservation.getSeat().getSeatNo(),
+				reservation.getSeat().getPrice(),
+				reservation.getStatus(),
+				reservation.getReservedAt()
+			))
+			.collect(Collectors.toList());
 	}
 
 	@Transactional

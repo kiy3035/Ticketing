@@ -30,6 +30,9 @@ public class Users {
 	@Column(name = "pw", nullable = false, length = 120)
 	private String pw;
 
+	@Column(name = "point", nullable = false)
+	private Long point = 0L;
+
 	@Column(nullable = false, updatable = false)
 	private OffsetDateTime createdAt;
 
@@ -62,6 +65,16 @@ public class Users {
 	// 비밀번호 해시 설정
 	public void setPw(String pw) {
 		this.pw = pw;
+	}
+
+	// 포인트
+	public Long getPoint() {
+		return point;
+	}
+
+	// 포인트 설정
+	public void setPoint(Long point) {
+		this.point = point;
 	}
 
 	// 생성 시각

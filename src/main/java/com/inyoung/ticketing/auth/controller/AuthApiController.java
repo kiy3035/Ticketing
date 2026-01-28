@@ -1,6 +1,7 @@
 package com.inyoung.ticketing.auth.controller;
 
 import java.security.Principal;
+import com.inyoung.ticketing.auth.dto.MyPageResponse;
 import com.inyoung.ticketing.auth.dto.SignupRequest;
 import com.inyoung.ticketing.auth.service.UsersService;
 import com.inyoung.ticketing.metrics.service.ActiveUserTracker;
@@ -50,6 +51,22 @@ public class AuthApiController {
 		}
 		activeUserTracker.recordActive(name);
 		return ResponseEntity.ok(name);
+	}
+
+	// 마이페이지 정보 조회
+	@GetMapping("/me/profile")
+	public ResponseEntity<MyPageResponse> myPage(Authentication authentication) {
+		if (authentication == null
+			|| !authentication.isAuthenticated()
+			|| authentication instanceof AnonymousAuthenticationToken) {
+			return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+		}
+		String name = extractName(authentication);
+		if (name == null || name.isBlank()) {
+			return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+		}
+		activeUserTracker.recordActive(name);
+		return ResponseEntity.ok(usersService.loadMyPage(name));
 	}
 
 	private String extractName(Authentication authentication) {

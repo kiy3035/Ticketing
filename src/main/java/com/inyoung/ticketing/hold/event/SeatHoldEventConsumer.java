@@ -33,12 +33,17 @@ public class SeatHoldEventConsumer {
 	)
 	public void handleSeatHoldEvent(String payload) {
 		SeatHoldEvent event = parseEvent(payload);
-		if (event == null || event.getType() != SeatHoldEventType.HOLD_EXPIRED) {
+		if (event == null) {
+			return;
+		}
+		SeatHoldEventType type = event.getType();
+		if (type != SeatHoldEventType.HOLD_EXPIRED
+			&& type != SeatHoldEventType.RESERVATION_CONFIRMED) {
 			return;
 		}
 		String message = buildMessage(event);
 		NotificationItemResponse item = new NotificationItemResponse(
-			SeatHoldEventType.HOLD_EXPIRED.name(),
+			type.name(),
 			message,
 			Instant.now()
 		);
@@ -46,13 +51,22 @@ public class SeatHoldEventConsumer {
 	}
 
 	private String buildMessage(SeatHoldEvent event) {
+		if (event.getType() == SeatHoldEventType.RESERVATION_CONFIRMED) {
+			return seatRepository.findById(event.getSeatId())
+				.map(this::formatConfirmedMessage)
+				.orElse("결제가 완료되었습니다. 좌석 ID " + event.getSeatId());
+		}
 		return seatRepository.findById(event.getSeatId())
-			.map(this::formatSeatMessage)
+			.map(this::formatExpiredMessage)
 			.orElse("예약이 만료되었습니다. 좌석 ID " + event.getSeatId());
 	}
 
-	private String formatSeatMessage(Seat seat) {
+	private String formatExpiredMessage(Seat seat) {
 		return "예약이 만료되었습니다. " + seat.getSection() + "구역 " + seat.getSeatNo();
+	}
+
+	private String formatConfirmedMessage(Seat seat) {
+		return "결제가 완료되었습니다. " + seat.getSection() + "구역 " + seat.getSeatNo();
 	}
 
 	private SeatHoldEvent parseEvent(String payload) {
