@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.inyoung.ticketing.notification.dto.NotificationItemResponse;
 import com.inyoung.ticketing.notification.service.NotificationService;
+import com.inyoung.ticketing.notification.service.SseNotificationService;
 import com.inyoung.ticketing.seat.domain.Seat;
 import com.inyoung.ticketing.seat.repository.SeatRepository;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -14,15 +15,18 @@ import org.springframework.stereotype.Component;
 @Component
 public class SeatHoldEventConsumer {
 	private final NotificationService notificationService;
+	private final SseNotificationService sseNotificationService;
 	private final SeatRepository seatRepository;
 	private final ObjectMapper objectMapper;
 
 	public SeatHoldEventConsumer(
 		NotificationService notificationService,
+		SseNotificationService sseNotificationService,
 		SeatRepository seatRepository,
 		ObjectMapper objectMapper
 	) {
 		this.notificationService = notificationService;
+		this.sseNotificationService = sseNotificationService;
 		this.seatRepository = seatRepository;
 		this.objectMapper = objectMapper;
 	}
@@ -47,7 +51,12 @@ public class SeatHoldEventConsumer {
 			message,
 			Instant.now()
 		);
+		
+		// Redis에 알림 저장 (폴링용 백업)
 		notificationService.addNotification(event.getUserId(), item);
+		
+		// SSE로 실시간 알림 전송
+		sseNotificationService.sendNotification(event.getUserId(), item);
 	}
 
 	private String buildMessage(SeatHoldEvent event) {

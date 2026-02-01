@@ -8,6 +8,13 @@ services:
       ZOOKEEPER_CLIENT_PORT: 2181
     ports:
       - "2181:2181"
+    # 메모리 제한 설정 (8GB RAM 환경에 맞춤)
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
 
   kafka:
     image: confluentinc/cp-kafka:7.6.1
@@ -25,6 +32,13 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    # 메모리 제한 설정 (8GB RAM 환경에 맞춤)
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
 
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
@@ -36,12 +50,27 @@ services:
     environment:
       KAFKA_CLUSTERS_0_NAME: local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+    # Kafka UI도 선택사항이므로 메모리 제한
+    deploy:
+      resources:
+        limits:
+          memory: 256M
 
   redis:
     image: redis:7.2-alpine
     container_name: redis
     ports:
       - "6379:6379"
+    # 메모리 제한 설정 (8GB RAM 환경에 맞춤)
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    # Redis 메모리 정책 설정 (메모리 부족 시 자동 정리)
+    # 개발 환경: persistence 비활성화 (서버 재시작 시 데이터 초기화)
+    command: redis-server --maxmemory 400mb --maxmemory-policy allkeys-lru --save ""
 
   redisinsight:
     image: redis/redisinsight:latest
@@ -50,3 +79,8 @@ services:
       - "5540:5540"
     depends_on:
       - redis
+    # RedisInsight는 선택사항이므로 메모리 제한
+    deploy:
+      resources:
+        limits:
+          memory: 256M

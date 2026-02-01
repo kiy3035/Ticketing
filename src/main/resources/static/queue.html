@@ -3,7 +3,7 @@
 <head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<title>좌석 선택 | 콘서트 예매</title>
+	<title>대기열 | 콘서트 예매</title>
 	<link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
@@ -15,8 +15,7 @@
 		<nav class="nav">
 			<a href="/app.html">콘서트</a>
 			<a href="/reservations.html">예매내역</a>
-			<span>좌석 선택</span>
-			<span>할인/쿠폰</span>
+			<span>대기열</span>
 		</nav>
 		<div class="user">
 			<div class="notifications">
@@ -41,36 +40,27 @@
 	<main class="container">
 		<section class="hero">
 			<div class="hero-card">
-				<h1 id="concertTitle">콘서트 상세</h1>
-				<p id="concertMeta">좌석을 선택해 예매를 진행하세요.</p>
-				<div class="hero-actions">
-					<button class="primary">빠른 예매</button>
-					<button class="outline">좌석 배치도</button>
-				</div>
-			</div>
-		</section>
-
-		<section>
-			<h2>좌석 현황</h2>
-			<div class="seat-wrapper">
-				<div class="stage">STAGE</div>
-				<div id="seatGrid" class="seat-map"></div>
-			</div>
-			<div class="legend">
-				<span><i class="dot available"></i>예약 가능</span>
-				<span><i class="dot held"></i>임시 홀드</span>
-				<span><i class="dot reserved"></i>예약 완료</span>
+				<h1 id="concertTitle">대기열</h1>
+				<p id="concertMeta">예매를 위해 대기 중입니다.</p>
 			</div>
 		</section>
 
 		<section class="panel">
-			<h2>예약 진행</h2>
-			<p>선택한 좌석을 홀드한 뒤 예약 확정을 진행하세요.</p>
-			<div class="row">
-				<input id="holdToken" type="hidden" aria-hidden="true">
-				<button id="reserveBtn" class="primary">예매하기</button>
+			<div class="queue-status">
+				<div class="queue-info">
+					<div class="queue-stat">
+						<div class="label">현재 순번</div>
+						<div id="currentRank" class="value large">-</div>
+					</div>
+					<div class="queue-stat">
+						<div class="label">전체 대기인원</div>
+						<div id="totalWaiting" class="value large">-</div>
+					</div>
+				</div>
+				<div class="queue-message">
+					<p id="queueMessage">대기열에 진입 중...</p>
+				</div>
 			</div>
-			<div id="actionResult" class="status info"></div>
 		</section>
 	</main>
 
@@ -78,6 +68,6 @@
 	<script src="/js/notifications.js"></script>
 	<script src="/js/topbar.js"></script>
 	<script src="/js/init.js"></script>
-	<script src="/js/concert.js"></script>
+	<script src="/js/queue.js"></script>
 </body>
 </html>

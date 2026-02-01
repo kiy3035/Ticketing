@@ -8,6 +8,8 @@ const initNotifications = () => {
 		return;
 	}
 
+	let eventSource = null;
+
 	const renderNotifications = (items) => {
 		notificationList.innerHTML = '';
 		if (!items.length) {
@@ -37,6 +39,42 @@ const initNotifications = () => {
 			notificationCount.textContent = '0';
 			notificationCount.classList.add('hidden');
 		}
+	};
+
+	// SSE로 실시간 알림 수신
+	const connectSSE = () => {
+		// 기존 연결이 있으면 종료
+		if (eventSource) {
+			eventSource.close();
+		}
+
+		// 새 SSE 연결 생성
+		eventSource = new EventSource('/api/notifications/stream');
+
+		// 알림 수신 시 처리
+		eventSource.addEventListener('notification', (event) => {
+			try {
+				const notification = JSON.parse(event.data);
+				// 알림 카운트 증가
+				const currentCount = Number(notificationCount.textContent || '0');
+				updateCount(currentCount + 1);
+				
+				// 알림 패널이 열려있으면 목록 갱신
+				if (notificationPanel.classList.contains('open')) {
+					fetchNotifications();
+				}
+			} catch (error) {
+				console.error('알림 파싱 실패:', error);
+			}
+		});
+
+		// 연결 오류 시 재연결 시도
+		eventSource.onerror = (error) => {
+			console.error('SSE 연결 오류:', error);
+			eventSource.close();
+			// 3초 후 재연결 시도
+			setTimeout(connectSSE, 3000);
+		};
 	};
 
 	const fetchNotifications = async () => {
@@ -75,8 +113,20 @@ const initNotifications = () => {
 		}
 	});
 
+	// 초기화: SSE 연결 및 폴링 시작
 	fetchNotifications();
-	setInterval(fetchNotifications, 5000);
+	connectSSE();
+	
+	// 폴링은 백업용으로 유지 (SSE 연결이 끊겼을 때 대비)
+	// 주기를 30초로 늘려서 서버 부하 감소
+	setInterval(fetchNotifications, 30000);
+
+	// 페이지 언로드 시 SSE 연결 종료
+	window.addEventListener('beforeunload', () => {
+		if (eventSource) {
+			eventSource.close();
+		}
+	});
 };
 
 window.initNotifications = initNotifications;

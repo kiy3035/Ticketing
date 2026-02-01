@@ -1,74 +1,510 @@
 # 아키텍처 & 플로우
 
-## 아키텍처 개요
+## 시스템 아키텍처 개요
 
 ```mermaid
-flowchart LR
-    subgraph client [Client]
-        Web[Static Web]
+flowchart TB
+    subgraph client [Client Layer]
+        Web[Static Web Pages<br/>HTML/CSS/JS]
+        SSE[EventSource<br/>SSE Client]
     end
 
-    subgraph api [Spring Boot API]
-        Sec[Security]
-        Ctrl[Controllers]
-        Svc[Services]
-        Sch[Schedulers]
-        Con[Kafka Consumers]
+    subgraph api [Spring Boot Application]
+        subgraph security [Security Layer]
+            Sec[Spring Security<br/>인증/인가]
+        end
+        
+        subgraph controllers [Controller Layer]
+            AuthCtrl[AuthController]
+            ConcertCtrl[ConcertController]
+            QueueCtrl[QueueController]
+            SeatCtrl[SeatController]
+            HoldCtrl[HoldController]
+            ResvCtrl[ReservationController]
+            NotifCtrl[NotificationController]
+            NotifSSE[NotificationSseController]
+            MetricsCtrl[MetricsController]
+        end
+        
+        subgraph services [Service Layer]
+            AuthSvc[UsersService]
+            ConcertSvc[ConcertService]
+            QueueSvc[QueueService]
+            SeatSvc[SeatService]
+            HoldSvc[HoldService]
+            ResvSvc[ReservationService]
+            NotifSvc[NotificationService]
+            SSENotifSvc[SseNotificationService]
+            MetricsSvc[MetricsService]
+            ActiveUser[ActiveUserTracker]
+        end
+        
+        subgraph stores [Store Layer]
+            HoldStore[HoldStore<br/>Redis 기반]
+            LockSvc[RedisLockService<br/>분산 락]
+        end
+        
+        subgraph schedulers [Scheduler Layer]
+            QueueScheduler[QueueProcessingScheduler<br/>대기열 처리]
+            HoldCleanup[HoldCleanupScheduler<br/>홀드 만료 처리]
+        end
+        
+        subgraph events [Event Layer]
+            EventPub[SeatHoldEventPublisher<br/>Kafka Producer]
+            EventCon[SeatHoldEventConsumer<br/>Kafka Consumer]
+        end
     end
 
-    subgraph data [Data]
-        DB[(MySQL)]
-        R[(Redis)]
+    subgraph data [Data Layer]
+        MySQL[(MySQL<br/>영구 데이터)]
+        Redis[(Redis<br/>세션/홀드/락/캐시/대기열)]
     end
 
-    subgraph stream [Streaming]
-        K[Kafka]
+    subgraph stream [Streaming Layer]
+        Kafka[Apache Kafka<br/>이벤트 스트리밍]
     end
 
-    Web --> Ctrl
-    Sec --> Ctrl
-    Ctrl --> Svc
-    Svc --> DB
-    Svc --> R
-    Svc --> K
-    Sch --> K
-    K --> Con
-    Con --> R
+    Web --> Sec
+    SSE --> Sec
+    Sec --> controllers
+    controllers --> services
+    services --> MySQL
+    services --> Redis
+    services --> stores
+    stores --> Redis
+    services --> EventPub
+    EventPub --> Kafka
+    Kafka --> EventCon
+    EventCon --> NotifSvc
+    EventCon --> SSENotifSvc
+    SSENotifSvc --> SSE
+    schedulers --> services
+    schedulers --> EventPub
 ```
 
-## 핵심 흐름 (Hold 만료 알림)
+## 레이어별 상세 설명
+
+### 1. Client Layer (프론트엔드)
+- **Static Web Pages**: HTML/CSS/JavaScript로 구성된 정적 페이지
+- **EventSource API**: SSE 클라이언트로 실시간 알림 수신
+- **폴링 메커니즘**: 대기열 순번 조회 (2초), 알림 백업 (30초)
+
+### 2. Security Layer
+- **Spring Security**: 인증 및 인가 처리
+- **세션 기반 인증**: Redis에 세션 저장
+- **접근 제어**: URL 패턴별 권한 설정
+
+### 3. Controller Layer
+- **REST API**: JSON 기반 RESTful API 제공
+- **SSE 엔드포인트**: `/api/notifications/stream`로 실시간 알림 스트림
+- **공통 응답 래핑**: `ApiResponse`로 일관된 응답 구조
+
+### 4. Service Layer
+- **비즈니스 로직**: 도메인별 비즈니스 로직 처리
+- **트랜잭션 관리**: `@Transactional`로 데이터 정합성 보장
+- **캐싱**: `@Cacheable`로 성능 최적화
+
+### 5. Store Layer
+- **HoldStore**: Redis 기반 홀드 저장소 (Lua 스크립트로 원자성 보장)
+- **RedisLockService**: 분산 락 구현 (Lua 스크립트로 토큰 검증)
+
+### 6. Scheduler Layer
+- **QueueProcessingScheduler**: 대기열 처리 (2초마다 상위 N명 입장 허용)
+- **HoldCleanupScheduler**: 홀드 만료 처리 (60초마다 만료 홀드 스캔)
+
+### 7. Event Layer
+- **SeatHoldEventPublisher**: Kafka로 이벤트 발행
+- **SeatHoldEventConsumer**: Kafka에서 이벤트 수신 후 알림 처리
+
+## 핵심 플로우 상세 설명
+
+### 1. 대기열 진입 및 입장 허용 플로우
 
 ```mermaid
 sequenceDiagram
     participant U as User
     participant FE as Frontend
-    participant API as API
+    participant API as QueueController
+    participant QSvc as QueueService
     participant R as Redis
-    participant K as Kafka
-    participant SCH as Scheduler
+    participant SCH as QueueScheduler
 
-    U->>FE: 좌석 선택 후 예매하기
-    FE->>API: POST /api/holds
-    API->>R: hold:seat, hold:token, hold:expires (TTL)
-    API->>K: HOLD_CREATED
-
-    SCH->>R: 만료 홀드 스캔
-    SCH->>K: HOLD_EXPIRED
-    K->>API: Consumer 수신
-    API->>R: notify:user:{userId}
-    FE->>API: GET /api/notifications
+    Note over U,SCH: 대기열 진입 단계
+    U->>FE: 콘서트 선택
+    FE->>API: POST /api/queue/enter?concertId={id}
+    API->>QSvc: enterQueue(concertId, userId)
+    
+    QSvc->>QSvc: 기존 토큰 확인 (중복 진입 방지)
+    alt 기존 토큰 존재
+        QSvc-->>API: 기존 토큰 정보 반환
+    else 새 토큰 발급
+        QSvc->>QSvc: UUID 토큰 생성
+        QSvc->>R: ZADD queue:concert:{id} {token} {timestamp}
+        QSvc->>R: SET queue:token:{token} {data} EX 1800
+        QSvc->>R: ZRANK queue:concert:{id} {token}
+        QSvc->>R: ZCARD queue:concert:{id}
+        QSvc-->>API: token, rank, totalWaiting
+    end
+    
+    API-->>FE: { token, rank, totalWaiting }
+    FE->>FE: 순번 폴링 시작
+    
+    Note over U,SCH: 순번 폴링 단계 (2초마다)
+    loop 폴링 (2초마다)
+        FE->>API: GET /api/queue/status?token={token}&concertId={id}
+        API->>QSvc: getRank(concertId, token)
+        QSvc->>R: ZRANK queue:concert:{id} {token}
+        QSvc-->>API: rank
+        
+        API->>QSvc: countWaiting(concertId)
+        QSvc->>R: ZCARD queue:concert:{id}
+        QSvc-->>API: totalWaiting
+        
+        API->>QSvc: isAllowed(token)
+        QSvc->>R: GET queue:allowed:{token}
+        QSvc-->>API: allowed
+        
+        API-->>FE: { rank, totalWaiting, isAllowed }
+        
+        alt 입장 허용됨
+            FE->>FE: 리다이렉트 /concert.html
+        end
+    end
+    
+    Note over U,SCH: 입장 허용 처리 단계 (스케줄러)
+    SCH->>SCH: processQueue() 실행 (2초마다)
+    SCH->>QSvc: getTopTokens(concertId, batchSize)
+    QSvc->>R: ZRANGE queue:concert:{id} 0 49
+    
+    loop 상위 N명 처리
+        SCH->>QSvc: isAllowed(token)
+        alt 입장 허용 안됨
+            SCH->>QSvc: allowEntry(token, concertId)
+            QSvc->>R: SET queue:allowed:{token} {data} EX 1800
+        end
+    end
 ```
 
-## 핵심 플로우
-1. 로그인/회원가입 후 `/app.html` 접근
-2. 콘서트 목록 조회: `GET /api/concerts`
-3. 좌석 조회: `GET /api/concerts/{id}/seats` (DB 예약 + Redis 홀드 오버레이)
-4. 홀드 생성: `POST /api/holds` (Redis TTL)
-5. 예약 확정: `POST /api/reservations` (DB 기록 + Redis 홀드 제거)
-6. 만료 홀드 스캔 → `HOLD_EXPIRED` 이벤트 발행
-7. 알림 소비자가 이벤트 수신 → Redis 알림 저장
+**핵심 포인트**:
+- **중복 진입 방지**: 기존 토큰 확인으로 동일 사용자의 중복 진입 방지
+- **O(log N) 성능**: ZSet의 RANK 연산으로 효율적인 순번 조회
+- **배치 처리**: 스케줄러가 주기적으로 상위 N명을 일괄 처리하여 서버 부하 분산
+- **토큰 TTL**: 30분 TTL로 자동 정리
 
-## ERD(초안)
+### 2. 좌석 홀드 생성 및 만료 플로우
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant FE as Frontend
+    participant API as HoldController
+    participant HSvc as HoldService
+    participant Lock as RedisLockService
+    participant Store as HoldStore
+    participant R as Redis
+    participant K as Kafka
+    participant SCH as HoldCleanupScheduler
+    participant Con as SeatHoldEventConsumer
+    participant Notif as NotificationService
+    participant SSE as SseNotificationService
+
+    Note over U,SSE: 홀드 생성 단계
+    U->>FE: 좌석 선택 후 예매하기
+    FE->>API: POST /api/holds
+    API->>HSvc: createHold(request, userId)
+    
+    HSvc->>HSvc: 좌석 조회 및 검증
+    HSvc->>Lock: tryLock(lock:seat:{seatId}, 5s)
+    Lock->>R: SETNX lock:seat:{seatId} {token} EX 5
+    Lock-->>HSvc: lockToken
+    
+    HSvc->>HSvc: 좌석 상태 확인 (RESERVED 체크)
+    HSvc->>Store: createHold(info, ttl)
+    
+    Store->>R: Lua Script 실행
+    Note over Store,R: 원자적 연산<br/>1. 좌석 키 존재 확인<br/>2. 좌석→토큰 저장<br/>3. 토큰→홀드 정보 저장<br/>4. 만료 ZSet에 추가
+    Store-->>HSvc: success
+    
+    HSvc->>K: publish(HOLD_CREATED, info)
+    HSvc->>Lock: unlock(lockKey, lockToken)
+    HSvc-->>API: { holdToken, expiresAt }
+    API-->>FE: 홀드 생성 완료
+    
+    Note over U,SSE: 홀드 만료 처리 단계
+    SCH->>SCH: cleanupExpiredHolds() 실행 (60초마다)
+    SCH->>Store: findExpiredHolds(now, 200)
+    Store->>R: ZRANGEBYSCORE hold:expires 0 {now}
+    Store-->>SCH: [expiredHolds]
+    
+    loop 만료된 홀드 처리
+        SCH->>Store: releaseByPayload(info, payload)
+        Store->>R: Lua Script 실행
+        Note over Store,R: 원자적 연산<br/>1. 좌석 키 삭제<br/>2. 토큰 키 삭제<br/>3. 만료 ZSet에서 제거
+        SCH->>K: publish(HOLD_EXPIRED, info)
+    end
+    
+    Note over U,SSE: 알림 전달 단계
+    K->>Con: handleSeatHoldEvent(payload)
+    Con->>Con: 이벤트 파싱 및 검증
+    Con->>Con: 알림 메시지 생성
+    Con->>Notif: addNotification(userId, item)
+    Notif->>R: LPUSH notify:user:{userId} {item}
+    Notif->>R: LTRIM notify:user:{userId} 0 49
+    Notif->>R: EXPIRE notify:user:{userId} 7d
+    
+    Con->>SSE: sendNotification(userId, item)
+    SSE->>SSE: 사용자별 SSE 연결 조회
+    alt SSE 연결 존재
+        SSE-->>FE: event: notification (실시간 전달)
+        FE->>FE: 알림 카운트 업데이트
+    end
+```
+
+**핵심 포인트**:
+- **분산 락**: 좌석 단위 락으로 동시성 제어
+- **원자적 연산**: Lua 스크립트로 홀드 생성/해제의 원자성 보장
+- **자동 만료**: Redis TTL + 스케줄러로 만료 처리 자동화
+- **이벤트 기반**: Kafka로 비동기 이벤트 처리
+- **실시간 알림**: SSE로 즉시 알림 전달
+
+### 3. 예약 확정 플로우
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant FE as Frontend
+    participant API as ReservationController
+    participant RSvc as ReservationService
+    participant Store as HoldStore
+    participant Lock as RedisLockService
+    participant R as Redis
+    participant DB as MySQL
+    participant K as Kafka
+
+    U->>FE: 예약 확정 버튼 클릭
+    FE->>API: POST /api/reservations
+    API->>RSvc: confirm(request, userId)
+    
+    RSvc->>Store: getHold(holdToken)
+    Store->>R: GET hold:token:{holdToken}
+    Store-->>RSvc: HoldInfo
+    
+    RSvc->>RSvc: 홀드 검증
+    Note over RSvc: 1. 만료 시간 확인<br/>2. 사용자 일치 확인
+    
+    RSvc->>Lock: tryLock(lock:seat:{seatId}, 5s)
+    Lock-->>RSvc: lockToken
+    
+    RSvc->>Store: isSeatHeldByToken(seatId, holdToken)
+    Store->>R: GET hold:seat:{seatId}
+    Store-->>RSvc: true/false
+    
+    alt 홀드 유효
+        RSvc->>DB: 좌석 상태 확인
+        RSvc->>DB: 좌석 상태를 RESERVED로 변경
+        RSvc->>DB: 예약 레코드 생성
+        RSvc->>Store: releaseHold(holdToken)
+        Store->>R: Lua Script 실행 (홀드 제거)
+        RSvc->>K: publish(RESERVATION_CONFIRMED, info)
+        RSvc->>Lock: unlock(lockKey, lockToken)
+        RSvc-->>API: ReservationResponse
+        API-->>FE: 예약 완료
+    else 홀드 만료/무효
+        RSvc->>Lock: unlock(lockKey, lockToken)
+        RSvc-->>API: 409 Conflict
+        API-->>FE: 홀드 만료 에러
+    end
+```
+
+**핵심 포인트**:
+- **홀드 검증**: 만료 시간 및 사용자 일치 확인
+- **분산 락**: 예약 확정 시에도 락으로 동시성 제어
+- **트랜잭션**: `@Transactional`로 DB 작업의 원자성 보장
+- **홀드 해제**: 예약 확정 시 홀드 자동 해제
+
+### 4. 실시간 알림 플로우 (SSE)
+
+```mermaid
+sequenceDiagram
+    participant FE as Frontend
+    participant SSE_API as NotificationSseController
+    participant SSE_Svc as SseNotificationService
+    participant Con as SeatHoldEventConsumer
+    participant K as Kafka
+
+    Note over FE,K: SSE 연결 생성
+    FE->>SSE_API: GET /api/notifications/stream
+    SSE_API->>SSE_Svc: createConnection(userId)
+    SSE_Svc->>SSE_Svc: SseEmitter 생성 (30분 타임아웃)
+    SSE_Svc->>SSE_Svc: emitters.put(userId, emitter)
+    SSE_Svc-->>SSE_API: SseEmitter
+    SSE_API-->>FE: SSE 연결 유지 (text/event-stream)
+    
+    Note over FE,K: 알림 수신
+    K->>Con: handleSeatHoldEvent(payload)
+    Con->>Con: 이벤트 처리
+    Con->>SSE_Svc: sendNotification(userId, item)
+    SSE_Svc->>SSE_Svc: emitters.get(userId)
+    alt SSE 연결 존재
+        SSE_Svc->>FE: emitter.send(event("notification", data))
+        FE->>FE: EventSource 이벤트 수신
+        FE->>FE: 알림 카운트 업데이트
+        FE->>FE: 알림 목록 갱신 (패널 열림 시)
+    else SSE 연결 없음
+        Note over SSE_Svc: 연결이 없으면 무시<br/>(폴링으로 처리)
+    end
+    
+    Note over FE,K: 연결 종료 처리
+    alt 타임아웃/에러 발생
+        SSE_Svc->>SSE_Svc: emitters.remove(userId)
+        SSE_Svc->>FE: emitter.complete()
+        FE->>FE: EventSource.onerror
+        FE->>FE: 3초 후 재연결 시도
+    end
+```
+
+**핵심 포인트**:
+- **연결 관리**: 사용자별 SSE 연결을 메모리에 저장
+- **자동 재연결**: 연결 종료 시 클라이언트가 자동 재연결
+- **폴링 백업**: SSE 연결 실패 시 폴링으로 대체
+
+## 전체 예매 플로우 (End-to-End)
+
+### 단계별 상세 설명
+
+#### 1. 로그인 및 콘서트 탐색
+```
+사용자 → 로그인 → Spring Security 인증 → Redis 세션 생성
+     → /app.html 접근 → GET /api/concerts
+     → ConcertService.listConcerts()
+     → Redis 캐시 확인 → 캐시 미스 시 DB 조회 → Redis 캐시 저장
+     → 콘서트 목록 반환
+```
+
+#### 2. 대기열 진입
+```
+사용자 → 콘서트 선택 → /queue.html?concertId={id}
+     → POST /api/queue/enter?concertId={id}
+     → QueueService.enterQueue()
+     → Redis ZSet에 토큰 추가 (O(log N))
+     → 토큰 정보 저장 (TTL 30분)
+     → 순번 및 대기인원 수 반환
+```
+
+#### 3. 순번 대기 및 입장 허용
+```
+프론트엔드 → 2초마다 GET /api/queue/status 폴링
+         → QueueService.getRank() (O(log N))
+         → QueueService.countWaiting() (O(1))
+         → QueueService.isAllowed() 확인
+
+스케줄러 → 2초마다 QueueProcessingScheduler.processQueue()
+        → 각 콘서트별로 상위 50명 조회
+        → 입장 허용 상태 설정 (SET queue:allowed:{token})
+        → 프론트엔드 폴링에서 입장 허용 감지
+        → /concert.html로 자동 리다이렉트
+```
+
+#### 4. 좌석 선택 및 홀드 생성
+```
+사용자 → 좌석 선택 → POST /api/holds
+     → HoldService.createHold()
+     → RedisLockService.tryLock() (분산 락)
+     → HoldStore.createHold() (Lua 스크립트로 원자적 연산)
+     → Redis에 홀드 저장 (TTL 5분)
+     → Kafka로 HOLD_CREATED 이벤트 발행
+     → 락 해제
+```
+
+#### 5. 예약 확정
+```
+사용자 → 예약 확정 버튼 → POST /api/reservations
+     → ReservationService.confirm()
+     → 홀드 검증 (만료 시간, 사용자 일치)
+     → 분산 락 획득
+     → DB 트랜잭션 시작
+     → 좌석 상태를 RESERVED로 변경
+     → 예약 레코드 생성
+     → HoldStore.releaseHold() (홀드 제거)
+     → Kafka로 RESERVATION_CONFIRMED 이벤트 발행
+     → 트랜잭션 커밋
+     → 락 해제
+```
+
+#### 6. 홀드 만료 및 알림
+```
+스케줄러 → 60초마다 HoldCleanupScheduler.cleanupExpiredHolds()
+        → HoldStore.findExpiredHolds() (ZSet 스캔)
+        → 만료된 홀드 제거
+        → Kafka로 HOLD_EXPIRED 이벤트 발행
+
+Kafka Consumer → SeatHoldEventConsumer.handleSeatHoldEvent()
+              → 알림 메시지 생성
+              → NotificationService.addNotification() (Redis 저장)
+              → SseNotificationService.sendNotification() (SSE 전송)
+
+프론트엔드 → EventSource로 실시간 알림 수신
+         → 알림 카운트 업데이트
+         → 알림 목록 갱신
+```
+
+## 데이터 흐름 다이어그램
+
+### 콘서트 목록 조회 (캐싱)
+
+```mermaid
+flowchart LR
+    A[GET /api/concerts] --> B{Redis 캐시<br/>확인}
+    B -->|캐시 히트| C[캐시 데이터 반환]
+    B -->|캐시 미스| D[MySQL 조회]
+    D --> E[Redis 캐시 저장<br/>TTL 5분]
+    E --> F[데이터 반환]
+```
+
+### 좌석 현황 조회 (DB + Redis 오버레이)
+
+```mermaid
+flowchart TB
+    A[GET /api/concerts/{id}/seats] --> B[MySQL에서<br/>좌석 조회]
+    B --> C[Redis에서<br/>홀드된 좌석 조회]
+    C --> D[좌석 상태 오버레이]
+    D --> E[AVAILABLE → HELD<br/>변환]
+    E --> F[응답 반환]
+```
+
+## 성능 최적화 전략
+
+### 1. Redis ZSet 활용
+- **대기열 순번**: O(log N) RANK 연산
+- **대기인원 수**: O(1) CARD 연산
+- **상위 N명 조회**: O(log N + M) RANGE 연산
+
+### 2. 캐싱 전략
+- **콘서트 목록**: Redis 캐시 (5분 TTL)
+- **카테고리 필터**: 클라이언트 메모리 캐시 (30초 TTL)
+
+### 3. 배치 처리
+- **대기열 처리**: 2초마다 상위 50명 일괄 처리
+- **홀드 만료**: 60초마다 최대 200개 일괄 처리
+
+### 4. 연결 풀링
+- **Redis**: Lettuce 연결 풀 (최대 20개)
+- **MySQL**: HikariCP 연결 풀 (기본 설정)
+
+## 확장성 고려사항
+
+### 수평 확장 가능한 컴포넌트
+1. **세션**: Redis 기반으로 다중 인스턴스 간 공유
+2. **홀드**: Redis 기반으로 다중 인스턴스 간 공유
+3. **대기열**: Redis 기반으로 다중 인스턴스 간 공유
+4. **알림**: Redis 기반으로 다중 인스턴스 간 공유
+
+### 확장 시 고려사항
+- **SSE 연결**: 인스턴스별로 관리되므로 로드밸런서에서 Sticky Session 필요
+- **Kafka Consumer**: Consumer Group으로 자동 분산 처리
+- **스케줄러**: 다중 인스턴스 실행 시 중복 실행 방지 필요 (분산 락 활용 가능)
+
+## ERD (Entity Relationship Diagram)
 
 ```mermaid
 erDiagram
@@ -84,28 +520,54 @@ erDiagram
         DATETIME start_at
         DATETIME end_at
         STRING status
+        ENUM category
         DATETIME created_at
     }
+    
     SEAT {
         BIGINT id PK
         BIGINT concert_id FK
         STRING section
         STRING seat_no
         BIGINT price
-        STRING status
+        ENUM status
     }
+    
     RESERVATION {
         BIGINT id PK
         BIGINT concert_id FK
         BIGINT seat_id FK
         STRING user_id
-        STRING status
+        ENUM status
         DATETIME reserved_at
     }
+    
     USERS {
         BIGINT id PK
-        STRING username
+        STRING username UK
         STRING pw
         DATETIME created_at
     }
 ```
+
+## 기술적 의사결정 (Technical Decisions)
+
+### 1. Redis ZSet 선택 이유
+- **순번 관리**: RANK 연산으로 효율적인 순번 조회
+- **정렬**: 타임스탬프 기준 자동 정렬
+- **성능**: O(log N) 연산으로 대규모 데이터 처리 가능
+
+### 2. Kafka 선택 이유
+- **비동기 처리**: 이벤트 발행과 소비의 분리
+- **확장성**: Consumer Group으로 자동 분산 처리
+- **내구성**: 이벤트 저장으로 재처리 가능
+
+### 3. SSE 선택 이유
+- **단방향 통신**: 서버 → 클라이언트 푸시에 적합
+- **HTTP 기반**: WebSocket보다 구현이 간단
+- **자동 재연결**: 브라우저가 자동으로 재연결 처리
+
+### 4. 분산 락 구현
+- **Lua 스크립트**: 원자적 연산 보장
+- **토큰 검증**: 락 해제 시 토큰 일치 확인으로 안전성 확보
+- **TTL**: 락 획득 실패 시 자동 해제

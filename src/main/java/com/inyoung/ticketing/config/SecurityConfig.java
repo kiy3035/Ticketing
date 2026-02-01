@@ -27,9 +27,11 @@ public class SecurityConfig {
 			.authorizeHttpRequests(auth -> auth
 				.requestMatchers("/", "/index.html").permitAll()
 				.requestMatchers("/login.html", "/signup.html", "/css/**", "/js/**", "/images/**").permitAll()
+				.requestMatchers("/favicon.ico").permitAll() // 브라우저 자동 요청 허용
 				.requestMatchers("/login", "/logout").permitAll()
 				.requestMatchers("/api/auth/signup").permitAll()
-				.requestMatchers("/app.html", "/concert.html", "/api/**").authenticated()
+				.requestMatchers("/api/queue/**").permitAll() // 부하 테스트용 허용
+				.requestMatchers("/app.html", "/concert.html", "/queue.html", "/api/**").authenticated()
 				.anyRequest().authenticated()
 			)
 			// 커스텀 로그인 페이지 사용

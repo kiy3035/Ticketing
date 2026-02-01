@@ -5,12 +5,10 @@ const reserveBtn = document.getElementById('reserveBtn');
 const actionResult = document.getElementById('actionResult');
 const concertTitle = document.getElementById('concertTitle');
 const concertMeta = document.getElementById('concertMeta');
-const statRemainingSeats = document.getElementById('statRemainingSeats');
-const statAvgWait = document.getElementById('statAvgWait');
-const statCurrentPrice = document.getElementById('statCurrentPrice');
 
 const params = new URLSearchParams(window.location.search);
 const concertId = params.get('concertId');
+const queueToken = params.get('queueToken');
 let seatById = {};
 let selectedSeatId = null;
 
@@ -103,15 +101,41 @@ const renderSeats = (seats) => {
 	}).join('');
 
 	seatGrid.innerHTML = html;
+};
 
-	const remaining = seats.filter((seat) => seat.status === 'AVAILABLE').length;
-	statRemainingSeats.textContent = remaining.toLocaleString();
+// 대기열 입장 허용 여부 확인
+const checkQueueAccess = async () => {
+	if (!concertId) {
+		return false;
+	}
+
+	// URL에 queueToken이 있으면 입장 허용 확인
+	if (queueToken) {
+		try {
+			const result = await window.fetchJson(`/api/queue/allowed?token=${queueToken}`);
+			if (result.ok && result.data.allowed && result.data.concertId && String(result.data.concertId) === String(concertId)) {
+				return true; // 입장 허용됨
+			}
+		} catch (error) {
+			console.error('대기열 입장 허용 확인 실패:', error);
+		}
+	}
+
+	// 입장 허용되지 않았거나 토큰이 없으면 대기열로 리다이렉트
+	window.location.href = `/queue.html?concertId=${concertId}`;
+	return false;
 };
 
 const loadConcertDetail = async () => {
 	if (!concertId) {
 		seatGrid.innerHTML = '<div class="status error">잘못된 접근입니다.</div>';
 		return;
+	}
+
+	// 대기열 접근 확인
+	const hasAccess = await checkQueueAccess();
+	if (!hasAccess) {
+		return; // 대기열로 리다이렉트됨
 	}
 
 	try {
@@ -192,9 +216,14 @@ const startPayment = () => {
 };
 
 const loadAvgWait = async () => {
+	if (!concertId) {
+		statAvgWait.textContent = '-';
+		return;
+	}
 	try {
-		const result = await window.fetchJson('/api/queue/count');
-		const avgWaitMin = Math.max(1, Math.ceil(Number(result.data) / 50));
+		const result = await window.fetchJson(`/api/queue/count?concertId=${concertId}`);
+		const totalWaiting = Number(result.data) || 0;
+		const avgWaitMin = Math.max(1, Math.ceil(totalWaiting / 50));
 		statAvgWait.textContent = `${avgWaitMin}분`;
 	} catch (error) {
 		statAvgWait.textContent = '-';
@@ -222,5 +251,3 @@ seatGrid.addEventListener('click', (event) => {
 
 reserveBtn.addEventListener('click', startPayment);
 loadConcertDetail();
-loadAvgWait();
-setInterval(loadAvgWait, 5000);
