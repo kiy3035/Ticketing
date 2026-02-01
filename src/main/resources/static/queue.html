@@ -37,7 +37,7 @@
 		</div>
 	</header>
 
-	<main class="container">
+	<main class="container queue-page">
 		<section class="hero">
 			<div class="hero-card">
 				<h1 id="concertTitle">대기열</h1>
@@ -45,20 +45,31 @@
 			</div>
 		</section>
 
-		<section class="panel">
-			<div class="queue-status">
-				<div class="queue-info">
-					<div class="queue-stat">
+		<section class="queue-modal">
+			<div class="queue-card">
+				<div class="queue-card-header">
+					<span class="badge light">대기열 안내</span>
+					<h2>예매 입장 순서를 확인 중입니다</h2>
+					<p>실시간으로 순번을 업데이트하며, 입장 허용 시 자동으로 이동합니다.</p>
+				</div>
+				<div class="queue-stats">
+					<div class="queue-stat-card">
 						<div class="label">현재 순번</div>
 						<div id="currentRank" class="value large">-</div>
 					</div>
-					<div class="queue-stat">
+					<div class="queue-stat-card">
 						<div class="label">전체 대기인원</div>
 						<div id="totalWaiting" class="value large">-</div>
 					</div>
 				</div>
 				<div class="queue-message">
 					<p id="queueMessage">대기열에 진입 중...</p>
+				</div>
+				<div class="queue-progress">
+					<div class="queue-progress-track">
+						<div class="queue-progress-bar"></div>
+					</div>
+					<p class="queue-progress-hint">입장 순서에 따라 자동으로 이동합니다.</p>
 				</div>
 			</div>
 		</section>

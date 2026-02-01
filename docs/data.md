@@ -377,6 +377,17 @@ Long count = redisTemplate.opsForZSet()
 3. 입장 허용 상태 설정: `SET queue:allowed:{token} {data} EX 1800`
 4. 프론트엔드 폴링에서 입장 허용 감지 후 좌석 선택 화면으로 이동
 
+### 만료 토큰 정리
+1. 토큰 TTL 만료 시 `queue:token:{token}` 키는 자동 삭제됨
+2. 정리 스케줄러가 ZSet을 스캔하여 토큰 키가 없는 멤버를 제거
+3. ZSet 자체에는 TTL을 주지 않고, **정리 스케줄러로 유령 대기열 제거**
+
+```redis
+ZSCAN queue:concert:1 0 COUNT 200
+EXISTS queue:token:{token}
+ZREM queue:concert:1 {token}
+```
+
 ### 성능 특성
 - **대기열 진입**: O(log N) - ZSet 추가
 - **순번 조회**: O(log N) - ZSet RANK 연산

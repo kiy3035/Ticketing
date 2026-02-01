@@ -47,6 +47,8 @@ public class SecurityConfig {
 			// 로그아웃 설정
 			.logout(logout -> logout
 				.logoutUrl("/logout")
+			.invalidateHttpSession(true)
+			.deleteCookies("JSESSIONID")
 				.logoutSuccessHandler((request, response, authentication) -> {
 					if (authentication != null) {
 						activeUserTracker.removeActive(authentication.getName());

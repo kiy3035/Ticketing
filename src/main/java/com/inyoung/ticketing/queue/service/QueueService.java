@@ -2,6 +2,7 @@ package com.inyoung.ticketing.queue.service;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -10,6 +11,9 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.inyoung.ticketing.config.TicketingProperties;
+import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.stereotype.Service;
@@ -23,10 +27,12 @@ public class QueueService {
 
 	private final StringRedisTemplate redisTemplate;
 	private final ObjectMapper objectMapper;
+	private final TicketingProperties properties;
 
-	// Redis 템플릿 및 ObjectMapper 주입
-	public QueueService(StringRedisTemplate redisTemplate) {
+	// Redis 템플릿 및 설정 주입
+	public QueueService(StringRedisTemplate redisTemplate, TicketingProperties properties) {
 		this.redisTemplate = redisTemplate;
+		this.properties = properties;
 		this.objectMapper = new ObjectMapper()
 			.registerModule(new JavaTimeModule())
 			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -35,15 +41,8 @@ public class QueueService {
 	// 콘서트 대기열 진입 (토큰 발급)
 	public QueueTokenInfo enterQueue(Long concertId, String userId) {
 		String queueKey = queueKey(concertId);
-		
-		// 기존 토큰 확인 (중복 진입 방지)
-		Optional<String> existingToken = findExistingToken(concertId, userId);
-		if (existingToken.isPresent()) {
-			String token = existingToken.get();
-			Long rank = getRank(concertId, token);
-			Long totalWaiting = countWaiting(concertId);
-			return new QueueTokenInfo(token, rank, totalWaiting);
-		}
+		// 공정성을 위해 기존 토큰은 제거하고 새로 발급한다.
+		removeExistingTokens(concertId, userId);
 
 		// 새 토큰 발급
 		String token = UUID.randomUUID().toString();
@@ -53,7 +52,8 @@ public class QueueService {
 		String tokenDataJson = toJson(tokenData);
 		
 		String tokenKey = tokenKey(token);
-		redisTemplate.opsForValue().set(tokenKey, tokenDataJson, Duration.ofSeconds(1800)); // 30분 TTL
+		long tokenTtlSeconds = properties.getQueue().getTokenTtlSeconds();
+		redisTemplate.opsForValue().set(tokenKey, tokenDataJson, Duration.ofSeconds(tokenTtlSeconds));
 		redisTemplate.opsForZSet().add(queueKey, token, now);
 		
 		Long rank = getRank(concertId, token);
@@ -92,7 +92,8 @@ public class QueueService {
 		String allowedKey = allowedKey(token);
 		QueueAllowedData allowedData = new QueueAllowedData(concertId, Instant.now());
 		String allowedDataJson = toJson(allowedData);
-		redisTemplate.opsForValue().set(allowedKey, allowedDataJson, Duration.ofSeconds(1800)); // 30분 TTL
+		long tokenTtlSeconds = properties.getQueue().getTokenTtlSeconds();
+		redisTemplate.opsForValue().set(allowedKey, allowedDataJson, Duration.ofSeconds(tokenTtlSeconds));
 	}
 
 	// 대기열에서 상위 N명 조회 (스케줄러용)
@@ -103,6 +104,35 @@ public class QueueService {
 			return List.of();
 		}
 		return tokens.stream().toList();
+	}
+
+	// 만료된 토큰 정리 (토큰 키가 없는 항목 제거)
+	public int pruneExpiredTokens(Long concertId, int maxScan) {
+		String queueKey = queueKey(concertId);
+		ScanOptions options = ScanOptions.scanOptions().count(maxScan).build();
+		List<String> expiredTokens = new ArrayList<>();
+		int scanned = 0;
+
+		try (Cursor<ZSetOperations.TypedTuple<String>> cursor =
+			redisTemplate.opsForZSet().scan(queueKey, options)) {
+			while (cursor.hasNext() && scanned < maxScan) {
+				ZSetOperations.TypedTuple<String> tuple = cursor.next();
+				scanned++;
+				if (tuple == null || tuple.getValue() == null) {
+					continue;
+				}
+				String token = tuple.getValue();
+				Boolean exists = redisTemplate.hasKey(tokenKey(token));
+				if (Boolean.FALSE.equals(exists)) {
+					expiredTokens.add(token);
+				}
+			}
+		}
+
+		if (!expiredTokens.isEmpty()) {
+			redisTemplate.opsForZSet().remove(queueKey, expiredTokens.toArray());
+		}
+		return expiredTokens.size();
 	}
 
 	// 토큰 정보 조회
@@ -125,20 +155,21 @@ public class QueueService {
 		redisTemplate.delete(allowedKey);
 	}
 
-	// 기존 토큰 찾기 (동일 사용자, 동일 콘서트)
-	private Optional<String> findExistingToken(Long concertId, String userId) {
+	// 기존 토큰 제거 (동일 사용자, 동일 콘서트)
+	private void removeExistingTokens(Long concertId, String userId) {
 		String queueKey = queueKey(concertId);
 		Set<String> tokens = redisTemplate.opsForZSet().range(queueKey, 0, -1);
 		if (tokens == null) {
-			return Optional.empty();
+			return;
 		}
 		for (String token : tokens) {
 			Optional<QueueTokenData> tokenData = getTokenData(token);
 			if (tokenData.isPresent() && tokenData.get().getUserId().equals(userId)) {
-				return Optional.of(token);
+				redisTemplate.opsForZSet().remove(queueKey, token);
+				redisTemplate.delete(tokenKey(token));
+				redisTemplate.delete(allowedKey(token));
 			}
 		}
-		return Optional.empty();
 	}
 
 	private String queueKey(Long concertId) {

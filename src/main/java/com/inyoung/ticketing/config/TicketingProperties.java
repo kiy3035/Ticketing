@@ -67,6 +67,8 @@ public class TicketingProperties {
 		private int batchSize = 50;
 		private long processingIntervalMs = 2000;
 		private long tokenTtlSeconds = 1800;
+		private long cleanupIntervalMs = 60000;
+		private int cleanupBatchSize = 200;
 
 		// 배치 크기 (한 번에 처리할 사용자 수)
 		public int getBatchSize() {
@@ -96,6 +98,26 @@ public class TicketingProperties {
 		// 토큰 TTL 설정
 		public void setTokenTtlSeconds(long tokenTtlSeconds) {
 			this.tokenTtlSeconds = tokenTtlSeconds;
+		}
+
+		// 만료 토큰 정리 주기(밀리초)
+		public long getCleanupIntervalMs() {
+			return cleanupIntervalMs;
+		}
+
+		// 만료 토큰 정리 주기 설정
+		public void setCleanupIntervalMs(long cleanupIntervalMs) {
+			this.cleanupIntervalMs = cleanupIntervalMs;
+		}
+
+		// 한 번에 정리할 토큰 수
+		public int getCleanupBatchSize() {
+			return cleanupBatchSize;
+		}
+
+		// 정리 배치 크기 설정
+		public void setCleanupBatchSize(int cleanupBatchSize) {
+			this.cleanupBatchSize = cleanupBatchSize;
 		}
 	}
 }

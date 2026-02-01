@@ -109,13 +109,17 @@ logging.level.org.springframework.cache=DEBUG
 # 대기열 설정
 ticketing.queue.batch-size=50                     # 한 번에 처리할 사용자 수
 ticketing.queue.processing-interval-ms=2000        # 스케줄러 실행 주기 (밀리초)
-ticketing.queue.token-ttl-seconds=1800            # 대기열 토큰 TTL (초, 30분)
+ticketing.queue.token-ttl-seconds=60            # 대기열 토큰 TTL (초, 1분)
+ticketing.queue.cleanup-interval-ms=60000          # 만료 토큰 정리 주기 (밀리초)
+ticketing.queue.cleanup-batch-size=200            # 한 번에 정리할 토큰 수
 ```
 
 **설명**:
 - **batch-size**: 스케줄러가 한 번에 처리할 사용자 수 (서버 부하 조절)
 - **processing-interval-ms**: 대기열 처리 주기 (2초)
 - **token-ttl-seconds**: 토큰 자동 만료 시간 (30분)
+- **cleanup-interval-ms**: 만료 토큰 정리 주기 (기본 60초)
+- **cleanup-batch-size**: 정리 시 스캔할 토큰 수
 
 ### 홀드 설정
 ```properties

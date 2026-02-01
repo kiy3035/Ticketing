@@ -3,13 +3,15 @@ import { check, sleep } from 'k6';
 
 export const options = {
     stages: [
-        { duration: '10s', target: 30 },   // 10초 동안 30명까지 증가 (안정성 확인)
-        { duration: '30s', target: 100 },  // 30초 동안 100명까지 증가 (일반 부하)
-        { duration: '20s', target: 200 },   // 20초 동안 200명까지 증가 (최대 부하)
-        { duration: '10s', target: 0 },     // 10초 동안 0명으로 감소
+        { duration: '30s', target: 100 },  // 워밍업
+        { duration: '2m', target: 200 },   // 구간 1
+        { duration: '2m', target: 300 },   // 구간 2
+        { duration: '2m', target: 400 },   // 구간 3
+        { duration: '2m', target: 600 },   // 구간 4
+        { duration: '30s', target: 0 },    // 종료
     ],
     thresholds: {
-        http_req_duration: ['p(95)<3000'], // 95% 요청이 3초 이내 (Redis 기반이므로 빠름)
+        http_req_duration: ['p(95)<5000'], // knee point 측정용: 임계치 여유
         http_req_failed: ['rate<0.1'],     // 에러율 10% 미만
     },
 };
@@ -40,8 +42,8 @@ export default function () {
     
     console.log(`진입 성공 - 순번: ${rank}, 대기인원: ${totalWaiting}`);
     
-    // 2. 순번 폴링 (최대 10번)
-    for (let i = 0; i < 10; i++) {
+    // 2. 순번 폴링 (최대 50번)
+    for (let i = 0; i < 50; i++) {
         const statusRes = http.get(`${BASE_URL}/api/queue/status?token=${token}&concertId=${CONCERT_ID}`);
         
         check(statusRes, {
@@ -63,6 +65,6 @@ export default function () {
             }
         }
         
-        sleep(2); // 2초 대기
+        sleep(1); // 1초 대기 (폴링 압력 증가)
     }
 }

@@ -1,6 +1,9 @@
 package com.inyoung.ticketing.config;
 
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -10,9 +13,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class FaviconController {
     
     @GetMapping("/favicon.ico")
-    public ResponseEntity<Void> favicon() {
-        // favicon 파일이 없으므로 204 No Content 반환 (에러 로그 없음)
-        return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
+	public ResponseEntity<Resource> favicon() {
+		Resource favicon = new ClassPathResource("static/favicon.png");
+		if (!favicon.exists()) {
+			return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
+		}
+		return ResponseEntity.ok()
+			.contentType(MediaType.IMAGE_PNG)
+			.body(favicon);
     }
     
     @GetMapping("/.well-known/**")

@@ -38,12 +38,22 @@ const enterQueue = async () => {
 	}
 
 	try {
-		const result = await window.fetchJson(`/api/queue/enter?concertId=${concertId}`, {
-			method: 'POST'
+		// 캐시 무시를 위해 타임스탬프 추가
+		const timestamp = new Date().getTime();
+		const result = await window.fetchJson(`/api/queue/enter?concertId=${concertId}&_t=${timestamp}`, {
+			method: 'POST',
+			headers: {
+				'Cache-Control': 'no-cache',
+				'Pragma': 'no-cache'
+			}
 		});
 		if (!result.ok) {
 			throw new Error(result.error?.message || '대기열 진입 실패');
 		}
+		
+		// 디버깅: 실제 응답 값 확인
+		console.log('대기열 진입 응답:', result.data);
+		
 		queueToken = result.data.token;
 		currentRank.textContent = result.data.rank || '-';
 		totalWaiting.textContent = result.data.totalWaiting || '-';
@@ -52,6 +62,7 @@ const enterQueue = async () => {
 		// 순번 폴링 시작
 		startPolling();
 	} catch (error) {
+		console.error('대기열 진입 에러:', error);
 		queueMessage.textContent = `대기열 진입 실패: ${error.message}`;
 	}
 };
@@ -76,7 +87,18 @@ const checkQueueStatus = async () => {
 	}
 
 	try {
-		const result = await window.fetchJson(`/api/queue/status?token=${queueToken}&concertId=${concertId}`);
+		// 캐시 무시를 위해 타임스탬프 추가
+		const timestamp = new Date().getTime();
+		const result = await window.fetchJson(`/api/queue/status?token=${queueToken}&concertId=${concertId}&_t=${timestamp}`, {
+			headers: {
+				'Cache-Control': 'no-cache',
+				'Pragma': 'no-cache'
+			}
+		});
+		
+		// 디버깅: 실제 응답 값 확인
+		console.log('대기열 상태 응답:', result.data);
+		
 		if (!result.ok) {
 			// 토큰이 유효하지 않거나 대기열에서 제거된 경우
 			if (result.error?.message?.includes('not found') || result.error?.message?.includes('Token')) {
@@ -93,8 +115,20 @@ const checkQueueStatus = async () => {
 			throw new Error(result.error?.message || '상태 조회 실패');
 		}
 		
-		currentRank.textContent = result.data.rank || '-';
-		totalWaiting.textContent = result.data.totalWaiting || '-';
+		// 응답 데이터 검증
+		const rank = result.data.rank;
+		const totalWaitingCount = result.data.totalWaiting;
+		
+		// rank나 totalWaiting이 null이거나 undefined인 경우 처리
+		if (rank == null || totalWaitingCount == null) {
+			console.warn('대기열 상태 데이터가 없습니다:', result.data);
+			currentRank.textContent = '-';
+			totalWaiting.textContent = '-';
+			return;
+		}
+		
+		currentRank.textContent = rank || '-';
+		totalWaiting.textContent = totalWaitingCount || '-';
 		
 		// 입장 허용 여부 확인
 		if (result.data.isAllowed) {
@@ -108,8 +142,8 @@ const checkQueueStatus = async () => {
 		}
 		
 		// 대기 중 메시지 업데이트
-		if (result.data.rank && result.data.totalWaiting) {
-			const estimatedWait = Math.max(1, Math.ceil(result.data.rank / 50));
+		if (rank && totalWaitingCount) {
+			const estimatedWait = Math.max(1, Math.ceil(rank / 50));
 			queueMessage.textContent = `대기 중입니다. 예상 대기 시간: 약 ${estimatedWait}분`;
 		}
 	} catch (error) {

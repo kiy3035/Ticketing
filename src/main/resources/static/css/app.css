@@ -649,6 +649,113 @@ img { max-width: 100%; display: block; }
 	background: var(--panel);
 	box-shadow: 0 16px 40px rgba(15, 23, 42, 0.06);
 }
+
+.queue-page .hero {
+	grid-template-columns: 1fr;
+}
+
+.queue-modal {
+	margin-top: 8px;
+	display: flex;
+	justify-content: center;
+}
+
+.queue-card {
+	width: min(720px, 100%);
+	background: linear-gradient(165deg, rgba(255, 255, 255, 0.96), rgba(238, 242, 255, 0.92));
+	border: 1px solid var(--line);
+	border-radius: 24px;
+	padding: 28px;
+	box-shadow: 0 24px 60px rgba(15, 23, 42, 0.12);
+	backdrop-filter: blur(10px);
+	display: grid;
+	gap: 22px;
+}
+
+.queue-card-header h2 {
+	margin: 10px 0 6px;
+	font-size: 22px;
+	letter-spacing: -0.2px;
+}
+
+.queue-card-header p {
+	margin: 0;
+	color: var(--muted);
+	font-size: 14px;
+}
+
+.queue-stats {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+	gap: 14px;
+}
+
+.queue-stat-card {
+	padding: 18px;
+	border-radius: 18px;
+	background: var(--panel);
+	border: 1px solid var(--line);
+	box-shadow: 0 12px 26px rgba(15, 23, 42, 0.08);
+	display: grid;
+	gap: 6px;
+}
+
+.queue-stat-card .label {
+	color: var(--muted);
+	font-size: 12px;
+	letter-spacing: 0.2px;
+}
+
+.queue-stat-card .value.large {
+	font-size: 28px;
+	font-weight: 700;
+}
+
+.queue-message {
+	padding: 14px 16px;
+	border-radius: 14px;
+	border: 1px solid var(--line);
+	background: rgba(49, 130, 246, 0.08);
+	color: var(--primary-2);
+	font-size: 14px;
+}
+
+.queue-message p {
+	margin: 0;
+}
+
+.queue-progress {
+	display: grid;
+	gap: 8px;
+}
+
+.queue-progress-track {
+	position: relative;
+	height: 8px;
+	border-radius: 999px;
+	background: var(--panel-2);
+	overflow: hidden;
+	border: 1px solid rgba(49, 130, 246, 0.12);
+}
+
+.queue-progress-bar {
+	position: absolute;
+	inset: 0;
+	background: linear-gradient(90deg, rgba(49, 130, 246, 0.2), rgba(49, 130, 246, 0.6), rgba(125, 211, 252, 0.35));
+	animation: queue-progress 2.4s ease-in-out infinite;
+}
+
+.queue-progress-hint {
+	margin: 0;
+	color: var(--muted);
+	font-size: 12px;
+}
+
+@keyframes queue-progress {
+	0% { transform: translateX(-60%); }
+	50% { transform: translateX(0%); }
+	100% { transform: translateX(60%); }
+}
 .panel-header {
 	display: flex;
 	flex-direction: column;
@@ -736,5 +843,8 @@ img { max-width: 100%; display: block; }
 	}
 	.payment-badges {
 		grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+	}
+	.queue-card {
+		padding: 22px;
 	}
 }

@@ -185,6 +185,27 @@ sequenceDiagram
     end
 ```
 
+#### 만료 토큰 정리 플로우
+- 토큰 TTL(30분)이 만료되면 `queue:token:{token}` 키가 자동으로 사라집니다.
+- 주기적으로 ZSet을 스캔하여 **토큰 키가 없는 멤버를 제거**합니다.
+- ZSet 자체에는 TTL을 두지 않고, **정리 스케줄러**로 유령 대기열을 제거합니다.
+
+```mermaid
+sequenceDiagram
+    participant SCH as QueueCleanupScheduler
+    participant QSvc as QueueService
+    participant R as Redis
+
+    SCH->>QSvc: pruneExpiredTokens(concertId, batchSize)
+    QSvc->>R: ZSCAN queue:concert:{id} COUNT {batchSize}
+    loop 토큰 검사
+        QSvc->>R: EXISTS queue:token:{token}
+        alt 토큰 없음
+            QSvc->>R: ZREM queue:concert:{id} {token}
+        end
+    end
+```
+
 **핵심 포인트**:
 - **중복 진입 방지**: 기존 토큰 확인으로 동일 사용자의 중복 진입 방지
 - **O(log N) 성능**: ZSet의 RANK 연산으로 효율적인 순번 조회
