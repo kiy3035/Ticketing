@@ -18,7 +18,7 @@ import org.springframework.web.server.ResponseStatusException;
 // 사용자 계정 서비스 및 인증 사용자 조회
 @Service
 public class UsersService implements UserDetailsService {
-	private static final long SIGNUP_POINT_BONUS = 1_000_000L;
+	private static final long SIGNUP_POINT_BONUS = 10_000_000L;
 	private final UsersRepository usersRepository;
 	private final PasswordEncoder passwordEncoder;
 

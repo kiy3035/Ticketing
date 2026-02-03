@@ -60,17 +60,36 @@ const submitPayment = async () => {
 		setError('홀드 토큰이 없습니다.');
 		return;
 	}
-	setStatus('결제 처리 중...');
+	setStatus('결제 요청 생성 중...');
 	try {
-		const result = await window.fetchJson('/api/reservations', {
+		const requestResult = await window.fetchJson('/api/payments/request', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ holdToken })
 		});
-		if (!result.ok) {
-			throw new Error(result.error?.message || '결제 실패');
+		if (!requestResult.ok) {
+			throw new Error(requestResult.error?.message || '결제 요청 실패');
 		}
-		setStatus(`결제 완료: 예약번호 ${result.data.reservationId}`, 'ok');
+
+		const paymentKey = requestResult.data.paymentKey;
+		setStatus('결제 승인 중...');
+
+		const approveResult = await window.fetchJson(`/api/payments/${paymentKey}/approve`, {
+			method: 'POST'
+		});
+		if (!approveResult.ok) {
+			throw new Error(approveResult.error?.message || '결제 승인 실패');
+		}
+
+		setStatus('결제 완료 처리 중...');
+		const completeResult = await window.fetchJson(`/api/payments/${paymentKey}/complete`, {
+			method: 'POST'
+		});
+		if (!completeResult.ok) {
+			throw new Error(completeResult.error?.message || '결제 완료 실패');
+		}
+
+		setStatus(`결제 완료: 예약번호 ${completeResult.data.reservationId}`, 'ok');
 		payBtn.disabled = true;
 	} catch (error) {
 		setStatus(`결제 실패: ${error.message}`, 'error');

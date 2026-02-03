@@ -436,3 +436,19 @@ ZREM queue:concert:1 {token}
 ### 자동 정리
 - **TTL 만료**: Redis가 자동으로 키 삭제
 - **스케줄러**: 만료된 홀드, 오래된 접속자 데이터 정리
+
+## 결제 (Payment) DB 구조
+
+### `payment` 테이블
+- **용도**: Mock 결제 상태 및 포인트 차감 이력 저장
+- **고유 키**: `payment_key`, `hold_token`
+
+**컬럼 요약**:
+- `payment_key` (UUID): 결제 키
+- `hold_token` (UUID): 홀드 토큰
+- `user_id`: 결제 사용자
+- `concert_id`, `seat_id`: 대상 좌석/콘서트
+- `amount`: 결제 금액 (포인트 차감)
+- `status`: READY/APPROVED/COMPLETED/CANCELED
+- `reservation_id`: 완료 시 예약 ID
+- `approved_at`, `completed_at`, `canceled_at`, `created_at`, `updated_at`

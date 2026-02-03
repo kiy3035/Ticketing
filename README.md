@@ -26,6 +26,11 @@
 - **자동 만료 처리**: 스케줄러가 만료된 홀드를 스캔하여 자동 정리
 - **이벤트 기반 알림**: Kafka로 만료 이벤트 발행 후 SSE로 실시간 전달
 
+### 3. Mock 결제 시스템 (Point Payment)
+- **실결제 없이 PG 유사 흐름 구현**: READY → APPROVED → COMPLETED / CANCELED
+- **포인트 차감 기반 승인**: 가입 시 지급된 포인트로 결제 시뮬레이션
+- **중복 요청 안전**: 동일 홀드 토큰 재요청 시 동일 결제 반환
+
 ### 3. 이벤트 스트리밍 (Event Streaming)
 - **Kafka 기반**: HOLD/RESERVATION 이벤트를 비동기로 처리
 - **이벤트 타입**: `HOLD_CREATED`, `HOLD_CANCELED`, `HOLD_EXPIRED`, `RESERVATION_CONFIRMED`

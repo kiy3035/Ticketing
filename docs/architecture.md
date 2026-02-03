@@ -384,6 +384,37 @@ sequenceDiagram
     end
 ```
 
+### 5. Mock 결제 플로우 (포인트 기반)
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant FE as Frontend
+    participant API as PaymentController
+    participant PSvc as PaymentService
+    participant R as Redis
+    participant DB as MySQL
+
+    U->>FE: 결제하기 클릭
+    FE->>API: POST /api/payments/request (holdToken)
+    API->>PSvc: requestPayment()
+    PSvc->>R: hold:token:{holdToken} 조회
+    PSvc->>DB: 결제(READY) 생성
+    API-->>FE: paymentKey, status=READY
+
+    FE->>API: POST /api/payments/{paymentKey}/approve
+    API->>PSvc: approvePayment()
+    PSvc->>DB: 사용자 포인트 차감
+    PSvc->>DB: 결제 상태 APPROVED
+    API-->>FE: status=APPROVED
+
+    FE->>API: POST /api/payments/{paymentKey}/complete
+    API->>PSvc: completePayment()
+    PSvc->>API: 예약 확정 처리 (ReservationService)
+    PSvc->>DB: 결제 상태 COMPLETED + reservationId 저장
+    API-->>FE: status=COMPLETED
+```
+
 **핵심 포인트**:
 - **연결 관리**: 사용자별 SSE 연결을 메모리에 저장
 - **자동 재연결**: 연결 종료 시 클라이언트가 자동 재연결

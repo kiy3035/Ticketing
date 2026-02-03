@@ -20,10 +20,11 @@ public class ApiResponseAdvice implements ResponseBodyAdvice<Object> {
 	}
 
 	@Override
-	public boolean supports(
-		MethodParameter returnType,
-		Class<? extends HttpMessageConverter<?>> converterType
-	) {
+	public boolean supports(MethodParameter returnType, Class<? extends HttpMessageConverter<?>> converterType) {
+		// 리소스(파일/바이너리) 응답을 래핑하지 않음
+		if (org.springframework.http.converter.ResourceHttpMessageConverter.class.isAssignableFrom(converterType)) {
+			return false;
+		}
 		return true;
 	}
 

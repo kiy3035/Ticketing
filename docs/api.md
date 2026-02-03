@@ -455,6 +455,120 @@ Authorization: (세션 쿠키)
 }
 ```
 
+## 결제 API (Mock Payment)
+
+결제는 실제 PG 연동이 아닌 **포인트 기반 Mock 결제**로 동작합니다.  
+흐름은 `READY → APPROVED → COMPLETED`이며, 필요 시 `CANCELED`로 전환됩니다.
+
+### 결제 요청 생성 (READY)
+```http
+POST /api/payments/request
+Content-Type: application/json
+Authorization: (세션 쿠키)
+```
+
+**요청 본문**:
+```json
+{
+  "holdToken": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+}
+```
+
+**응답** (201 Created):
+```json
+{
+  "success": true,
+  "data": {
+    "paymentKey": "e8f1b1a4-1a0e-4b1c-9f59-1d4ccfab1f4b",
+    "status": "READY",
+    "amount": 150000,
+    "reservationId": null,
+    "approvedAt": null,
+    "completedAt": null,
+    "canceledAt": null
+  },
+  "message": "OK",
+  "timestamp": "2026-01-25T10:00:00+09:00"
+}
+```
+
+### 결제 승인 (APPROVED)
+```http
+POST /api/payments/{paymentKey}/approve
+Authorization: (세션 쿠키)
+```
+
+**응답** (200 OK):
+```json
+{
+  "success": true,
+  "data": {
+    "paymentKey": "e8f1b1a4-1a0e-4b1c-9f59-1d4ccfab1f4b",
+    "status": "APPROVED",
+    "amount": 150000,
+    "approvedAt": "2026-01-25T10:01:00+09:00"
+  },
+  "message": "OK",
+  "timestamp": "2026-01-25T10:01:00+09:00"
+}
+```
+
+**에러 케이스**:
+- `409 Conflict`: 포인트 부족, 이미 취소됨
+
+### 결제 완료 (COMPLETED)
+```http
+POST /api/payments/{paymentKey}/complete
+Authorization: (세션 쿠키)
+```
+
+**응답** (200 OK):
+```json
+{
+  "success": true,
+  "data": {
+    "paymentKey": "e8f1b1a4-1a0e-4b1c-9f59-1d4ccfab1f4b",
+    "status": "COMPLETED",
+    "amount": 150000,
+    "reservationId": 123,
+    "completedAt": "2026-01-25T10:02:00+09:00"
+  },
+  "message": "OK",
+  "timestamp": "2026-01-25T10:02:00+09:00"
+}
+```
+
+**동작**:
+1. 결제 상태가 APPROVED인지 검증
+2. 예약 확정 처리 (`/api/reservations` 내부 호출)
+3. 결제 상태 COMPLETED로 변경
+
+### 결제 취소 (CANCELED)
+```http
+POST /api/payments/{paymentKey}/cancel
+Authorization: (세션 쿠키)
+```
+
+**응답** (200 OK):
+```json
+{
+  "success": true,
+  "data": {
+    "paymentKey": "e8f1b1a4-1a0e-4b1c-9f59-1d4ccfab1f4b",
+    "status": "CANCELED",
+    "canceledAt": "2026-01-25T10:03:00+09:00"
+  },
+  "message": "OK",
+  "timestamp": "2026-01-25T10:03:00+09:00"
+}
+```
+
+### 결제 조회
+```http
+GET /api/payments/{paymentKey}
+Authorization: (세션 쿠키)
+```
+
 ## 알림 API
 
 ### 알림 목록 조회 (폴링용)
