@@ -70,14 +70,14 @@ public class Payment {
 
 	@PrePersist
 	void prePersist() {
-		OffsetDateTime now = OffsetDateTime.now(ZoneId.of("Asia/Seoul"));
+		OffsetDateTime now = OffsetDateTime.now(ZoneId.of("Asia/Seoul")).withNano(0);
 		this.createdAt = now;
 		this.updatedAt = now;
 	}
 
 	@PreUpdate
 	void preUpdate() {
-		this.updatedAt = OffsetDateTime.now(ZoneId.of("Asia/Seoul"));
+		this.updatedAt = OffsetDateTime.now(ZoneId.of("Asia/Seoul")).withNano(0);
 	}
 
 	public Long getId() {

@@ -1,6 +1,8 @@
 package com.inyoung.ticketing.concert.domain;
 
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -40,12 +42,12 @@ public class Concert {
 	private ConcertCategory category;
 
 	@Column(nullable = false, updatable = false)
-	private Instant createdAt;
+	private OffsetDateTime createdAt;
 
-	// 생성 시각 자동 설정
+	// 생성 시각 자동 설정 (한국시간, 초단위까지만)
 	@PrePersist
 	void prePersist() {
-		this.createdAt = Instant.now();
+		this.createdAt = OffsetDateTime.now(ZoneId.of("Asia/Seoul")).withNano(0);
 	}
 
 	// 식별자
@@ -114,7 +116,7 @@ public class Concert {
 	}
 
 	// 생성 시각
-	public Instant getCreatedAt() {
+	public OffsetDateTime getCreatedAt() {
 		return createdAt;
 	}
 }

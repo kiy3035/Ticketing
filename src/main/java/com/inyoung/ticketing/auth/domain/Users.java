@@ -48,10 +48,10 @@ public class Users {
 	@Column(nullable = false, updatable = false)
 	private OffsetDateTime createdAt;
 
-	// 생성 시각 자동 설정
+	// 생성 시각 자동 설정 (한국시간, 초단위까지만 저장)
 	@PrePersist
 	void prePersist() {
-		this.createdAt = OffsetDateTime.now(ZoneId.of("Asia/Seoul"));
+		this.createdAt = OffsetDateTime.now(ZoneId.of("Asia/Seoul")).withNano(0);
 	}
 
 	// 식별자

@@ -43,10 +43,10 @@ public class Reservation {
 	@Column(nullable = false)
 	private OffsetDateTime reservedAt;
 
-	// 예약 시각 자동 설정
+	// 예약 시각 자동 설정 (한국시간, 초단위까지만 저장)
 	@PrePersist
 	void prePersist() {
-		this.reservedAt = OffsetDateTime.now(ZoneId.of("Asia/Seoul"));
+		this.reservedAt = OffsetDateTime.now(ZoneId.of("Asia/Seoul")).withNano(0);
 	}
 
 	// 식별자
