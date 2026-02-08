@@ -89,13 +89,12 @@ public class SmsService {
 	 * @param username 사용자명
 	 * @param concertName 공연명
 	 * @param amount 결제 금액
-	 * @return SMS 본문 텍스트
+	 * @return SMS 본문 텍스트 (한글 45자 이내)
 	 */
 	private String buildPaymentCompleteSmsBody(String username, String concertName, long amount) {
 		return String.format(
-			"[콘서트예매] %s님의 예매가 완료되었습니다. 공연: %s 금액: %,d원 마이페이지에서 확인하세요.",
+			"[예매완료] %s님 %,d원",
 			username,
-			concertName,
 			amount
 		);
 	}
