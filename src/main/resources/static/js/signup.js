@@ -2,17 +2,47 @@
 const form = document.getElementById('signupForm');
 const statusError = document.getElementById('statusError');
 const statusInfo = document.getElementById('statusInfo');
+const notificationMethod = document.getElementById('notificationMethod');
+const toggleBtns = document.querySelectorAll('.toggle-btn');
+
+// 알림 방식 토글
+toggleBtns.forEach(btn => {
+	btn.addEventListener('click', (e) => {
+		e.preventDefault();
+		toggleBtns.forEach(b => b.classList.remove('active'));
+		btn.classList.add('active');
+		notificationMethod.value = btn.dataset.method;
+	});
+});
+
+// 휴대폰번호 포맷팅
+const phoneInput = document.getElementById('phone');
+phoneInput.addEventListener('input', (e) => {
+	let value = e.target.value.replace(/\D/g, '');
+	if (value.length > 11) value = value.slice(0, 11);
+	
+	if (value.length <= 3) {
+		e.target.value = value;
+	} else if (value.length <= 7) {
+		e.target.value = value.slice(0, 3) + '-' + value.slice(3);
+	} else {
+		e.target.value = value.slice(0, 3) + '-' + value.slice(3, 7) + '-' + value.slice(7);
+	}
+});
 
 form.addEventListener('submit', async (event) => {
 	event.preventDefault();
 	statusError.hidden = true;
-	statusInfo.textContent = '아이디 4~20자, 비밀번호 6~50자';
+	statusInfo.textContent = '회원가입을 진행 중입니다...';
 
 	const username = document.getElementById('username').value.trim();
 	const password = document.getElementById('password').value.trim();
+	const email = document.getElementById('email').value.trim();
+	const phone = document.getElementById('phone').value.trim();
+	const notifMethod = notificationMethod.value;
 
-	if (!username || !password) {
-		statusError.textContent = '아이디와 비밀번호를 입력해주세요.';
+	if (!username || !password || !email || !phone) {
+		statusError.textContent = '모든 필수 항목을 입력해주세요.';
 		statusError.hidden = false;
 		return;
 	}
@@ -26,21 +56,37 @@ form.addEventListener('submit', async (event) => {
 		statusError.hidden = false;
 		return;
 	}
+	if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+		statusError.textContent = '유효한 이메일 주소를 입력해주세요.';
+		statusError.hidden = false;
+		return;
+	}
+	if (!/^\d{3}-\d{4}-\d{4}$/.test(phone)) {
+		statusError.textContent = '휴대폰번호를 올바른 형식으로 입력해주세요. (010-0000-0000)';
+		statusError.hidden = false;
+		return;
+	}
 
 	try {
-	const result = await window.fetchJson('/api/auth/signup', {
+		const result = await window.fetchJson('/api/auth/signup', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ username, password })
+			body: JSON.stringify({ 
+				username, 
+				password,
+				email,
+				phone,
+				notificationMethod: notifMethod
+			})
 		});
-	if (!result.ok) {
-		if (result.status === 409) {
-			throw new Error('이미 사용 중인 아이디입니다.');
-		}
-		if (result.status === 400) {
-			throw new Error(result.error?.message || '입력값 형식이 올바르지 않습니다.');
-		}
-		throw new Error(result.error?.message || '회원가입에 실패했습니다.');
+		if (!result.ok) {
+			if (result.status === 409) {
+				throw new Error('이미 사용 중인 아이디입니다.');
+			}
+			if (result.status === 400) {
+				throw new Error(result.error?.message || '입력값 형식이 올바르지 않습니다.');
+			}
+			throw new Error(result.error?.message || '회원가입에 실패했습니다.');
 		}
 
 		window.location.href = '/login.html?signup';

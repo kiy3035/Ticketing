@@ -12,6 +12,7 @@ import com.inyoung.ticketing.payment.domain.Payment;
 import com.inyoung.ticketing.payment.domain.PaymentStatus;
 import com.inyoung.ticketing.payment.dto.PaymentRequest;
 import com.inyoung.ticketing.payment.dto.PaymentResponse;
+import com.inyoung.ticketing.payment.event.PaymentCompleteEventPublisher;
 import com.inyoung.ticketing.payment.repository.PaymentRepository;
 import com.inyoung.ticketing.reservation.dto.ReservationRequest;
 import com.inyoung.ticketing.reservation.dto.ReservationResponse;
@@ -31,19 +32,22 @@ public class PaymentService {
 	private final SeatRepository seatRepository;
 	private final UsersRepository usersRepository;
 	private final ReservationService reservationService;
+	private final PaymentCompleteEventPublisher paymentCompleteEventPublisher;
 
 	public PaymentService(
 		PaymentRepository paymentRepository,
 		HoldStore holdStore,
 		SeatRepository seatRepository,
 		UsersRepository usersRepository,
-		ReservationService reservationService
+		ReservationService reservationService,
+		PaymentCompleteEventPublisher paymentCompleteEventPublisher
 	) {
 		this.paymentRepository = paymentRepository;
 		this.holdStore = holdStore;
 		this.seatRepository = seatRepository;
 		this.usersRepository = usersRepository;
 		this.reservationService = reservationService;
+		this.paymentCompleteEventPublisher = paymentCompleteEventPublisher;
 	}
 
 	@Transactional
@@ -118,6 +122,14 @@ public class PaymentService {
 		payment.setStatus(PaymentStatus.COMPLETED);
 		payment.setCompletedAt(now());
 		payment.setReservationId(reservation.getReservationId());
+
+		// 결제 완료 이벤트 발행 (Kafka를 통해 비동기로 이메일/SMS 전송)
+		paymentCompleteEventPublisher.publishPaymentComplete(
+			paymentKey,
+			userId,
+			payment.getConcertId(),
+			payment.getAmount()
+		);
 
 		return new PaymentResponse(payment);
 	}

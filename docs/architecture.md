@@ -420,6 +420,57 @@ sequenceDiagram
 - **자동 재연결**: 연결 종료 시 클라이언트가 자동 재연결
 - **폴링 백업**: SSE 연결 실패 시 폴링으로 대체
 
+### 5. 결제 완료 및 이메일/SMS 알림 (Kafka 비동기 처리)
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant FE as Frontend
+    participant API as PaymentController
+    participant PSvc as PaymentService
+    participant K as Kafka
+    participant Con as PaymentCompleteEventConsumer
+    participant NotifSvc as NotificationService
+    participant EmailSvc as EmailService
+    participant SmsSvc as SmsService
+
+    U->>FE: 결제 완료하기 클릭
+    FE->>API: POST /api/payments/{paymentKey}/complete
+    API->>PSvc: completePayment()
+    PSvc->>PSvc: 결제 상태 COMPLETED로 변경
+    PSvc->>K: publish(PaymentCompleteEvent)
+    Note over PSvc,K: 이벤트 발행만 수행<br/>응답 빠르게 반환
+    PSvc-->>API: 결제 완료 응답
+    API-->>FE: 팝업 표시 및 홈 리다이렉트 (즉시)
+
+    Note over Con,SmsSvc: 비동기 처리 (별도 스레드)
+    K->>Con: handlePaymentComplete(event)
+    Con->>NotifSvc: notifyPaymentComplete(userId, concertId, amount)
+    
+    Note over NotifSvc: 사용자의 notiType 조회
+    NotifSvc->>NotifSvc: user.getNotiType()
+    
+    alt notiType = "email"
+        NotifSvc->>EmailSvc: sendPaymentCompleteEmail(...)
+        EmailSvc->>EmailSvc: Google SMTP 서버에 메일 전송
+        EmailSvc-->>NotifSvc: 전송 성공/실패 로깅
+    else notiType = "sms"
+        NotifSvc->>SmsSvc: sendPaymentCompleteSms(...)
+        SmsSvc->>SmsSvc: HMAC-SHA256 서명 생성
+        SmsSvc->>SmsSvc: NCP SENS API 호출
+        SmsSvc-->>NotifSvc: 전송 성공/실패 로깅
+    end
+    
+    Note over Con,SmsSvc: 예외 발생 시 다시 로깅<br/>Kafka DLT로 이동 가능
+```
+
+**핵심 아키텍처**:
+- **비동기 처리**: 결제 완료 후 알림은 별도 처리 (응답 시간 단축)
+- **도메인 분리**: PaymentService는 Kafka 이벤트만 발행 (알림 로직 없음)
+- **라우팅**: NotificationService에서 notiType으로 EmailService 또는 SmsService 호출
+- **에러 처리**: 알림 실패가 결제 프로세스를 방해하지 않음
+- **재시도 가능**: Kafka의 Dead Letter Topic으로 실패 이벤트 재처리
+
 ## 전체 예매 플로우 (End-to-End)
 
 ### 단계별 상세 설명
@@ -623,3 +674,227 @@ erDiagram
 - **Lua 스크립트**: 원자적 연산 보장
 - **토큰 검증**: 락 해제 시 토큰 일치 확인으로 안전성 확보
 - **TTL**: 락 획득 실패 시 자동 해제
+
+### 5. 이메일 & SMS 알림 선택
+- **Google SMTP (이메일)**: 안정적이고 설정이 간단, 전 세계 사용 가능
+- **NCP SENS (SMS)**: 한국 최적화, 저렴한 비용, 빠른 전송
+
+## 이메일 & SMS 구현 상세
+
+### 1. 이메일 시스템 (Google SMTP)
+
+#### 아키텍처
+```
+PaymentService (Kafka Event 발행)
+       ↓
+PaymentCompleteEventConsumer (Kafka 이벤트 수신)
+       ↓
+NotificationService (라우팅 로직)
+       ↓
+EmailService (Google SMTP 발송)
+```
+
+#### 구현 세부사항
+- **Provider**: Google SMTP Server (smtp.gmail.com:587)
+- **인증**: App Password (16자 자동 생성 비밀번호)
+- **프로토콜**: STARTTLS (TLS 암호화)
+- **타임아웃**: 5초 (연결, 전송)
+- **메시지 포맷**: 결제 금액, 콘서트 정보 포함
+
+#### 설정 (application.properties)
+```properties
+# 이메일 설정 (Google SMTP)
+spring.mail.host=smtp.gmail.com
+spring.mail.port=587
+spring.mail.username=${MAIL_USERNAME}  # .env에서 주입
+spring.mail.password=${MAIL_PASSWORD}  # .env에서 주입
+spring.mail.properties.mail.smtp.auth=true
+spring.mail.properties.mail.smtp.starttls.enable=true
+spring.mail.properties.mail.smtp.starttls.required=true
+spring.mail.properties.mail.smtp.connectiontimeout=5000
+spring.mail.properties.mail.smtp.timeout=5000
+spring.mail.properties.mail.smtp.writetimeout=5000
+```
+
+#### 사용 예시
+```java
+// PaymentCompleteEventConsumer에서
+paymentNotificationService.notifyPaymentComplete(userId, concertId, amount);
+    ↓
+// NotificationService에서
+if (user.getNotiType().equals("email")) {
+    emailService.sendPaymentCompleteEmail(
+        user.getEmail(),
+        user.getUsername(),
+        concert.getTitle(),
+        payment.getAmount()
+    );
+}
+```
+
+#### 환경 설정
+1. Gmail 계정 2단계 인증 활성화
+2. [Google Account Security](https://myaccount.google.com/apppasswords) 에서 16자 앱 비밀번호 생성
+3. `.env` 파일에 추가:
+```env
+MAIL_USERNAME=your-email@gmail.com
+MAIL_PASSWORD=xxxx xxxx xxxx xxxx  # 16자 앱 비밀번호
+```
+
+### 2. SMS 시스템 (NCP SENS)
+
+#### 아키텍처
+```
+PaymentService (Kafka Event 발행)
+       ↓
+PaymentCompleteEventConsumer (Kafka 이벤트 수신)
+       ↓
+NotificationService (라우팅 로직)
+       ↓
+SmsService (NCP SENS API 호출)
+```
+
+#### 구현 세부사항
+- **Provider**: 네이버 클라우드 플랫폼 (NCP SENS)
+- **인증**: HMAC-SHA256 서명 기반 (REST API)
+- **엔드포인트**: `POST https://sens.apigw.ntruss.com/sms/v2/services/{serviceId}/messages`
+- **전송 형식**: JSON
+- **응답**: 메시지 ID 및 전송 상태 반환
+
+#### API 요청 구조
+```
+Request Headers:
+- x-ncp-apigw-timestamp: {타임스탬프 (밀리초)}
+- x-ncp-iam-access-key: {접근 키}
+- x-ncp-apigw-signature-v2: {HMAC-SHA256 서명}
+- Content-Type: application/json
+
+Request Body (JSON):
+{
+  "type": "SMS",
+  "contentType": "COMM",
+  "countryCode": "82",
+  "from": "발신번호 (예: 01012345678)",
+  "messages": [
+    {
+      "to": "수신번호 (예: 01087654321)"
+    }
+  ],
+  "content": "메시지 내용"
+}
+```
+
+#### HMAC-SHA256 서명 생성
+```java
+String message = "POST\n/sms/v2/services/{serviceId}/messages\n{timestamp}\n{accessKey}";
+Mac mac = Mac.getInstance("HmacSHA256");
+SecretKeySpec secretKey = new SecretKeySpec(secretKey.getBytes(), "HmacSHA256");
+mac.init(secretKey);
+byte[] signature = mac.doFinal(message.getBytes());
+String encodedSignature = Base64.getEncoder().encodeToString(signature);
+```
+
+#### 설정 (application.properties)
+```properties
+# NCP SENS 설정 (.env에서 주입)
+ncp.sens.service-id=${NCP_SENS_SERVICE_ID}
+ncp.sens.access-key=${NCP_SENS_ACCESS_KEY}
+ncp.sens.secret-key=${NCP_SENS_SECRET_KEY}
+ncp.sens.from-number=${NCP_SENS_FROM_NUMBER}
+ncp.sens.api-url=https://sens.apigw.ntruss.com
+```
+
+#### 환경 설정
+1. NCP 콘솔에서 SENS 서비스 신청
+2. API 인증키 발급 (Access Key, Secret Key)
+3. 발신 번호 등록 (비용 발생할 수 있음)
+4. `.env` 파일에 추가:
+```env
+NCP_SENS_SERVICE_ID=ncp-service-id
+NCP_SENS_ACCESS_KEY=ncp-access-key
+NCP_SENS_SECRET_KEY=ncp-secret-key
+NCP_SENS_FROM_NUMBER=01012345678  # 회사 발신 전용 번호
+```
+
+#### 사용 예시
+```java
+// PaymentCompleteEventConsumer에서
+paymentNotificationService.notifyPaymentComplete(userId, concertId, amount);
+    ↓
+// NotificationService에서
+if (user.getNotiType().equals("sms")) {
+    smsService.sendPaymentCompleteSms(
+        user.getPhone(),
+        user.getUsername(),
+        concert.getTitle(),
+        payment.getAmount()
+    );
+}
+```
+
+### 3. 알림 라우팅 (NotificationService)
+
+```java
+@Service
+public class PaymentNotificationService {
+    @Autowired
+    private UsersRepository usersRepository;
+    
+    @Autowired
+    private ConcertRepository concertRepository;
+    
+    @Autowired
+    private EmailService emailService;
+    
+    @Autowired
+    private SmsService smsService;
+    
+    // 사용자의 notiType에 따라 이메일 또는 SMS 전송
+    public void notifyPaymentComplete(String userId, Long concertId, Long amount) {
+        Users user = usersRepository.findByUserId(userId)
+            .orElseThrow(() -> new RuntimeException("User not found"));
+        
+        Concert concert = concertRepository.findById(concertId)
+            .orElseThrow(() -> new RuntimeException("Concert not found"));
+        
+        String notiType = user.getNotiType();  // "email" 또는 "sms"
+        
+        if ("email".equals(notiType)) {
+            emailService.sendPaymentCompleteEmail(
+                user.getEmail(),
+                user.getUsername(),
+                concert.getTitle(),
+                amount
+            );
+        } else if ("sms".equals(notiType)) {
+            smsService.sendPaymentCompleteSms(
+                user.getPhone(),
+                user.getUsername(),
+                concert.getTitle(),
+                amount
+            );
+        }
+    }
+}
+```
+
+### 4. 오류 처리 및 재시도
+
+#### 시나리오별 처리
+| 상황 | 처리 방식 |
+|------|---------|
+| 이메일/SMS 전송 실패 | 예외 로깅 후 Kafka 메시지 consumed |
+| API 연결 타임아웃 | IOException 발생 → 스택 트레이스 로깅 |
+| 사용자 정보 없음 | RuntimeException 발생 → 로그 기록 |
+| notiType이 잘못됨 | 두 서비스 모두 호출 안 함 |
+
+#### Kafka DLT (Dead Letter Topic) 설정 (선택사항)
+```properties
+# 프로덕션 환경에서 추천
+spring.kafka.listener.error-handler=paymentCompleteErrorHandler
+spring.kafka.listener.ack-mode=manual
+```
+
+---
+
+[이전 기술적 의사결정 섹션]

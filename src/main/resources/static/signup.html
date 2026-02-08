@@ -26,6 +26,37 @@
 				<span>비밀번호</span>
 				<input id="password" type="password" placeholder="6~50자" minlength="6" maxlength="50" required>
 			</label>
+			<label>
+				<span>이메일</span>
+				<input id="email" type="email" placeholder="example@email.com" required>
+			</label>
+			<label>
+				<span>휴대폰번호</span>
+				<input id="phone" type="tel" placeholder="010-0000-0000" required>
+			</label>
+			
+			<div class="notification-preference">
+				<label class="preference-label">
+					<span>결제 알림 방식</span>
+				</label>
+				<div class="toggle-group">
+					<button type="button" class="toggle-btn active" data-method="sms">
+						<svg class="toggle-icon" viewBox="0 0 24 24" aria-hidden="true">
+							<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+						</svg>
+						<span>문자</span>
+					</button>
+					<button type="button" class="toggle-btn" data-method="email">
+						<svg class="toggle-icon" viewBox="0 0 24 24" aria-hidden="true">
+							<rect x="2" y="4" width="20" height="16" rx="2" ry="2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+							<path d="m22 6-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+						</svg>
+						<span>이메일</span>
+					</button>
+				</div>
+				<input id="notificationMethod" type="hidden" value="sms">
+			</div>
+
 			<button type="submit" class="primary">회원가입</button>
 		</form>
 

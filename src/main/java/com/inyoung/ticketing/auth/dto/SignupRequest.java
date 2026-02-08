@@ -1,6 +1,8 @@
 package com.inyoung.ticketing.auth.dto;
 
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 // 회원가입 요청 DTO
@@ -12,6 +14,17 @@ public class SignupRequest {
 	@NotBlank
 	@Size(min = 6, max = 50)
 	private String password;
+
+	@NotBlank
+	@Email
+	private String email;
+
+	@NotBlank
+	@Pattern(regexp = "^\\d{3}-\\d{4}-\\d{4}$")
+	private String phone;
+
+	@NotBlank
+	private String notificationMethod = "sms";
 
 	// 사용자 아이디
 	public String getUsername() {
@@ -31,5 +44,35 @@ public class SignupRequest {
 	// 비밀번호 설정
 	public void setPassword(String password) {
 		this.password = password;
+	}
+
+	// 이메일
+	public String getEmail() {
+		return email;
+	}
+
+	// 이메일 설정
+	public void setEmail(String email) {
+		this.email = email;
+	}
+
+	// 휴대폰번호
+	public String getPhone() {
+		return phone;
+	}
+
+	// 휴대폰번호 설정
+	public void setPhone(String phone) {
+		this.phone = phone;
+	}
+
+	// 알림 방식
+	public String getNotificationMethod() {
+		return notificationMethod;
+	}
+
+	// 알림 방식 설정
+	public void setNotificationMethod(String notificationMethod) {
+		this.notificationMethod = notificationMethod;
 	}
 }

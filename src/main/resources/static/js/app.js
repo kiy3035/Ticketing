@@ -1,3 +1,21 @@
+// 로그인 후 역할 확인 및 리다이렉팅
+const checkUserRoleAndRedirect = async () => {
+	try {
+		const result = await window.fetchJson('/api/auth/me');
+		if (result.ok) {
+			const userData = result.data;
+			// ADMIN 권한이면 관리자 화면으로 리다이렉팅
+			if (userData.role === 'ADMIN') {
+				window.location.href = '/admin.html';
+			}
+		}
+	} catch (error) {
+		// 에러 발생 시 현재 페이지에서 계속 진행
+	}
+};
+
+checkUserRoleAndRedirect();
+
 // 콘서트 목록을 불러와 카드로 렌더링한다.
 const listEl = document.getElementById('concertList');
 const statActiveUsers = document.getElementById('statActiveUsers');

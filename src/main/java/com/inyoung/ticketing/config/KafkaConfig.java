@@ -4,6 +4,7 @@ import java.util.HashMap;
 import java.util.Map;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.inyoung.ticketing.hold.event.SeatHoldEvent;
+import com.inyoung.ticketing.payment.event.PaymentCompleteEvent;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.boot.autoconfigure.kafka.KafkaProperties;
@@ -66,6 +67,53 @@ public class KafkaConfig {
 		ConcurrentKafkaListenerContainerFactory<String, String> factory =
 			new ConcurrentKafkaListenerContainerFactory<>();
 		factory.setConsumerFactory(seatHoldConsumerFactory);
+		return factory;
+	}
+
+	// ===== 결제 알림 이벤트 설정 =====
+	@Bean
+	public ProducerFactory<String, PaymentCompleteEvent> paymentCompleteProducerFactory(
+		KafkaProperties kafkaProperties,
+		ObjectMapper objectMapper
+	) {
+		Map<String, Object> configs = new HashMap<>(kafkaProperties.buildProducerProperties());
+		configs.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+		configs.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
+		return new DefaultKafkaProducerFactory<>(
+			configs,
+			new StringSerializer(),
+			new JsonSerializer<>(objectMapper)
+		);
+	}
+
+	@Bean
+	public KafkaTemplate<String, PaymentCompleteEvent> paymentCompleteKafkaTemplate(
+		ProducerFactory<String, PaymentCompleteEvent> paymentCompleteProducerFactory
+	) {
+		return new KafkaTemplate<>(paymentCompleteProducerFactory);
+	}
+
+	@Bean
+	public ConsumerFactory<String, PaymentCompleteEvent> paymentCompleteConsumerFactory(
+		KafkaProperties kafkaProperties,
+		ObjectMapper objectMapper
+	) {
+		Map<String, Object> configs = new HashMap<>(kafkaProperties.buildConsumerProperties());
+		configs.put("key.deserializer", StringDeserializer.class);
+		return new DefaultKafkaConsumerFactory<>(
+			configs,
+			new StringDeserializer(),
+			new org.springframework.kafka.support.serializer.JsonDeserializer<>(PaymentCompleteEvent.class, false)
+		);
+	}
+
+	@Bean
+	public ConcurrentKafkaListenerContainerFactory<String, PaymentCompleteEvent> paymentCompleteKafkaListenerFactory(
+		ConsumerFactory<String, PaymentCompleteEvent> paymentCompleteConsumerFactory
+	) {
+		ConcurrentKafkaListenerContainerFactory<String, PaymentCompleteEvent> factory =
+			new ConcurrentKafkaListenerContainerFactory<>();
+		factory.setConsumerFactory(paymentCompleteConsumerFactory);
 		return factory;
 	}
 }

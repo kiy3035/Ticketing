@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="ko">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>관리자 대시보드 | 콘서트 예매</title>
+	<link rel="stylesheet" href="/css/app.css">
+	<style>
+		.admin-topbar {
+			background: linear-gradient(135deg, rgba(49, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%);
+			border-bottom: 2px solid rgba(49, 130, 246, 0.3);
+		}
+
+		.admin-badge {
+			display: inline-block;
+			background: rgba(249, 115, 22, 0.15);
+			color: var(--warning);
+			padding: 4px 12px;
+			border-radius: 20px;
+			font-size: 11px;
+			font-weight: 600;
+			text-transform: uppercase;
+			margin-right: 8px;
+		}
+
+		.admin-hero {
+			background: linear-gradient(135deg, rgba(49, 130, 246, 0.08) 0%, rgba(59, 130, 246, 0.04) 100%);
+			border: 1px solid rgba(49, 130, 246, 0.2);
+		}
+
+		.admin-grid {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+			gap: 16px;
+			margin-bottom: 24px;
+		}
+
+		.stat-card {
+			background: var(--panel);
+			padding: 20px;
+			border-radius: 12px;
+			border: 1px solid var(--line);
+		}
+
+		.stat-card .label {
+			color: var(--muted);
+			font-size: 12px;
+			margin-bottom: 8px;
+		}
+
+		.stat-card .value {
+			font-size: 28px;
+			font-weight: 700;
+			color: var(--primary-2);
+		}
+
+		.admin-table {
+			width: 100%;
+			border-collapse: collapse;
+			background: var(--panel);
+			border-radius: 12px;
+			overflow: hidden;
+			border: 1px solid var(--line);
+		}
+
+		.admin-table thead {
+			background: rgba(49, 130, 246, 0.08);
+		}
+
+		.admin-table th {
+			padding: 12px 16px;
+			text-align: left;
+			font-size: 13px;
+			font-weight: 600;
+			color: var(--text);
+			border-bottom: 1px solid var(--line);
+		}
+
+		.admin-table td {
+			padding: 12px 16px;
+			font-size: 13px;
+			border-bottom: 1px solid var(--line);
+		}
+
+		.admin-table tr:last-child td {
+			border-bottom: none;
+		}
+
+		.admin-table tr:hover {
+			background: rgba(49, 130, 246, 0.04);
+		}
+
+		.admin-tabs {
+			display: flex;
+			gap: 0;
+			border-bottom: 1px solid var(--line);
+			margin-bottom: 20px;
+		}
+
+		.admin-tab {
+			padding: 12px 20px;
+			cursor: pointer;
+			border: none;
+			background: none;
+			color: var(--muted);
+			font-size: 13px;
+			font-weight: 500;
+			border-bottom: 3px solid transparent;
+			transition: all 0.2s ease;
+		}
+
+		.admin-tab:hover {
+			color: var(--text);
+		}
+
+		.admin-tab.active {
+			color: var(--primary-2);
+			border-bottom-color: var(--primary-2);
+		}
+
+		.admin-tabpanel {
+			display: none;
+		}
+
+		.admin-tabpanel.active {
+			display: block;
+		}
+
+		.search-bar {
+			display: flex;
+			gap: 12px;
+			margin-bottom: 20px;
+		}
+
+		.search-bar input {
+			flex: 1;
+			padding: 12px;
+			border-radius: 12px;
+			border: 1px solid var(--line);
+			background: var(--panel-2);
+			color: var(--text);
+		}
+
+		.search-bar button {
+			padding: 12px 24px;
+		}
+
+		.no-data {
+			text-align: center;
+			padding: 40px 20px;
+			color: var(--muted);
+		}
+	</style>
+</head>
+<body>
+	<header class="topbar admin-topbar">
+		<a class="brand" href="/admin.html">
+			<span class="logo">CT</span>
+			<span>Concert Ticketing</span>
+		</a>
+		<nav class="nav">
+			<span class="admin-badge">관리자</span>
+			<a href="/admin.html" class="active">대시보드</a>
+		</nav>
+		<div class="user">
+			<a class="ghost topbar-link" href="/app.html">일반 사용자로 전환</a>
+			<span id="userName" class="badge">admin</span>
+			<button id="logoutBtn" class="ghost">로그아웃</button>
+		</div>
+	</header>
+
+	<main class="container">
+		<section class="hero admin-hero">
+			<div class="hero-card">
+				<h1>관리자 대시보드</h1>
+				<p>전체 예매 현황, 사용자, 결제 정보를 관리합니다.</p>
+			</div>
+		</section>
+
+		<!-- 통계 카드 -->
+		<div class="admin-grid">
+			<div class="stat-card">
+				<div class="label">총 사용자</div>
+				<div class="value" id="statTotalUsers">-</div>
+			</div>
+			<div class="stat-card">
+				<div class="label">총 예약</div>
+				<div class="value" id="statTotalReservations">-</div>
+			</div>
+			<div class="stat-card">
+				<div class="label">오늘 결제</div>
+				<div class="value" id="statTodayPayments">-</div>
+			</div>
+			<div class="stat-card">
+				<div class="label">총 매출</div>
+				<div class="value" id="statTotalRevenue">-</div>
+			</div>
+		</div>
+
+		<!-- 탭 네비게이션 -->
+		<div class="admin-tabs">
+			<button class="admin-tab active" data-tab="statistics">통계</button>
+			<button class="admin-tab" data-tab="payments">결제 관리</button>
+			<button class="admin-tab" data-tab="users">사용자 관리</button>
+			<button class="admin-tab" data-tab="concerts">공연 관리</button>
+		</div>
+
+		<!-- 통계 탭 -->
+		<div id="statistics" class="admin-tabpanel active">
+			<h2>예매 통계</h2>
+			<div style="margin-top: 20px; padding: 40px; background: var(--panel); border-radius: 12px; text-align: center; color: var(--muted);">
+				통계 차트는 추후 추가 예정입니다.
+			</div>
+		</div>
+
+		<!-- 결제 관리 탭 -->
+		<div id="payments" class="admin-tabpanel">
+			<h2>최근 결제 내역</h2>
+			<div class="search-bar">
+				<input id="paymentSearchInput" type="text" placeholder="사용자명, 예약번호로 검색">
+				<button class="primary" id="paymentSearchBtn">검색</button>
+			</div>
+			<div id="paymentTableContainer">
+				<table class="admin-table" id="paymentTable">
+					<thead>
+						<tr>
+							<th>결제 번호</th>
+							<th>사용자</th>
+							<th>금액</th>
+							<th>상태</th>
+							<th>결제 시각</th>
+						</tr>
+					</thead>
+					<tbody id="paymentTableBody">
+						<tr>
+							<td colspan="5" class="no-data">데이터를 불러오는 중...</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+		</div>
+
+		<!-- 사용자 관리 탭 -->
+		<div id="users" class="admin-tabpanel">
+			<h2>사용자 목록</h2>
+			<div class="search-bar">
+				<input id="userSearchInput" type="text" placeholder="사용자명, 이메일로 검색">
+				<button class="primary" id="userSearchBtn">검색</button>
+			</div>
+			<div id="userTableContainer">
+				<table class="admin-table" id="userTable">
+					<thead>
+						<tr>
+							<th>사용자명</th>
+							<th>이메일</th>
+							<th>포인트</th>
+							<th>역할</th>
+							<th>가입 일시</th>
+						</tr>
+					</thead>
+					<tbody id="userTableBody">
+						<tr>
+							<td colspan="5" class="no-data">데이터를 불러오는 중...</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+		</div>
+
+		<!-- 공연 관리 탭 -->
+		<div id="concerts" class="admin-tabpanel">
+			<h2>공연 목록</h2>
+			<div class="search-bar">
+				<input id="concertSearchInput" type="text" placeholder="공연명으로 검색">
+				<button class="primary" id="concertSearchBtn">검색</button>
+			</div>
+			<div id="concertTableContainer">
+				<table class="admin-table" id="concertTable">
+					<thead>
+						<tr>
+							<th>공연명</th>
+							<th>장소</th>
+							<th>시작</th>
+							<th>상태</th>
+							<th>좌석 수</th>
+						</tr>
+					</thead>
+					<tbody id="concertTableBody">
+						<tr>
+							<td colspan="5" class="no-data">데이터를 불러오는 중...</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+		</div>
+	</main>
+
+	<script src="/js/api.js"></script>
+	<script src="/js/topbar.js"></script>
+	<script src="/js/init.js"></script>
+	<script src="/js/admin.js"></script>
+</body>
+</html>

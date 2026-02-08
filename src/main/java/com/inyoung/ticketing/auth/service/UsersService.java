@@ -41,6 +41,9 @@ public class UsersService implements UserDetailsService {
 		Users account = new Users();
 		account.setUsername(request.getUsername());
 		account.setPw(passwordEncoder.encode(request.getPassword()));
+		account.setEmail(request.getEmail());
+		account.setPhone(request.getPhone());
+		account.setNotiType(request.getNotificationMethod());
 		account.setPoint(SIGNUP_POINT_BONUS);
 		usersRepository.save(account);
 	}
@@ -56,6 +59,14 @@ public class UsersService implements UserDetailsService {
 			point,
 			account.getCreatedAt()
 		);
+	}
+
+	// 로그인 사용자의 역할 조회
+	@Transactional(readOnly = true)
+	public String loadUserRole(String username) {
+		Users account = usersRepository.findByUsername(username)
+			.orElseThrow(() -> new UsernameNotFoundException("User not found"));
+		return account.getRole();
 	}
 
 	// 스프링 시큐리티 사용자 로딩

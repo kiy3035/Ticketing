@@ -10,6 +10,10 @@ const paySeatPrice = document.getElementById('paySeatPrice');
 const payBtn = document.getElementById('payBtn');
 const payResult = document.getElementById('payResult');
 const backToSeat = document.getElementById('backToSeat');
+const payOverlay = document.getElementById('payOverlay');
+const overlayTitle = document.getElementById('overlayTitle');
+const overlayMessage = document.getElementById('overlayMessage');
+const overlayHome = document.getElementById('overlayHome');
 
 const setStatus = (message, status = 'info') => {
 	payResult.textContent = message;
@@ -90,12 +94,26 @@ const submitPayment = async () => {
 		}
 
 		setStatus(`결제 완료: 예약번호 ${completeResult.data.reservationId}`, 'ok');
-		payBtn.disabled = true;
+			payBtn.disabled = true;
+
+			// 큰 모달 오버레이로 성공 메시지 표시 후 홈으로 리다이렉트
+			if (payOverlay) {
+				overlayTitle.textContent = '결제가 완료되었습니다';
+				overlayMessage.textContent = `예약번호 ${completeResult.data.reservationId}로 정상 처리되었습니다. 곧 홈으로 이동합니다.`;
+				payOverlay.classList.remove('hidden');
+				payOverlay.setAttribute('aria-hidden', 'false');
+				// 3초 후 홈으로 이동
+				setTimeout(() => { window.location.href = '/app.html'; }, 3000);
+			}
 	} catch (error) {
 		setStatus(`결제 실패: ${error.message}`, 'error');
 	}
 };
 
 payBtn.addEventListener('click', submitPayment);
+
+if (overlayHome) {
+	overlayHome.addEventListener('click', () => { window.location.href = '/app.html'; });
+}
 
 loadPaymentInfo();

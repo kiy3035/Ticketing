@@ -239,11 +239,32 @@ const updateCurrentPrice = (seatId) => {
 	statCurrentPrice.textContent = `${seat.price.toLocaleString()}원`;
 };
 
+// Collapsible 토글 기능
+const seatToggle = document.getElementById('seatToggle');
+const seatContent = document.getElementById('seatContent');
+
+if (seatToggle && seatContent) {
+	seatToggle.addEventListener('click', () => {
+		seatToggle.classList.toggle('open');
+		seatContent.classList.toggle('open');
+	});
+
+	// 초기 상태: 열려있음
+	seatToggle.classList.add('open');
+	seatContent.classList.add('open');
+}
+
 seatGrid.addEventListener('click', (event) => {
 	const button = event.target.closest('button.seat');
 	if (!button || button.disabled) {
 		return;
 	}
+	// 좌석 선택 시 이전 선택 해제 및 현재 선택 강조
+	const prev = seatGrid.querySelector('button.seat.selected');
+	if (prev && prev !== button) {
+		prev.classList.remove('selected');
+	}
+	button.classList.add('selected');
 	selectedSeatId = button.dataset.seatId;
 	updateCurrentPrice(button.dataset.seatId);
 	actionResult.textContent = '좌석이 선택되었습니다. 예매하기를 눌러 홀드를 진행하세요.';
