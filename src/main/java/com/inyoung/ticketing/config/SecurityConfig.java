@@ -25,13 +25,13 @@ public class SecurityConfig {
 		http
 			// 접근 제어 규칙 정의
 			.authorizeHttpRequests(auth -> auth
-				.requestMatchers("/", "/index.html").permitAll()
+				.requestMatchers("/").permitAll() // 루트 경로는 RootController에서 리다이렉트 처리
 				.requestMatchers("/login.html", "/signup.html", "/css/**", "/js/**", "/images/**").permitAll()
 				.requestMatchers("/favicon.ico").permitAll() // 브라우저 자동 요청 허용
 				.requestMatchers("/login", "/logout").permitAll()
 				.requestMatchers("/api/auth/signup").permitAll()
 				.requestMatchers("/api/queue/**").permitAll() // 부하 테스트용 허용
-				.requestMatchers("/app.html", "/concert.html", "/queue.html", "/api/**").authenticated()
+				.requestMatchers("/admin.html", "/app.html", "/concert.html", "/queue.html", "/reservation.html", "/payment.html", "/api/**").authenticated()
 				.anyRequest().authenticated()
 			)
 			// 커스텀 로그인 페이지 사용

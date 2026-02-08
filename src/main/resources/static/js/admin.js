@@ -4,6 +4,23 @@
  * 탭 전환, 데이터 조회, 검색 기능을 처리합니다.
  */
 
+// ADMIN 권한 검증 (ADMIN이 아니면 /app.html로 리다이렉트)
+const validateAdminRole = async () => {
+	try {
+		const result = await window.fetchJson('/api/auth/me');
+		if (!result.ok || result.data.role !== 'ADMIN') {
+			// ADMIN이 아니면 일반 사용자 페이지로 리다이렉트
+			window.location.href = '/app.html';
+		}
+	} catch (error) {
+		// 인증 실패 시 로그인 페이지로 리다이렉트
+		window.location.href = '/login.html';
+	}
+};
+
+// 페이지 로드 시 권한 검증
+validateAdminRole();
+
 // 탭 전환 기능
 const tabButtons = document.querySelectorAll('.admin-tab');
 const tabPanels = document.querySelectorAll('.admin-tabpanel');
