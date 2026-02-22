@@ -12,4 +12,10 @@ public interface SeatRepository extends JpaRepository<Seat, Long> {
 
 	// 콘서트별 좌석 상태 조회
 	List<Seat> findByConcertIdAndStatus(Long concertId, SeatStatus status);
+
+	/** 콘서트별 전체 좌석 수 (대기열 입장 제한 계산용) */
+	long countByConcertId(Long concertId);
+
+	/** 콘서트별 예매 완료(RESERVED) 좌석 수. 예매 가능 수 = countByConcertId - countByConcertIdAndStatus */
+	long countByConcertIdAndStatus(Long concertId, SeatStatus status);
 }

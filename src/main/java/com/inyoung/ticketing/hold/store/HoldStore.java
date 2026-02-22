@@ -87,6 +87,42 @@ public class HoldStore {
 		return holdToken.equals(token);
 	}
 
+	/**
+	 * 결제 진행 중 홀드 TTL 연장 (20분 제한 적용).
+	 * 결제 요청 시 호출하여 해당 홀드의 만료 시각을 연장한다.
+	 * Redis의 seat/token 키 TTL과 만료 ZSET 스코어를 함께 갱신한다.
+	 *
+	 * @param holdToken 홀드 토큰
+	 * @param newTtl    연장할 TTL (예: 20분)
+	 * @return 연장 성공 시 true, 홀드가 없으면 false
+	 */
+	public boolean extendHoldTtl(String holdToken, Duration newTtl) {
+		String payload = redisTemplate.opsForValue().get(tokenKey(holdToken));
+		if (payload == null || payload.isBlank()) {
+			return false;
+		}
+		HoldInfo info = fromPayload(payload);
+		Instant newExpiresAt = Instant.now().plus(newTtl);
+		HoldInfo newInfo = new HoldInfo(
+			info.getHoldToken(),
+			info.getConcertId(),
+			info.getSeatId(),
+			info.getUserId(),
+			newExpiresAt
+		);
+		String newPayload = toPayload(newInfo);
+		long ttlSeconds = newTtl.toSeconds();
+
+		String seatKey = seatKey(info.getSeatId());
+		String tokenKey = tokenKey(holdToken);
+		redisTemplate.opsForValue().set(seatKey, holdToken, Duration.ofSeconds(ttlSeconds));
+		redisTemplate.opsForValue().set(tokenKey, newPayload, Duration.ofSeconds(ttlSeconds));
+		// ZSET: 기존 payload 제거 후 새 만료 시각으로 추가
+		redisTemplate.opsForZSet().remove(EXPIRY_ZSET_KEY, payload);
+		redisTemplate.opsForZSet().add(EXPIRY_ZSET_KEY, newPayload, newExpiresAt.toEpochMilli());
+		return true;
+	}
+
 	public Optional<HoldInfo> releaseHold(String holdToken) {
 		String payload = redisTemplate.opsForValue().get(tokenKey(holdToken));
 		if (payload == null || payload.isBlank()) {

@@ -1,11 +1,13 @@
 package com.inyoung.ticketing.payment.service;
 
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.Optional;
 import java.util.UUID;
 import com.inyoung.ticketing.auth.domain.Users;
 import com.inyoung.ticketing.auth.repository.UsersRepository;
+import com.inyoung.ticketing.config.TicketingProperties;
 import com.inyoung.ticketing.hold.store.HoldInfo;
 import com.inyoung.ticketing.hold.store.HoldStore;
 import com.inyoung.ticketing.payment.domain.Payment;
@@ -33,6 +35,7 @@ public class PaymentService {
 	private final UsersRepository usersRepository;
 	private final ReservationService reservationService;
 	private final PaymentCompleteEventPublisher paymentCompleteEventPublisher;
+	private final TicketingProperties properties;
 
 	public PaymentService(
 		PaymentRepository paymentRepository,
@@ -40,7 +43,8 @@ public class PaymentService {
 		SeatRepository seatRepository,
 		UsersRepository usersRepository,
 		ReservationService reservationService,
-		PaymentCompleteEventPublisher paymentCompleteEventPublisher
+		PaymentCompleteEventPublisher paymentCompleteEventPublisher,
+		TicketingProperties properties
 	) {
 		this.paymentRepository = paymentRepository;
 		this.holdStore = holdStore;
@@ -48,12 +52,17 @@ public class PaymentService {
 		this.usersRepository = usersRepository;
 		this.reservationService = reservationService;
 		this.paymentCompleteEventPublisher = paymentCompleteEventPublisher;
+		this.properties = properties;
 	}
 
 	@Transactional
 	public PaymentResponse requestPayment(PaymentRequest request, String userId) {
 		String holdToken = request.getHoldToken();
 		HoldInfo hold = loadHold(holdToken, userId);
+
+		// 결제 진행 단계: 홀드 TTL을 20분으로 연장 (결제 완료까지 유지)
+		long extensionSeconds = properties.getPayment().getHoldExtensionTtlSeconds();
+		holdStore.extendHoldTtl(holdToken, Duration.ofSeconds(extensionSeconds));
 
 		Optional<Payment> existing = paymentRepository.findWithLockByHoldToken(holdToken);
 		if (existing.isPresent()) {

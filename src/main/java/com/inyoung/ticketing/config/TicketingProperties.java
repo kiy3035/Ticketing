@@ -8,6 +8,7 @@ public class TicketingProperties {
 	private Hold hold = new Hold();
 	private Kafka kafka = new Kafka();
 	private Queue queue = new Queue();
+	private Payment payment = new Payment();
 
 	// 홀드 관련 설정 접근자
 	public Hold getHold() {
@@ -23,9 +24,15 @@ public class TicketingProperties {
 		return queue;
 	}
 
-	// 홀드 설정 묶음
+	// 결제 관련 설정 접근자 (결제 진행 중 홀드 연장 등)
+	public Payment getPayment() {
+		return payment;
+	}
+
+	// 홀드 설정 묶음 (좌석 선택 단계 TTL)
 	public static class Hold {
-		private long ttlSeconds = 300;
+		/** 좌석 선택 단계 홀드 유효 시간(초). 기본 10분. */
+		private long ttlSeconds = 600;
 		private long cleanupIntervalMs = 60000;
 
 		// 홀드 TTL(초)
@@ -118,6 +125,20 @@ public class TicketingProperties {
 		// 정리 배치 크기 설정
 		public void setCleanupBatchSize(int cleanupBatchSize) {
 			this.cleanupBatchSize = cleanupBatchSize;
+		}
+	}
+
+	// 결제 설정 묶음 (결제 진행 중 홀드 연장 TTL)
+	public static class Payment {
+		/** 결제 요청 시 홀드 TTL 연장 시간(초). 기본 20분. */
+		private long holdExtensionTtlSeconds = 1200;
+
+		public long getHoldExtensionTtlSeconds() {
+			return holdExtensionTtlSeconds;
+		}
+
+		public void setHoldExtensionTtlSeconds(long holdExtensionTtlSeconds) {
+			this.holdExtensionTtlSeconds = holdExtensionTtlSeconds;
 		}
 	}
 }
