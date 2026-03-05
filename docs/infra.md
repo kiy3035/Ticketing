@@ -104,6 +104,17 @@ logging.level.org.springframework.cache=DEBUG
 - **캐시 타입**: Redis를 캐시 저장소로 사용
 - **로깅**: 캐시 동작 디버깅용
 
+### 취소된 공연 환불 배치 설정
+```properties
+# 취소된 공연 환불 배치
+ticketing.refund.batch-size=50                    # 한 번에 처리할 결제 건수
+ticketing.refund.interval-ms=300000               # 배치 실행 주기 (5분)
+```
+
+**설명**:
+- **batch-size**: 콘서트별 COMPLETED 결제를 한 번에 조회·처리할 건수
+- **interval-ms**: 스케줄러 실행 주기 (기본 5분)
+
 ### 대기열 설정
 ```properties
 # 대기열 설정

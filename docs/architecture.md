@@ -47,6 +47,7 @@ flowchart TB
         subgraph schedulers [Scheduler Layer]
             QueueScheduler[QueueProcessingScheduler<br/>대기열 처리]
             HoldCleanup[HoldCleanupScheduler<br/>홀드 만료 처리]
+            RefundBatch[RefundForCancelledConcertScheduler<br/>취소 공연 환불 배치]
         end
         
         subgraph events [Event Layer]
@@ -111,6 +112,7 @@ flowchart TB
 ### 6. Scheduler Layer
 - **QueueProcessingScheduler**: 대기열 처리 (2초마다 상위 N명 입장 허용)
 - **HoldCleanupScheduler**: 홀드 만료 처리 (60초마다 만료 홀드 스캔)
+- **RefundForCancelledConcertScheduler**: 취소된 공연 환불 배치 (5분마다 CANCELLED 공연의 COMPLETED 결제 청크 환불)
 
 ### 7. Event Layer
 - **SeatHoldEventPublisher**: Kafka로 이벤트 발행
@@ -343,7 +345,37 @@ sequenceDiagram
 - **트랜잭션**: `@Transactional`로 DB 작업의 원자성 보장
 - **홀드 해제**: 예약 확정 시 홀드 자동 해제
 
-### 4. 실시간 알림 플로우 (SSE)
+### 4. 취소된 공연 환불 배치 플로우
+
+```mermaid
+sequenceDiagram
+    participant SCH as RefundForCancelledConcertScheduler
+    participant CR as ConcertRepository
+    participant PR as PaymentRepository
+    participant PSvc as PaymentService
+    participant RSvc as ReservationService
+    participant DB as MySQL
+
+    SCH->>SCH: refundPaymentsForCancelledConcerts() (5분마다)
+    SCH->>CR: findByStatus(CANCELLED)
+    CR-->>SCH: [Concert]
+    loop 콘서트별
+        SCH->>PR: findByConcertIdAndStatus(concertId, COMPLETED, PageRequest)
+        PR-->>SCH: [Payment] (청크 50건)
+        loop 결제별
+            SCH->>PSvc: refundCompletedPaymentForCancelledConcert(paymentId)
+            PSvc->>PR: findWithLockById(paymentId)
+            PSvc->>PSvc: 포인트 환불 (Users.point += amount)
+            PSvc->>DB: Payment.status = CANCELED, canceledAt
+            PSvc->>RSvc: cancelReservationForRefund(reservationId)
+            RSvc->>DB: Reservation.status = CANCELLED, Seat.status = AVAILABLE
+        end
+    end
+```
+
+**핵심**: CANCELLED 공연의 COMPLETED 결제만 대상, 청크 페이징, 건별 트랜잭션·락, 실패 시 로그 후 계속 진행(멱등).
+
+### 5. 실시간 알림 플로우 (SSE)
 
 ```mermaid
 sequenceDiagram
@@ -384,7 +416,7 @@ sequenceDiagram
     end
 ```
 
-### 5. Mock 결제 플로우 (포인트 기반)
+### 6. Mock 결제 플로우 (포인트 기반)
 
 ```mermaid
 sequenceDiagram
@@ -420,7 +452,7 @@ sequenceDiagram
 - **자동 재연결**: 연결 종료 시 클라이언트가 자동 재연결
 - **폴링 백업**: SSE 연결 실패 시 폴링으로 대체
 
-### 5. 결제 완료 및 이메일/SMS 알림 (Kafka 비동기 처리)
+### 7. 결제 완료 및 이메일/SMS 알림 (Kafka 비동기 처리)
 
 ```mermaid
 sequenceDiagram

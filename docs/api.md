@@ -108,6 +108,8 @@ Authorization: (세션 쿠키)
 - `query` (optional): 검색어 (제목/장소)
 - `category` (optional): 카테고리 (`ALL`, `IDOL`, `BALLAD`, `ROCK`, `HIPHOP`, `JAZZ`, `CLASSICAL`)
 
+**콘서트 상태** (`status`): `UPCOMING`(예정), `ONGOING`(진행중), `COMPLETED`(종료), `CANCELLED`(취소)
+
 **응답** (200 OK):
 ```json
 {
@@ -119,8 +121,8 @@ Authorization: (세션 쿠키)
       "venue": "올림픽공원 KSPO DOME",
       "startAt": "2026-02-02T04:00:00+09:00",
       "endAt": "2026-02-02T07:00:00+09:00",
-      "status": "OPEN",
-      "category": "IDOL"
+"status": "UPCOMING",
+    "category": "IDOL"
     }
   ],
   "message": "OK",
@@ -459,6 +461,8 @@ Authorization: (세션 쿠키)
 
 결제는 실제 PG 연동이 아닌 **포인트 기반 Mock 결제**로 동작합니다.  
 흐름은 `READY → APPROVED → COMPLETED`이며, 필요 시 `CANCELED`로 전환됩니다.
+
+**배치 환불**: 공연이 `CANCELLED`로 변경된 경우, 스케줄러가 주기적으로 해당 공연의 `COMPLETED` 결제를 청크 단위로 환불(포인트 복원, 결제/예약/좌석 취소)합니다. 사용자 API가 아닌 백그라운드 배치로만 동작합니다.
 
 ### 결제 요청 생성 (READY)
 ```http

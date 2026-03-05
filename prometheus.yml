@@ -1,0 +1,12 @@
+# 티켓팅 앱 메트릭 스크래핑 (로컬 실행 시 host.docker.internal 사용)
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'ticketing'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      # 로컬에서 앱 실행 시: Windows/Mac은 host.docker.internal, Linux는 extra_hosts 필요
+      - targets: ['host.docker.internal:8080']
+        labels:
+          application: 'ticketing'

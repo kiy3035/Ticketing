@@ -452,3 +452,5 @@ ZREM queue:concert:1 {token}
 - `status`: READY/APPROVED/COMPLETED/CANCELED
 - `reservation_id`: 완료 시 예약 ID
 - `approved_at`, `completed_at`, `canceled_at`, `created_at`, `updated_at`
+
+**취소된 공연 환불 배치**: `Concert.status = CANCELLED`인 공연에 대해 `Payment.status = COMPLETED`인 건을 페이징 조회 후, 건별로 포인트 환불·결제 CANCELED·예약 CANCELLED·좌석 AVAILABLE 처리. `ticketing.refund.interval-ms` 주기, `ticketing.refund.batch-size` 청크로 실행.
