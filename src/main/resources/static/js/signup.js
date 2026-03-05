@@ -3,7 +3,9 @@ const form = document.getElementById('signupForm');
 const statusError = document.getElementById('statusError');
 const statusInfo = document.getElementById('statusInfo');
 const notificationMethod = document.getElementById('notificationMethod');
-const toggleBtns = document.querySelectorAll('.toggle-btn');
+const signupRole = document.getElementById('signupRole');
+const toggleBtns = document.querySelectorAll('.notification-preference .toggle-btn');
+const roleBtns = document.querySelectorAll('.role-preference .toggle-btn');
 
 // 알림 방식 토글
 toggleBtns.forEach(btn => {
@@ -12,6 +14,16 @@ toggleBtns.forEach(btn => {
 		toggleBtns.forEach(b => b.classList.remove('active'));
 		btn.classList.add('active');
 		notificationMethod.value = btn.dataset.method;
+	});
+});
+
+// 가입 유형 토글 (일반 고객 / 판매자)
+roleBtns.forEach(btn => {
+	btn.addEventListener('click', (e) => {
+		e.preventDefault();
+		roleBtns.forEach(b => b.classList.remove('active'));
+		btn.classList.add('active');
+		if (signupRole) signupRole.value = btn.dataset.role || 'USER';
 	});
 });
 
@@ -40,6 +52,7 @@ form.addEventListener('submit', async (event) => {
 	const email = document.getElementById('email').value.trim();
 	const phone = document.getElementById('phone').value.trim();
 	const notifMethod = notificationMethod.value;
+	const role = signupRole ? signupRole.value : 'USER';
 
 	if (!username || !password || !email || !phone) {
 		statusError.textContent = '모든 필수 항목을 입력해주세요.';
@@ -76,7 +89,8 @@ form.addEventListener('submit', async (event) => {
 				password,
 				email,
 				phone,
-				notificationMethod: notifMethod
+				notificationMethod: notifMethod,
+				role: role === 'SELLER' ? 'SELLER' : 'USER'
 			})
 		});
 		if (!result.ok) {

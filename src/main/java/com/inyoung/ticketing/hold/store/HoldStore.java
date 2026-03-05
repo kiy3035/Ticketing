@@ -20,6 +20,7 @@ public class HoldStore {
 	private static final String SEAT_KEY_PREFIX = "hold:seat:";
 	private static final String TOKEN_KEY_PREFIX = "hold:token:";
 	private static final String EXPIRY_ZSET_KEY = "hold:expires";
+	private static final String USER_HOLDS_PREFIX = "hold:user:";
 
 	private static final DefaultRedisScript<Long> CREATE_SCRIPT = new DefaultRedisScript<>(
 		"""
@@ -71,7 +72,11 @@ public class HoldStore {
 			payload,
 			String.valueOf(info.getExpiresAt().toEpochMilli())
 		);
-		return result != null && result == 1L;
+		if (result != null && result == 1L) {
+			redisTemplate.opsForSet().add(userHoldsKey(info.getUserId()), info.getHoldToken());
+			return true;
+		}
+		return false;
 	}
 
 	public Optional<HoldInfo> getHold(String holdToken) {
@@ -136,6 +141,7 @@ public class HoldStore {
 	public void releaseByPayload(HoldInfo info, String payload) {
 		List<String> keys = List.of(seatKey(info.getSeatId()), tokenKey(info.getHoldToken()), EXPIRY_ZSET_KEY);
 		redisTemplate.execute(RELEASE_SCRIPT, keys, info.getHoldToken(), payload);
+		redisTemplate.opsForSet().remove(userHoldsKey(info.getUserId()), info.getHoldToken());
 	}
 
 	public Set<Long> findHeldSeatIds(List<Long> seatIds) {
@@ -154,6 +160,31 @@ public class HoldStore {
 			}
 		}
 		return held;
+	}
+
+	/**
+	 * 사용자별 유효한 홀드 목록 (만료 전인 것만). 토큰이 이미 만료되어 없으면 Set에서 제거(정리).
+	 */
+	public List<HoldInfo> getHoldsByUser(String userId) {
+		Set<String> tokens = redisTemplate.opsForSet().members(userHoldsKey(userId));
+		if (tokens == null || tokens.isEmpty()) {
+			return List.of();
+		}
+		Instant now = Instant.now();
+		List<HoldInfo> result = new ArrayList<>();
+		for (String token : tokens) {
+			String payload = redisTemplate.opsForValue().get(tokenKey(token));
+			if (payload == null || payload.isBlank()) {
+				redisTemplate.opsForSet().remove(userHoldsKey(userId), token);
+				continue;
+			}
+			HoldInfo info = fromPayload(payload);
+			if (info.getExpiresAt().isBefore(now)) {
+				continue;
+			}
+			result.add(info);
+		}
+		return result;
 	}
 
 	public List<HoldPayload> findExpiredHolds(Instant now, int limit) {
@@ -180,6 +211,10 @@ public class HoldStore {
 
 	private String tokenKey(String holdToken) {
 		return TOKEN_KEY_PREFIX + holdToken;
+	}
+
+	private String userHoldsKey(String userId) {
+		return USER_HOLDS_PREFIX + userId;
 	}
 
 	private String toPayload(HoldInfo info) {

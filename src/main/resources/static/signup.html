@@ -5,6 +5,10 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<title>회원가입 | 콘서트 예매</title>
 	<link rel="stylesheet" href="/css/app.css">
+	<style>
+		.role-toggle-group .toggle-btn { flex-direction: column; gap: 2px; }
+		.role-toggle-group .toggle-btn small { font-size: 11px; opacity: 0.85; }
+	</style>
 </head>
 <body class="auth">
 	<div class="auth-card">
@@ -34,6 +38,23 @@
 				<span>휴대폰번호</span>
 				<input id="phone" type="tel" placeholder="010-0000-0000" required>
 			</label>
+
+			<div class="role-preference">
+				<label class="preference-label">
+					<span>가입 유형</span>
+				</label>
+				<div class="toggle-group role-toggle-group">
+					<button type="button" class="toggle-btn active" data-role="USER">
+						<span>일반 고객</span>
+						<small>콘서트 예매 이용</small>
+					</button>
+					<button type="button" class="toggle-btn" data-role="SELLER">
+						<span>판매자</span>
+						<small>공연 등록·매출 관리</small>
+					</button>
+				</div>
+				<input id="signupRole" type="hidden" value="USER">
+			</div>
 			
 			<div class="notification-preference">
 				<label class="preference-label">

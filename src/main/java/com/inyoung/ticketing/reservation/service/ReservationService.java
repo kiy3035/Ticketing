@@ -95,6 +95,9 @@ public class ReservationService {
 			if (!seat.getConcert().getId().equals(hold.getConcertId())) {
 				throw new ResponseStatusException(HttpStatus.CONFLICT, "Hold concert mismatch");
 			}
+			if (seat.getConcert().getEndAt().isBefore(Instant.now())) {
+				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Past concert cannot be booked");
+			}
 			if (seat.getStatus() == SeatStatus.RESERVED) {
 				throw new ResponseStatusException(HttpStatus.CONFLICT, "Seat already reserved");
 			}

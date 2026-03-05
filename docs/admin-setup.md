@@ -145,6 +145,32 @@ UPDATE users SET role = 'USER' WHERE username = 'username';
 
 ---
 
+## 판매자(SELLER) 계정 생성
+
+판매자 대시보드(`/seller.html`)는 **SELLER** 역할을 가진 사용자만 접근할 수 있습니다. 로그인 시 자동으로 `/seller.html`로 리다이렉트됩니다.
+
+### SELLER 사용자 생성 (MySQL)
+
+```sql
+-- seller / admin123 (위와 동일한 bcrypt 해시 사용 시)
+INSERT INTO users (username, pw, email, phone, noti_type, role, point, created_at)
+VALUES (
+  'seller',
+  '$2a$10$slYQmyNdGzIn9KqvkXmQ4eZ7Gz8LW5ycLLdXnz.HcNNx/0zL8pDOi',
+  'seller@concert.com',
+  '01000000001',
+  'sms',
+  'SELLER',
+  0,
+  NOW()
+);
+```
+
+- 판매자로 로그인 후 **공연 등록** → **좌석 일괄 등록** → 일반 사용자가 해당 공연을 예매할 수 있습니다.
+- 등록한 공연만 목록에 표시되며, 예약·매출을 조회할 수 있습니다.
+
+---
+
 ## 추후 개선 사항
 
 - [ ] 관리 인터페이스에서 사용자 역할 변경 기능

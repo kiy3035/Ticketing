@@ -1,5 +1,6 @@
 package com.inyoung.ticketing.concert.domain;
 
+import com.inyoung.ticketing.auth.domain.Users;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
@@ -7,9 +8,12 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 
@@ -40,6 +44,10 @@ public class Concert {
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 20)
 	private ConcertCategory category;
+
+	@ManyToOne(fetch = FetchType.LAZY)
+	@JoinColumn(name = "seller_id")
+	private Users seller;
 
 	@Column(nullable = false, updatable = false)
 	private OffsetDateTime createdAt;
@@ -113,6 +121,15 @@ public class Concert {
 	// 카테고리 설정
 	public void setCategory(ConcertCategory category) {
 		this.category = category;
+	}
+
+	// 판매자 (null이면 시스템/관리자 등록)
+	public Users getSeller() {
+		return seller;
+	}
+
+	public void setSeller(Users seller) {
+		this.seller = seller;
 	}
 
 	// 생성 시각

@@ -2,6 +2,7 @@ package com.inyoung.ticketing.auth.service;
 
 import java.util.Collections;
 import com.inyoung.ticketing.auth.domain.Users;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import com.inyoung.ticketing.auth.dto.MyPageResponse;
 import com.inyoung.ticketing.auth.dto.SignupRequest;
 import com.inyoung.ticketing.auth.repository.UsersRepository;
@@ -45,6 +46,10 @@ public class UsersService implements UserDetailsService {
 		account.setPhone(request.getPhone());
 		account.setNotiType(request.getNotificationMethod());
 		account.setPoint(SIGNUP_POINT_BONUS);
+		String role = request.getRole();
+		if (role == null || role.isBlank()) role = "USER";
+		if (!"USER".equals(role) && !"SELLER".equals(role)) role = "USER";
+		account.setRole(role);
 		usersRepository.save(account);
 	}
 
@@ -75,6 +80,11 @@ public class UsersService implements UserDetailsService {
 		Users account = usersRepository.findByUsername(username)
 			.orElseThrow(() -> new UsernameNotFoundException("User not found"));
 
-		return new User(account.getUsername(), account.getPw(), Collections.emptyList());
+		String role = account.getRole() != null ? account.getRole() : "USER";
+		return new User(
+			account.getUsername(),
+			account.getPw(),
+			Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + role))
+		);
 	}
 }

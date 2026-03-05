@@ -48,6 +48,10 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
 	@Query("SELECT COALESCE(SUM(p.amount), 0L) FROM Payment p WHERE p.status = 'COMPLETED'")
 	Long sumAllAmounts();
 
+	/** 콘서트별 완료 결제 금액 합계 (판매자 매출 조회용) */
+	@Query("SELECT COALESCE(SUM(p.amount), 0L) FROM Payment p WHERE p.concertId = :concertId AND p.status = 'COMPLETED'")
+	Long sumAmountByConcertIdAndStatus(@Param("concertId") Long concertId);
+
 	/**
 	 * 상태와 사용자ID 또는 결제키로 검색
 	 */

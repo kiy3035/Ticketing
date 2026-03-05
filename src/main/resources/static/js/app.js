@@ -25,6 +25,7 @@ const categoryButtons = document.querySelectorAll('.chip[data-category]');
 const searchInput = document.getElementById('searchInput');
 let allConcerts = [];
 let selectedCategory = 'ALL';
+let showPast = false; // false: 예매 가능, true: 지난 공연
 let searchTimer = null;
 const concertCache = new Map();
 const CACHE_TTL_MS = 30000;
@@ -36,7 +37,7 @@ const formatDate = (value) => {
 
 const renderConcerts = (concerts) => {
 	if (!concerts.length) {
-		listEl.innerHTML = '<div class="status info">등록된 콘서트가 없습니다.</div>';
+		listEl.innerHTML = '<div class="status info">' + (showPast ? '지난 공연이 없습니다.' : '등록된 콘서트가 없습니다.') + '</div>';
 		return;
 	}
 
@@ -46,7 +47,7 @@ const renderConcerts = (concerts) => {
 			<div class="meta">${concert.venue}</div>
 			<div class="meta">${formatDate(concert.startAt)} ~ ${formatDate(concert.endAt)}</div>
 			<div class="meta">상태: ${concert.status}</div>
-			<a class="primary" href="/concert.html?concertId=${concert.id}">좌석 보기</a>
+			<a class="primary" href="/concert.html?concertId=${concert.id}">${showPast ? '상세 보기' : '좌석 보기'}</a>
 		</div>
 	`).join('');
 };
@@ -67,7 +68,7 @@ const applyClientFilters = (concerts) => {
 	});
 };
 
-const buildCacheKey = (query, category) => `${category || 'ALL'}::${query || ''}`;
+const buildCacheKey = (query, category, past) => `${category || 'ALL'}::${query || ''}::${past ? 'past' : 'upcoming'}`;
 
 const getCachedConcerts = (key) => {
 	const entry = concertCache.get(key);
@@ -85,14 +86,11 @@ const setCachedConcerts = (key, data) => {
 	concertCache.set(key, { timestamp: Date.now(), data });
 };
 
-const buildQueryString = (query, category) => {
+const buildQueryString = (query, category, past) => {
 	const params = new URLSearchParams();
-	if (query) {
-		params.set('query', query);
-	}
-	if (category && category !== 'ALL') {
-		params.set('category', category);
-	}
+	if (query) params.set('query', query);
+	if (category && category !== 'ALL') params.set('category', category);
+	if (past) params.set('past', 'true');
 	return params.toString();
 };
 
@@ -100,8 +98,8 @@ const loadConcerts = async () => {
 	listEl.innerHTML = '<div class="status info">콘서트 정보를 불러오는 중...</div>';
 	try {
 		const query = searchInput ? searchInput.value.trim() : '';
-		const cacheKey = buildCacheKey(query, selectedCategory);
-		const allKey = buildCacheKey('', 'ALL');
+		const cacheKey = buildCacheKey(query, selectedCategory, showPast);
+		const allKey = buildCacheKey('', 'ALL', showPast);
 		if (!query && selectedCategory !== 'ALL') {
 			const cachedAll = getCachedConcerts(allKey);
 			if (cachedAll) {
@@ -117,16 +115,12 @@ const loadConcerts = async () => {
 			return;
 		}
 
-		const qs = buildQueryString(query, selectedCategory);
+		const qs = buildQueryString(query, selectedCategory, showPast);
 		const result = await window.fetchJson(qs ? `/api/concerts?${qs}` : '/api/concerts');
-		if (!result.ok) {
-			throw new Error('fetch failed');
-		}
+		if (!result.ok) throw new Error('fetch failed');
 		allConcerts = Array.isArray(result.data) ? result.data : [];
 		setCachedConcerts(cacheKey, allConcerts);
-		if (!query && selectedCategory === 'ALL') {
-			setCachedConcerts(allKey, allConcerts);
-		}
+		if (!query && selectedCategory === 'ALL') setCachedConcerts(allKey, allConcerts);
 		renderConcerts(applyClientFilters(allConcerts));
 	} catch (error) {
 		listEl.innerHTML = '<div class="status error">콘서트 정보를 불러오지 못했습니다.</div>';
@@ -148,6 +142,16 @@ const loadMetrics = async () => {
 		statSuccessRate.textContent = '-';
 	}
 };
+
+// 예매 가능 / 지난 공연 탭
+document.querySelectorAll('.app-tab').forEach((btn) => {
+	btn.addEventListener('click', () => {
+		document.querySelectorAll('.app-tab').forEach((b) => b.classList.remove('active'));
+		btn.classList.add('active');
+		showPast = btn.dataset.past === 'true';
+		loadConcerts();
+	});
+});
 
 categoryButtons.forEach((button) => {
 	button.addEventListener('click', () => {

@@ -1,5 +1,6 @@
 package com.inyoung.ticketing.concert.service;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.stream.Collectors;
 import com.inyoung.ticketing.cache.CacheNames;
@@ -19,13 +20,17 @@ public class ConcertService {
 		this.concertRepository = concertRepository;
 	}
 
-	// 콘서트 목록 캐시 조회
+	/** 콘서트 목록 캐시 조회. past=false면 예매 가능(종료 전), past=true면 지난 공연(종료 후). 오늘 날짜·현재 시간 기준 */
 	@Cacheable(cacheNames = CacheNames.CONCERT_LIST, keyGenerator = "concertListKeyGenerator")
-	public List<ConcertResponse> listConcerts(String query, String category) {
+	public List<ConcertResponse> listConcerts(String query, String category, boolean past) {
 		String trimmed = query == null ? null : query.trim();
 		String normalizedQuery = (trimmed == null || trimmed.isBlank()) ? null : trimmed;
 		ConcertCategory concertCategory = parseCategory(category);
-		return concertRepository.searchConcerts(concertCategory, normalizedQuery).stream()
+		Instant now = Instant.now();
+		List<com.inyoung.ticketing.concert.domain.Concert> concerts = past
+			? concertRepository.searchPastConcerts(concertCategory, normalizedQuery, now)
+			: concertRepository.searchUpcomingConcerts(concertCategory, normalizedQuery, now);
+		return concerts.stream()
 			.map(ConcertResponse::new)
 			.collect(Collectors.toList());
 	}

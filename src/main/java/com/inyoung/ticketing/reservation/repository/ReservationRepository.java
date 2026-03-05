@@ -11,4 +11,7 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
 
 	// 사용자별 예약 내역 최신순 조회
 	java.util.List<Reservation> findByUserIdOrderByReservedAtDesc(String userId);
+
+	/** 콘서트별 예약 목록 최신순 (판매자 대시보드용) */
+	java.util.List<Reservation> findByConcert_IdOrderByReservedAtDesc(Long concertId);
 }

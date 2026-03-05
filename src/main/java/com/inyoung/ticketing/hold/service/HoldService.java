@@ -2,9 +2,13 @@ package com.inyoung.ticketing.hold.service;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import com.inyoung.ticketing.concert.domain.Concert;
+import com.inyoung.ticketing.concert.repository.ConcertRepository;
 import com.inyoung.ticketing.config.TicketingProperties;
+import com.inyoung.ticketing.hold.dto.HoldItemResponse;
 import com.inyoung.ticketing.hold.dto.HoldRequest;
 import com.inyoung.ticketing.hold.dto.HoldResponse;
 import com.inyoung.ticketing.hold.event.SeatHoldEventPublisher;
@@ -24,20 +28,22 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class HoldService {
 	private final SeatRepository seatRepository;
+	private final ConcertRepository concertRepository;
 	private final LockService lockService;
 	private final TicketingProperties properties;
 	private final HoldStore holdStore;
 	private final SeatHoldEventPublisher eventPublisher;
 
-	// 리포지토리/락/설정 주입
 	public HoldService(
 		SeatRepository seatRepository,
+		ConcertRepository concertRepository,
 		LockService lockService,
 		TicketingProperties properties,
 		HoldStore holdStore,
 		SeatHoldEventPublisher eventPublisher
 	) {
 		this.seatRepository = seatRepository;
+		this.concertRepository = concertRepository;
 		this.lockService = lockService;
 		this.properties = properties;
 		this.holdStore = holdStore;
@@ -52,6 +58,10 @@ public class HoldService {
 
 		if (!seat.getConcert().getId().equals(request.getConcertId())) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Seat does not belong to concert");
+		}
+		Concert concert = seat.getConcert();
+		if (concert.getEndAt().isBefore(Instant.now())) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Past concert cannot be booked");
 		}
 
 		String lockKey = "lock:seat:" + seat.getId();
@@ -68,7 +78,7 @@ public class HoldService {
 			Instant expiresAt = Instant.now().plusSeconds(properties.getHold().getTtlSeconds());
 			HoldInfo info = new HoldInfo(
 				holdToken,
-				seat.getConcert().getId(),
+				concert.getId(),
 				seat.getId(),
 				userId,
 				expiresAt
@@ -95,5 +105,36 @@ public class HoldService {
 		}
 		holdStore.releaseHold(holdToken);
 		eventPublisher.publish(SeatHoldEventType.HOLD_CANCELED, info);
+	}
+
+	/** 로그인 사용자의 예약 중인 홀드 목록 (공연·좌석 정보 포함) */
+	@Transactional(readOnly = true)
+	public List<HoldItemResponse> listMyHolds(String userId) {
+		return holdStore.getHoldsByUser(userId).stream()
+			.map(info -> {
+				Concert concert = concertRepository.findById(info.getConcertId()).orElse(null);
+				Seat seat = seatRepository.findById(info.getSeatId()).orElse(null);
+				String title = concert != null ? concert.getTitle() : "-";
+				String venue = concert != null ? concert.getVenue() : "-";
+				Instant startAt = concert != null ? concert.getStartAt() : null;
+				Instant endAt = concert != null ? concert.getEndAt() : null;
+				String section = seat != null ? seat.getSection() : "-";
+				String seatNo = seat != null ? seat.getSeatNo() : "-";
+				Long price = seat != null ? seat.getPrice() : 0L;
+				return new HoldItemResponse(
+					info.getHoldToken(),
+					info.getConcertId(),
+					title,
+					venue,
+					startAt,
+					endAt,
+					info.getSeatId(),
+					section,
+					seatNo,
+					price,
+					info.getExpiresAt()
+				);
+			})
+			.toList();
 	}
 }

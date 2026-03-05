@@ -51,7 +51,10 @@ public class QueueProcessingScheduler {
 			long totalSeats = seatRepository.countByConcertId(concertId);
 			long reservedCount = seatRepository.countByConcertIdAndStatus(concertId, SeatStatus.RESERVED);
 			long availableSeats = Math.max(0, totalSeats - reservedCount);
-			int allowCount = (int) Math.min(batchSize, availableSeats);
+			// 좌석이 0개인 공연(미등록)은 대기열만 통과시키기 위해 배치 크기만큼 허용
+			int allowCount = totalSeats == 0
+				? batchSize
+				: (int) Math.min(batchSize, availableSeats);
 
 			// 대기열에서 상위 N명 조회 (배치 크기만큼)
 			List<String> topTokens = queueService.getTopTokens(concertId, batchSize);

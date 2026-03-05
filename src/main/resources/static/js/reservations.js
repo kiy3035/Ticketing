@@ -1,6 +1,8 @@
 const reservationListEl = document.getElementById('reservationList');
+const holdListEl = document.getElementById('holdList');
 const reservationStatusEl = document.getElementById('reservationStatus');
 const reservationSummaryEl = document.getElementById('reservationSummary');
+let currentTab = 'holds';
 
 const formatNumber = (value) => {
 	if (value === null || value === undefined) {
@@ -124,13 +126,79 @@ const renderReservations = (items) => {
 	reservationSummaryEl.textContent = `${items.length}건`;
 };
 
+const formatRemaining = (expiresAt) => {
+	const end = new Date(expiresAt).getTime();
+	const now = Date.now();
+	const sec = Math.max(0, Math.floor((end - now) / 1000));
+	if (sec < 60) return `${sec}초 남음`;
+	const min = Math.floor(sec / 60);
+	return `${min}분 남음`;
+};
+
+const buildHoldCard = (item) => {
+	const period = `${formatDate(item.startAt)} ~ ${formatDate(item.endAt)}`;
+	const seatInfo = `${item.section || ''}구역 ${item.seatNo || ''}번`.trim() || '좌석 정보 없음';
+	const paymentUrl = `/payment.html?concertId=${item.concertId}&seatId=${item.seatId}&holdToken=${encodeURIComponent(item.holdToken)}`;
+	return `
+		<div class="reservation-card" data-hold-token="${item.holdToken}">
+			<div class="reservation-main">
+				<div>
+					<h3>${item.concertTitle || '-'}</h3>
+					<div class="meta">${item.venue || '-'}</div>
+					<div class="meta">${period}</div>
+				</div>
+				<div class="reservation-status status-pending">예약 중</div>
+			</div>
+			<div class="reservation-badges">
+				<span class="badge light">${seatInfo}</span>
+				<span class="badge light">${formatNumber(item.price)}원</span>
+				<span class="badge dday">${formatRemaining(item.expiresAt)}</span>
+			</div>
+			<div class="hold-card-actions">
+				<a class="primary" href="${paymentUrl}">결제하기</a>
+				<button type="button" class="ghost hold-cancel-btn" data-hold-token="${item.holdToken}">홀드 취소</button>
+			</div>
+		</div>
+	`;
+};
+
+const renderHolds = (items) => {
+	if (!items.length) {
+		holdListEl.innerHTML = '<div class="status info">예약 중인 좌석이 없습니다.</div>';
+		return;
+	}
+	holdListEl.innerHTML = items.map(buildHoldCard).join('');
+	holdListEl.querySelectorAll('.hold-cancel-btn').forEach((btn) => {
+		btn.addEventListener('click', async () => {
+			const token = btn.dataset.holdToken;
+			if (!token || !confirm('이 좌석 예약을 취소하시겠습니까?')) return;
+			try {
+				const res = await fetch(`/api/holds/${encodeURIComponent(token)}`, { method: 'DELETE' });
+				if (res.ok) loadHolds();
+				else alert('취소에 실패했습니다.');
+			} catch (e) {
+				alert('취소에 실패했습니다.');
+			}
+		});
+	});
+};
+
+const loadHolds = async () => {
+	try {
+		const result = await window.fetchJson('/api/holds/me');
+		if (!result.ok) throw new Error('fetch failed');
+		const items = Array.isArray(result.data) ? result.data : [];
+		renderHolds(items);
+	} catch (error) {
+		holdListEl.innerHTML = '<div class="status error">예약 중 목록을 불러오지 못했습니다.</div>';
+	}
+};
+
 const loadReservations = async () => {
 	reservationStatusEl.textContent = '예매 내역을 불러오는 중...';
 	try {
 		const result = await window.fetchJson('/api/reservations/me');
-		if (!result.ok) {
-			throw new Error('fetch failed');
-		}
+		if (!result.ok) throw new Error('fetch failed');
 		const items = Array.isArray(result.data) ? result.data : [];
 		renderReservations(items);
 		reservationStatusEl.textContent = '';
@@ -141,4 +209,18 @@ const loadReservations = async () => {
 	}
 };
 
+document.querySelectorAll('.reservations-tab').forEach((tab) => {
+	tab.addEventListener('click', () => {
+		const tabName = tab.dataset.tab;
+		currentTab = tabName;
+		document.querySelectorAll('.reservations-tab').forEach((t) => t.classList.remove('active'));
+		document.querySelectorAll('.reservations-tabpanel').forEach((p) => p.classList.remove('active'));
+		tab.classList.add('active');
+		document.getElementById(tabName === 'holds' ? 'holdsPanel' : 'reservationsPanel').classList.add('active');
+		if (tabName === 'holds') loadHolds();
+		else loadReservations();
+	});
+});
+
+loadHolds();
 loadReservations();

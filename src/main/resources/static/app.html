@@ -5,6 +5,21 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<title>콘서트 목록 | 콘서트 예매</title>
 	<link rel="stylesheet" href="/css/app.css">
+	<style>
+		.app-tabs { display: flex; gap: 0; margin-bottom: 12px; }
+		.app-tab {
+			padding: 10px 20px;
+			border: none;
+			background: none;
+			color: var(--muted);
+			font-size: 14px;
+			font-weight: 500;
+			border-bottom: 3px solid transparent;
+			cursor: pointer;
+		}
+		.app-tab:hover { color: var(--text); }
+		.app-tab.active { color: var(--primary-2); border-bottom-color: var(--primary-2); }
+	</style>
 </head>
 <body>
 	<header class="topbar">
@@ -64,6 +79,10 @@
 		</section>
 
 		<section class="filter-bar">
+			<div class="app-tabs">
+				<button type="button" class="app-tab active" data-past="false">예매 가능</button>
+				<button type="button" class="app-tab" data-past="true">지난 공연</button>
+			</div>
 			<div class="chip-group">
 				<button class="chip active" data-category="ALL">전체</button>
 				<button class="chip" data-category="IDOL">아이돌</button>

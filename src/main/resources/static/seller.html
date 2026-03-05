@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="ko">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>판매자 대시보드 | 콘서트 예매</title>
+	<link rel="stylesheet" href="/css/app.css">
+	<style>
+		.seller-topbar {
+			background: linear-gradient(135deg, rgba(34, 197, 94, 0.08) 0%, rgba(34, 197, 94, 0.04) 100%);
+			border-bottom: 2px solid rgba(34, 197, 94, 0.25);
+		}
+		.seller-badge {
+			display: inline-block;
+			background: rgba(34, 197, 94, 0.15);
+			color: var(--success);
+			padding: 4px 12px;
+			border-radius: 20px;
+			font-size: 11px;
+			font-weight: 600;
+			text-transform: uppercase;
+			margin-right: 8px;
+		}
+		.seller-hero {
+			background: linear-gradient(135deg, rgba(34, 197, 94, 0.06) 0%, rgba(34, 197, 94, 0.02) 100%);
+			border: 1px solid rgba(34, 197, 94, 0.2);
+		}
+		.seller-table {
+			width: 100%;
+			border-collapse: collapse;
+			background: var(--panel);
+			border-radius: 12px;
+			overflow: hidden;
+			border: 1px solid var(--line);
+		}
+		.seller-table thead { background: rgba(34, 197, 94, 0.08); }
+		.seller-table th, .seller-table td {
+			padding: 12px 16px;
+			text-align: left;
+			font-size: 13px;
+			border-bottom: 1px solid var(--line);
+		}
+		.seller-table tr:last-child td { border-bottom: none; }
+		.seller-table tr:hover { background: rgba(34, 197, 94, 0.04); }
+		.seller-detail {
+			display: none;
+			margin-top: 24px;
+			padding: 24px;
+			background: var(--panel);
+			border-radius: 12px;
+			border: 1px solid var(--line);
+		}
+		.seller-detail.visible { display: block; }
+		.seller-detail h2 { margin-top: 0; }
+		.seller-tabs {
+			display: flex;
+			gap: 0;
+			border-bottom: 1px solid var(--line);
+			margin-bottom: 16px;
+		}
+		.seller-tab {
+			padding: 10px 18px;
+			cursor: pointer;
+			border: none;
+			background: none;
+			color: var(--muted);
+			font-size: 13px;
+			border-bottom: 3px solid transparent;
+		}
+		.seller-tab:hover { color: var(--text); }
+		.seller-tab.active { color: var(--success); border-bottom-color: var(--success); }
+		.seller-tabpanel { display: none; }
+		.seller-tabpanel.active { display: block; }
+		.modal {
+			display: none;
+			position: fixed;
+			inset: 0;
+			background: rgba(0,0,0,0.4);
+			z-index: 100;
+			align-items: center;
+			justify-content: center;
+		}
+		.modal.visible { display: flex; }
+		.modal-inner {
+			background: var(--panel);
+			border-radius: 16px;
+			padding: 24px;
+			max-width: 480px;
+			width: 90%;
+			max-height: 90vh;
+			overflow-y: auto;
+		}
+		.modal-inner h3 { margin-top: 0; }
+		.modal-inner label { display: block; margin-bottom: 8px; font-size: 13px; color: var(--muted); }
+		.modal-inner input, .modal-inner select {
+			width: 100%;
+			padding: 10px 12px;
+			border-radius: 10px;
+			border: 1px solid var(--line);
+			margin-bottom: 16px;
+		}
+		.modal-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px; }
+		.no-data { text-align: center; padding: 24px; color: var(--muted); }
+		.btn-sm { padding: 6px 12px; font-size: 12px; }
+	</style>
+</head>
+<body>
+	<header class="topbar seller-topbar">
+		<a class="brand" href="/seller.html">
+			<span class="logo">CT</span>
+			<span>Concert Ticketing</span>
+		</a>
+		<nav class="nav">
+			<span class="seller-badge">판매자</span>
+			<a href="/seller.html" class="active">내 공연</a>
+		</nav>
+		<div class="user">
+			<a class="ghost topbar-link" href="/app.html">일반 사용자로 전환</a>
+			<span id="userName" class="badge">seller</span>
+			<button id="logoutBtn" class="ghost">로그아웃</button>
+		</div>
+	</header>
+
+	<main class="container">
+		<section class="hero seller-hero">
+			<div class="hero-card" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+				<div>
+					<h1>판매자 대시보드</h1>
+					<p>등록한 공연을 관리하고, 좌석·예약·매출을 확인하세요.</p>
+				</div>
+				<button type="button" class="primary" id="btnCreateConcert">+ 공연 등록</button>
+			</div>
+		</section>
+
+		<div id="concertListSection">
+			<h2>내 공연 목록</h2>
+			<table class="seller-table">
+				<thead>
+					<tr>
+						<th>공연명</th>
+						<th>장소</th>
+						<th>일시</th>
+						<th>상태</th>
+						<th>좌석</th>
+						<th>예매</th>
+						<th>매출</th>
+						<th>관리</th>
+					</tr>
+				</thead>
+				<tbody id="concertTableBody">
+					<tr><td colspan="8" class="no-data">불러오는 중...</td></tr>
+				</tbody>
+			</table>
+		</div>
+
+		<div id="concertDetail" class="seller-detail">
+			<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+				<h2 id="detailTitle">공연 상세</h2>
+				<button type="button" class="ghost" id="btnCloseDetail">닫기</button>
+			</div>
+			<div id="detailMeta" style="color: var(--muted); font-size: 13px; margin-bottom: 16px;"></div>
+			<div class="seller-tabs">
+				<button type="button" class="seller-tab active" data-tab="seats">좌석</button>
+				<button type="button" class="seller-tab" data-tab="reservations">예약 목록</button>
+				<button type="button" class="seller-tab" data-tab="sales">매출</button>
+			</div>
+			<div id="seats" class="seller-tabpanel active">
+				<button type="button" class="primary btn-sm" id="btnAddSeats">좌석 일괄 등록</button>
+				<div id="seatsContent" style="margin-top: 12px;"></div>
+			</div>
+			<div id="reservations" class="seller-tabpanel">
+				<div id="reservationsContent"></div>
+			</div>
+			<div id="sales" class="seller-tabpanel">
+				<div id="salesContent"></div>
+			</div>
+		</div>
+	</main>
+
+	<!-- 공연 등록 모달 -->
+	<div id="modalCreateConcert" class="modal">
+		<div class="modal-inner">
+			<h3>공연 등록</h3>
+			<label>제목</label>
+			<input type="text" id="createTitle" placeholder="공연명">
+			<label>장소</label>
+			<input type="text" id="createVenue" placeholder="공연장">
+			<label>시작 일시 (ISO 또는 YYYY-MM-DDTHH:mm)</label>
+			<input type="datetime-local" id="createStartAt">
+			<label>종료 일시</label>
+			<input type="datetime-local" id="createEndAt">
+			<label>카테고리</label>
+			<select id="createCategory">
+				<option value="IDOL">IDOL</option>
+				<option value="BAND">BAND</option>
+				<option value="HIPHOP">HIPHOP</option>
+				<option value="CLASSIC">CLASSIC</option>
+			</select>
+			<div class="modal-actions">
+				<button type="button" class="ghost" id="modalCreateCancel">취소</button>
+				<button type="button" class="primary" id="modalCreateSubmit">등록</button>
+			</div>
+		</div>
+	</div>
+
+	<!-- 좌석 일괄 등록 모달 -->
+	<div id="modalAddSeats" class="modal">
+		<div class="modal-inner">
+			<h3>좌석 일괄 등록</h3>
+			<label>구역 (예: A, B, VIP)</label>
+			<input type="text" id="seatSection" placeholder="A">
+			<label>좌석 번호 시작</label>
+			<input type="number" id="seatNoFrom" min="1" value="1">
+			<label>좌석 번호 끝</label>
+			<input type="number" id="seatNoTo" min="1" value="10">
+			<label>가격 (포인트)</label>
+			<input type="number" id="seatPrice" min="0" value="50000">
+			<div class="modal-actions">
+				<button type="button" class="ghost" id="modalSeatsCancel">취소</button>
+				<button type="button" class="primary" id="modalSeatsSubmit">등록</button>
+			</div>
+		</div>
+	</div>
+
+	<script src="/js/api.js"></script>
+	<script src="/js/topbar.js"></script>
+	<script src="/js/init.js"></script>
+	<script src="/js/seller.js"></script>
+</body>
+</html>

@@ -5,6 +5,18 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<title>예매내역 | 콘서트 예매</title>
 	<link rel="stylesheet" href="/css/app.css">
+	<style>
+		.reservations-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
+		.reservations-tab {
+			padding: 12px 20px; border: none; background: none; color: var(--muted); font-size: 14px; font-weight: 500;
+			border-bottom: 3px solid transparent; cursor: pointer;
+		}
+		.reservations-tab:hover { color: var(--text); }
+		.reservations-tab.active { color: var(--primary-2); border-bottom-color: var(--primary-2); }
+		.reservations-tabpanel { display: none; }
+		.reservations-tabpanel.active { display: block; }
+		.hold-card-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+	</style>
 </head>
 <body>
 	<header class="topbar">
@@ -55,11 +67,24 @@
 		</section>
 
 		<section class="panel">
-			<div class="panel-header">
-				<h2>예매 리스트</h2>
-				<span class="helper">좌석 홀드/결제 이후 확정된 예약만 표시됩니다.</span>
+			<div class="reservations-tabs">
+				<button type="button" class="reservations-tab active" data-tab="holds">예약 중</button>
+				<button type="button" class="reservations-tab" data-tab="reservations">예매 내역</button>
 			</div>
-			<div id="reservationList" class="reservation-list"></div>
+			<div id="holdsPanel" class="reservations-tabpanel active">
+				<div class="panel-header">
+					<h2>예약 중인 좌석</h2>
+					<span class="helper">결제 전 좌석을 잡아둔 상태입니다. 만료 전에 결제를 진행하세요.</span>
+				</div>
+				<div id="holdList" class="reservation-list"></div>
+			</div>
+			<div id="reservationsPanel" class="reservations-tabpanel">
+				<div class="panel-header">
+					<h2>예매 리스트</h2>
+					<span class="helper">결제 완료 후 확정된 예약만 표시됩니다.</span>
+				</div>
+				<div id="reservationList" class="reservation-list"></div>
+			</div>
 			<div id="reservationStatus" class="status info"></div>
 		</section>
 	</main>

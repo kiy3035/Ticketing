@@ -4,6 +4,7 @@ import java.io.IOException;
 import com.inyoung.ticketing.metrics.service.ActiveUserTracker;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -13,6 +14,7 @@ import org.springframework.security.web.SecurityFilterChain;
 // 로그인/회원가입 및 접근 제어를 설정하는 보안 설정
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 public class SecurityConfig {
 	private final ActiveUserTracker activeUserTracker;
 
@@ -32,7 +34,7 @@ public class SecurityConfig {
 				.requestMatchers("/api/auth/signup").permitAll()
 				.requestMatchers("/api/queue/**").permitAll() // 부하 테스트용 허용
 				.requestMatchers("/actuator/**").permitAll() // Prometheus 스크래핑 및 헬스체크
-				.requestMatchers("/admin.html", "/app.html", "/concert.html", "/queue.html", "/reservation.html", "/payment.html", "/api/**").authenticated()
+				.requestMatchers("/admin.html", "/app.html", "/seller.html", "/concert.html", "/queue.html", "/reservation.html", "/payment.html", "/api/**").authenticated()
 				.anyRequest().authenticated()
 			)
 			// 커스텀 로그인 페이지 사용
@@ -41,7 +43,14 @@ public class SecurityConfig {
 				.loginProcessingUrl("/login")
 				.successHandler((request, response, authentication) -> {
 					activeUserTracker.recordActive(authentication.getName());
-					sendRedirect(response, "/app.html");
+					String redirect = "/app.html";
+					boolean isAdmin = authentication.getAuthorities().stream()
+						.anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
+					boolean isSeller = authentication.getAuthorities().stream()
+						.anyMatch(a -> "ROLE_SELLER".equals(a.getAuthority()));
+					if (isAdmin) redirect = "/admin.html";
+					else if (isSeller) redirect = "/seller.html";
+					sendRedirect(response, redirect);
 				})
 				.permitAll()
 			)

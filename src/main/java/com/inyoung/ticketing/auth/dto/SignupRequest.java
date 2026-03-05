@@ -26,6 +26,10 @@ public class SignupRequest {
 	@NotBlank
 	private String notificationMethod = "sms";
 
+	/** 가입 유형: USER(일반 고객), SELLER(판매자). 미입력 시 USER */
+	@Pattern(regexp = "^(USER|SELLER)?$", message = "role must be USER or SELLER")
+	private String role = "USER";
+
 	// 사용자 아이디
 	public String getUsername() {
 		return username;
@@ -74,5 +78,13 @@ public class SignupRequest {
 	// 알림 방식 설정
 	public void setNotificationMethod(String notificationMethod) {
 		this.notificationMethod = notificationMethod;
+	}
+
+	public String getRole() {
+		return role;
+	}
+
+	public void setRole(String role) {
+		this.role = role;
 	}
 }
