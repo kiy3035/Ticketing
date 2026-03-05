@@ -9,10 +9,15 @@ public class TicketingProperties {
 	private Kafka kafka = new Kafka();
 	private Queue queue = new Queue();
 	private Payment payment = new Payment();
+	private Refund refund = new Refund();
 
 	// 홀드 관련 설정 접근자
 	public Hold getHold() {
 		return hold;
+	}
+
+	public Refund getRefund() {
+		return refund;
 	}
 
 	public Kafka getKafka() {
@@ -139,6 +144,30 @@ public class TicketingProperties {
 
 		public void setHoldExtensionTtlSeconds(long holdExtensionTtlSeconds) {
 			this.holdExtensionTtlSeconds = holdExtensionTtlSeconds;
+		}
+	}
+
+	// 취소된 공연 환불 배치 설정
+	public static class Refund {
+		/** 한 번에 처리할 결제 건수. 기본 50. */
+		private int batchSize = 50;
+		/** 배치 실행 주기(밀리초). 기본 5분. */
+		private long intervalMs = 300_000;
+
+		public int getBatchSize() {
+			return batchSize;
+		}
+
+		public void setBatchSize(int batchSize) {
+			this.batchSize = batchSize;
+		}
+
+		public long getIntervalMs() {
+			return intervalMs;
+		}
+
+		public void setIntervalMs(long intervalMs) {
+			this.intervalMs = intervalMs;
 		}
 	}
 }

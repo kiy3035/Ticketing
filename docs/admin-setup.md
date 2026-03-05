@@ -93,7 +93,7 @@ VALUES (
 ### 4. 공연 관리 탭
 - 전체 공연 목록 조회
 - 공연명으로 검색
-- 공연 상태(PENDING, OPEN, CLOSED) 표시
+- 공연 상태(UPCOMING, ONGOING, COMPLETED, CANCELLED) 표시
 
 ---
 

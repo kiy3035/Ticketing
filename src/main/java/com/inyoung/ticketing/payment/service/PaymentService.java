@@ -21,6 +21,8 @@ import com.inyoung.ticketing.reservation.dto.ReservationResponse;
 import com.inyoung.ticketing.reservation.service.ReservationService;
 import com.inyoung.ticketing.seat.domain.Seat;
 import com.inyoung.ticketing.seat.repository.SeatRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +31,8 @@ import org.springframework.web.server.ResponseStatusException;
 // Mock 결제 서비스
 @Service
 public class PaymentService {
+	private static final Logger log = LoggerFactory.getLogger(PaymentService.class);
+
 	private final PaymentRepository paymentRepository;
 	private final HoldStore holdStore;
 	private final SeatRepository seatRepository;
@@ -171,6 +175,39 @@ public class PaymentService {
 			.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Payment not found"));
 		validateOwner(payment, userId);
 		return new PaymentResponse(payment);
+	}
+
+	/**
+	 * 취소된 공연 환불 배치용: 완료된 결제 1건에 대해 포인트 환불, 결제 취소, 예약/좌석 해제.
+	 * 이미 CANCELED이면 스킵(idempotent). COMPLETED가 아니면 false 반환.
+	 */
+	@Transactional
+	public boolean refundCompletedPaymentForCancelledConcert(Long paymentId) {
+		Payment payment = paymentRepository.findWithLockById(paymentId).orElse(null);
+		if (payment == null) {
+			return false;
+		}
+		if (payment.getStatus() == PaymentStatus.CANCELED) {
+			return true; // 이미 취소됨
+		}
+		if (payment.getStatus() != PaymentStatus.COMPLETED) {
+			return false; // 완료된 결제만 환불 대상
+		}
+
+		try {
+			refundPoints(payment.getUserId(), payment.getAmount());
+		} catch (Exception e) {
+			log.warn("Refund points failed for paymentId={}, userId={}, continuing to cancel payment. {}", paymentId, payment.getUserId(), e.getMessage());
+		}
+
+		payment.setStatus(PaymentStatus.CANCELED);
+		payment.setCanceledAt(now());
+		paymentRepository.save(payment);
+
+		if (payment.getReservationId() != null) {
+			reservationService.cancelReservationForRefund(payment.getReservationId());
+		}
+		return true;
 	}
 
 	private HoldInfo loadHold(String holdToken, String userId) {

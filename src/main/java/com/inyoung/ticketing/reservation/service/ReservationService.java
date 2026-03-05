@@ -118,4 +118,26 @@ public class ReservationService {
 			lockService.unlock(lockKey, lockToken.get());
 		}
 	}
+
+	/**
+	 * 환불 배치용: 예약 취소 및 좌석 해제.
+	 * 공연 취소 등으로 결제가 환불될 때 예약 상태를 CANCELLED로, 좌석을 AVAILABLE로 되돌린다.
+	 */
+	@Transactional
+	public void cancelReservationForRefund(Long reservationId) {
+		if (reservationId == null) {
+			return;
+		}
+		Optional<Reservation> opt = reservationRepository.findById(reservationId);
+		if (opt.isEmpty() || opt.get().getStatus() == ReservationStatus.CANCELLED) {
+			return;
+		}
+		Reservation reservation = opt.get();
+		reservation.setStatus(ReservationStatus.CANCELLED);
+		reservationRepository.save(reservation);
+
+		Seat seat = reservation.getSeat();
+		seat.setStatus(SeatStatus.AVAILABLE);
+		seatRepository.save(seat);
+	}
 }

@@ -29,6 +29,14 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	Optional<Payment> findWithLockByHoldToken(String holdToken);
 
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	Optional<Payment> findWithLockById(Long id);
+
+	/**
+	 * 콘서트별·상태별 결제 페이징 조회 (취소된 공연 환불 배치용)
+	 */
+	Page<Payment> findByConcertIdAndStatus(Long concertId, PaymentStatus status, Pageable pageable);
+
 	/**
 	 * 특정 상태와 시간 범위의 결제 조회
 	 */
