@@ -46,7 +46,7 @@ const loadPaymentInfo = async () => {
 
 		if (concert) {
 			payConcertTitle.textContent = concert.title;
-			payConcertMeta.textContent = `${concert.venue} | ${new Date(concert.concertAt).toLocaleString()}`;
+			payConcertMeta.textContent = `${concert.venue} | ${(window.formatDateKorea || (v => new Date(v).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }))(concert.concertAt)}`;
 		}
 		if (seat) {
 			paySeatInfo.textContent = `구역 ${seat.section} - ${seat.seatNo}`;

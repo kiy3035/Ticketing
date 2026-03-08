@@ -19,3 +19,9 @@ const fetchJson = async (url, options = {}) => {
 };
 
 window.fetchJson = fetchJson;
+
+/** API에서 오는 날짜/시간을 항상 한국 시간(DB·로컬과 동일)으로 표시 */
+window.formatDateKorea = (value) => {
+	const date = new Date(value);
+	return Number.isNaN(date.getTime()) ? value : date.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+};

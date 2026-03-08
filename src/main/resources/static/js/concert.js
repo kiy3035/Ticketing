@@ -154,7 +154,7 @@ const loadConcertDetail = async () => {
 		const concert = concerts.find((item) => String(item.id) === String(concertId));
 		if (concert) {
 			concertTitle.textContent = concert.title;
-			concertMeta.textContent = `${concert.venue} | ${new Date(concert.concertAt).toLocaleString()}`;
+			concertMeta.textContent = `${concert.venue} | ${(window.formatDateKorea || (v => new Date(v).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }))(concert.concertAt)}`;
 		}
 	} catch (error) {
 		// 상세 정보는 실패해도 좌석 조회로 진행한다.
@@ -212,7 +212,7 @@ const startPayment = () => {
 	actionResult.textContent = '좌석을 홀드하는 중...';
 	holdSeat(selectedSeatId)
 		.then((data) => {
-			actionResult.textContent = `홀드 성공: 만료 ${new Date(data.expiresAt).toLocaleString()}`;
+			actionResult.textContent = `홀드 성공: 만료 ${(window.formatDateKorea || (v => new Date(v).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }))(data.expiresAt)}`;
 			const query = new URLSearchParams({
 				concertId,
 				seatId: String(selectedSeatId),

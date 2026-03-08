@@ -10,10 +10,7 @@ const formatNumber = (value) => {
 	return Number(value).toLocaleString();
 };
 
-const formatDate = (value) => {
-	const date = new Date(value);
-	return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
-};
+const formatDate = (value) => (window.formatDateKorea ? window.formatDateKorea(value) : new Date(value).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }));
 
 const loadProfile = async () => {
 	if (!profileNameEl || !profileBalanceEl || !profileCreatedAtEl) {

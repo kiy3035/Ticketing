@@ -24,7 +24,7 @@ function statusColor(status) {
 
 function formatDate(iso) {
 	if (!iso) return '-';
-	return new Date(iso).toLocaleString('ko-KR');
+	return window.formatDateKorea ? window.formatDateKorea(iso) : new Date(iso).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
 }
 
 async function loadConcerts() {

@@ -31,8 +31,8 @@ public class Concert {
 	@Column(nullable = false, length = 200)
 	private String venue;
 
-	/** 공연 일시 (날짜·시각 단일 값). 기존 DB 마이그레이션 후 nullable=false로 변경 가능 */
-	@Column(nullable = true)
+	/** 공연 일시 (한국 시간 기준). DB에는 DATETIME으로 저장해 로컬·앱·DB 표기가 동일하게 맞춤 */
+	@Column(nullable = true, columnDefinition = "DATETIME")
 	private Instant concertAt;
 
 	@Enumerated(EnumType.STRING)
