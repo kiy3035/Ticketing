@@ -111,7 +111,7 @@ const loadPayments = async (searchQuery = '') => {
 				<td>
 					<span class="badge" style="background: ${getStatusColor(payment.status)}">${payment.status}</span>
 				</td>
-				<td>${(window.formatDateKorea || (v => new Date(v).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }))(payment.completedAt)}</td>
+				<td>${(window.formatDateKorea || ((v) => new Date(v).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })))(payment.completedAt)}</td>
 			</tr>
 		`).join('');
 
@@ -148,7 +148,7 @@ const loadUsers = async (searchQuery = '') => {
 				<td>
 					<span class="badge" style="background: ${user.role === 'ADMIN' ? 'rgba(249, 115, 22, 0.15)' : 'rgba(34, 197, 94, 0.15)'}">${user.role}</span>
 				</td>
-				<td>${(window.formatDateKorea || (v => new Date(v).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }))(user.createdAt)}</td>
+				<td>${(window.formatDateKorea || ((v) => new Date(v).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })))(user.createdAt)}</td>
 			</tr>
 		`).join('');
 

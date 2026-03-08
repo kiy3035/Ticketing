@@ -25,7 +25,7 @@ const loadConcertInfo = async () => {
 		const concert = concerts.find((item) => String(item.id) === String(concertId));
 		if (concert) {
 			concertTitle.textContent = concert.title;
-			concertMeta.textContent = `${concert.venue} | ${(window.formatDateKorea || (v => new Date(v).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }))(concert.concertAt)}`;
+			concertMeta.textContent = `${concert.venue} | ${(window.formatDateKorea || ((v) => new Date(v).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })))(concert.concertAt)}`;
 		}
 	} catch (error) {
 		// 콘서트 정보는 실패해도 대기열 진입은 진행한다.

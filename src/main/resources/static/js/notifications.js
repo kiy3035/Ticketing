@@ -22,7 +22,7 @@ const initNotifications = () => {
 		items.forEach((item) => {
 			const li = document.createElement('li');
 			li.className = 'notification-item';
-			const time = item.createdAt ? (window.formatDateKorea || (v => new Date(v).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }))(item.createdAt) : '';
+			const time = item.createdAt ? (window.formatDateKorea || ((v) => new Date(v).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })))(item.createdAt) : '';
 			li.innerHTML = `
 				<div class="message">${item.message}</div>
 				<div class="time">${time}</div>

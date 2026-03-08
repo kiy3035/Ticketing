@@ -4,12 +4,12 @@ package com.inyoung.ticketing.metrics.dto;
 public class MetricsResponse {
 	private long activeUsers;
 	private long todayOpen;
-	private double successRate;
+	private long upcomingOpen;
 
-	public MetricsResponse(long activeUsers, long todayOpen, double successRate) {
+	public MetricsResponse(long activeUsers, long todayOpen, long upcomingOpen) {
 		this.activeUsers = activeUsers;
 		this.todayOpen = todayOpen;
-		this.successRate = successRate;
+		this.upcomingOpen = upcomingOpen;
 	}
 
 	public long getActiveUsers() {
@@ -20,7 +20,7 @@ public class MetricsResponse {
 		return todayOpen;
 	}
 
-	public double getSuccessRate() {
-		return successRate;
+	public long getUpcomingOpen() {
+		return upcomingOpen;
 	}
 }

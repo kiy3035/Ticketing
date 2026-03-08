@@ -46,4 +46,33 @@ public class EmailService {
 			username, concertName, amount
 		);
 	}
+
+	/** 회원가입 성공 시 환영 이메일 전송 (Gmail SMTP) */
+	public void sendSignupSuccessEmail(String email, String username) {
+		try {
+			SimpleMailMessage message = new SimpleMailMessage();
+			message.setTo(email);
+			message.setSubject("[콘서트 예매] 회원가입을 완료했습니다");
+			message.setText(buildSignupSuccessEmailBody(username));
+			message.setFrom("noreply@concert-ticketing.com");
+
+			mailSender.send(message);
+			logger.info("Signup success email sent to: {}", email);
+		} catch (Exception e) {
+			logger.error("Failed to send signup success email to: {}", email, e);
+			throw new RuntimeException("Failed to send email", e);
+		}
+	}
+
+	private String buildSignupSuccessEmailBody(String username) {
+		return String.format(
+			"안녕하세요, %s님!\n\n" +
+			"콘서트 예매 서비스 회원가입이 완료되었습니다.\n\n" +
+			"이제 로그인하시어 다양한 공연을 예매하실 수 있습니다.\n" +
+			"가입 축하 포인트가 지급되었습니다. 마이페이지에서 확인해 보세요.\n\n" +
+			"감사합니다.\n" +
+			"콘서트 예매 팀",
+			username
+		);
+	}
 }

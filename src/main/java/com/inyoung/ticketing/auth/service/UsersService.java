@@ -6,6 +6,9 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import com.inyoung.ticketing.auth.dto.MyPageResponse;
 import com.inyoung.ticketing.auth.dto.SignupRequest;
 import com.inyoung.ticketing.auth.repository.UsersRepository;
+import com.inyoung.ticketing.notification.service.EmailService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -19,17 +22,20 @@ import org.springframework.web.server.ResponseStatusException;
 // 사용자 계정 서비스 및 인증 사용자 조회
 @Service
 public class UsersService implements UserDetailsService {
+	private static final Logger logger = LoggerFactory.getLogger(UsersService.class);
 	private static final long SIGNUP_POINT_BONUS = 10_000_000L;
 	private final UsersRepository usersRepository;
 	private final PasswordEncoder passwordEncoder;
+	private final EmailService emailService;
 
-	// 리포지토리/인코더 주입
 	public UsersService(
 		UsersRepository usersRepository,
-		PasswordEncoder passwordEncoder
+		PasswordEncoder passwordEncoder,
+		EmailService emailService
 	) {
 		this.usersRepository = usersRepository;
 		this.passwordEncoder = passwordEncoder;
+		this.emailService = emailService;
 	}
 
 	// 회원가입 처리
@@ -51,6 +57,15 @@ public class UsersService implements UserDetailsService {
 		if (!"USER".equals(role) && !"SELLER".equals(role)) role = "USER";
 		account.setRole(role);
 		usersRepository.save(account);
+
+		// 회원가입 성공 시 Gmail로 환영 메일 발송 (실패해도 가입은 유지)
+		if (request.getEmail() != null && !request.getEmail().isBlank()) {
+			try {
+				emailService.sendSignupSuccessEmail(request.getEmail(), request.getUsername());
+			} catch (Exception e) {
+				logger.warn("Signup success email failed for {}: {}", request.getEmail(), e.getMessage());
+			}
+		}
 	}
 
 	// 마이페이지 정보 조회

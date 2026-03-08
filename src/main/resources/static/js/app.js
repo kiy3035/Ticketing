@@ -20,7 +20,7 @@ checkUserRoleAndRedirect();
 const listEl = document.getElementById('concertList');
 const statActiveUsers = document.getElementById('statActiveUsers');
 const statTodayOpen = document.getElementById('statTodayOpen');
-const statSuccessRate = document.getElementById('statSuccessRate');
+const statUpcomingOpen = document.getElementById('statUpcomingOpen');
 const categoryButtons = document.querySelectorAll('.chip[data-category]');
 const searchInput = document.getElementById('searchInput');
 let allConcerts = [];
@@ -136,13 +136,13 @@ const loadMetrics = async () => {
 		if (!result.ok) {
 			throw new Error('fetch failed');
 		}
-		statActiveUsers.textContent = result.data.activeUsers.toLocaleString();
-		statTodayOpen.textContent = `${result.data.todayOpen} 공연`;
-		statSuccessRate.textContent = `${result.data.successRate.toFixed(1)}%`;
+		statActiveUsers.textContent = (result.data.activeUsers ?? '-').toLocaleString?.() ?? result.data.activeUsers ?? '-';
+		statTodayOpen.textContent = `${result.data.todayOpen ?? 0} 공연`;
+		statUpcomingOpen.textContent = `${result.data.upcomingOpen ?? 0} 공연`;
 	} catch (error) {
 		statActiveUsers.textContent = '-';
 		statTodayOpen.textContent = '-';
-		statSuccessRate.textContent = '-';
+		statUpcomingOpen.textContent = '-';
 	}
 };
 

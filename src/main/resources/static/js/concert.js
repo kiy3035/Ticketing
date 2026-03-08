@@ -41,22 +41,12 @@ const renderSeats = (seats) => {
 		rowsBySection[seat.section][row][col] = seat;
 	});
 
-	const scaleRanges = {
-		A: [0.92, 1.12],
-		B: [0.90, 1.08],
-		C: [0.88, 1.06],
-		D: [0.86, 1.04]
-	};
-
 	const html = sections.map((section) => {
 		const rows = rowsBySection[section] || {};
 		const rowKeys = Object.keys(rows).map(Number).sort((a, b) => a - b);
-		const [minScale, maxScale] = scaleRanges[section] || [0.9, 1.08];
-		const maxRow = Math.max(...rowKeys, 10);
 
 		const rowHtml = rowKeys.map((row) => {
 			const seatsInRow = rows[row] || Array(10).fill(null);
-			const scale = minScale + ((row - 1) / Math.max(1, maxRow - 1)) * (maxScale - minScale);
 			const seatsHtml = seatsInRow.map((seat) => {
 				if (!seat) {
 					return '<span class="seat placeholder"></span>';
@@ -77,7 +67,7 @@ const renderSeats = (seats) => {
 			const rightSeats = seatsHtml.slice(5).join('');
 
 			return `
-				<div class="seat-row" style="--row-scale:${scale.toFixed(2)}">
+				<div class="seat-row">
 					<div class="seat-label">${section}${row}</div>
 					<div class="seat-row-inner">
 						<div class="seat-side">
@@ -154,7 +144,7 @@ const loadConcertDetail = async () => {
 		const concert = concerts.find((item) => String(item.id) === String(concertId));
 		if (concert) {
 			concertTitle.textContent = concert.title;
-			concertMeta.textContent = `${concert.venue} | ${(window.formatDateKorea || (v => new Date(v).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }))(concert.concertAt)}`;
+			concertMeta.textContent = `${concert.venue} | ${(window.formatDateKorea || ((v) => new Date(v).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })))(concert.concertAt)}`;
 		}
 	} catch (error) {
 		// 상세 정보는 실패해도 좌석 조회로 진행한다.
@@ -212,7 +202,7 @@ const startPayment = () => {
 	actionResult.textContent = '좌석을 홀드하는 중...';
 	holdSeat(selectedSeatId)
 		.then((data) => {
-			actionResult.textContent = `홀드 성공: 만료 ${(window.formatDateKorea || (v => new Date(v).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }))(data.expiresAt)}`;
+			actionResult.textContent = `홀드 성공: 만료 ${(window.formatDateKorea || ((v) => new Date(v).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })))(data.expiresAt)}`;
 			const query = new URLSearchParams({
 				concertId,
 				seatId: String(selectedSeatId),
