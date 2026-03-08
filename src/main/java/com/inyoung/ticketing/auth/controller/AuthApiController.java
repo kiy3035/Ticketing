@@ -25,7 +25,6 @@ public class AuthApiController {
 	private final UsersService usersService;
 	private final ActiveUserTracker activeUserTracker;
 
-	// 서비스 주입
 	public AuthApiController(UsersService usersService, ActiveUserTracker activeUserTracker) {
 		this.usersService = usersService;
 		this.activeUserTracker = activeUserTracker;

@@ -34,6 +34,7 @@ public class SecurityConfig {
 				.requestMatchers("/api/auth/signup").permitAll()
 				.requestMatchers("/api/queue/**").permitAll() // 부하 테스트용 허용
 				.requestMatchers("/actuator/**").permitAll() // Prometheus 스크래핑 및 헬스체크
+				.requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll() // API 명세 (Swagger UI)
 				.requestMatchers("/admin.html", "/app.html", "/seller.html", "/concert.html", "/queue.html", "/reservation.html", "/payment.html", "/api/**").authenticated()
 				.anyRequest().authenticated()
 			)

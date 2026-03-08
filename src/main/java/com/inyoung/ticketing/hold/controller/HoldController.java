@@ -22,7 +22,6 @@ import org.springframework.web.bind.annotation.RestController;
 public class HoldController {
 	private final HoldService holdService;
 
-	// 서비스 주입
 	public HoldController(HoldService holdService) {
 		this.holdService = holdService;
 	}

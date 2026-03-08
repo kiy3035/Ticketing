@@ -15,7 +15,7 @@ flowchart TB
         end
         
         subgraph controllers [Controller Layer]
-            AuthCtrl[AuthController]
+            AuthCtrl[AuthApiController]
             ConcertCtrl[ConcertController]
             QueueCtrl[QueueController]
             SeatCtrl[SeatController]
@@ -45,9 +45,10 @@ flowchart TB
         end
         
         subgraph schedulers [Scheduler Layer]
-            QueueScheduler[QueueProcessingScheduler<br/>대기열 처리]
-            HoldCleanup[HoldCleanupScheduler<br/>홀드 만료 처리]
-            RefundBatch[RefundForCancelledConcertScheduler<br/>취소 공연 환불 배치]
+            QueueScheduler[QueueProcessingScheduler<br/>대기열 입장 허용 2초]
+            QueueCleanup[QueueCleanupScheduler<br/>대기열 만료 토큰 정리 60초]
+            HoldCleanup[HoldCleanupScheduler<br/>홀드 만료 정리 60초]
+            RefundBatch[RefundForCancelledConcertScheduler<br/>취소 공연 환불 5분]
         end
         
         subgraph events [Event Layer]
@@ -109,10 +110,13 @@ flowchart TB
 - **HoldStore**: Redis 기반 홀드 저장소 (Lua 스크립트로 원자성 보장)
 - **RedisLockService**: 분산 락 구현 (Lua 스크립트로 토큰 검증)
 
-### 6. Scheduler Layer
-- **QueueProcessingScheduler**: 대기열 처리 (2초마다 상위 N명 입장 허용)
-- **HoldCleanupScheduler**: 홀드 만료 처리 (60초마다 만료 홀드 스캔)
-- **RefundForCancelledConcertScheduler**: 취소된 공연 환불 배치 (5분마다 CANCELLED 공연의 COMPLETED 결제 청크 환불)
+### 6. Scheduler Layer (배치·스케줄러)
+- **QueueProcessingScheduler**: 대기열 상위 N명 입장 허용. 기본 2초 주기 (설정: `ticketing.queue.processing-interval-ms`).
+- **QueueCleanupScheduler**: 대기열 만료 토큰 제거. 기본 60초 주기 (설정: `ticketing.queue.cleanup-interval-ms`).
+- **HoldCleanupScheduler**: 만료된 좌석 홀드 스캔·정리 및 Kafka HOLD_EXPIRED 발행. 기본 60초 주기 (설정: `ticketing.hold.cleanup-interval-ms`).
+- **RefundForCancelledConcertScheduler**: CANCELLED 공연의 COMPLETED 결제 청크 환불. 기본 5분 주기 (설정: `ticketing.refund.interval-ms`).
+
+모든 주기는 application.properties 또는 환경 변수로 변경 가능. 상세·튜닝 근거는 [인프라 문서](docs/infra.md#스케줄러-주기-가이드-배치-4종) 참고.
 
 ### 7. Event Layer
 - **SeatHoldEventPublisher**: Kafka로 이벤트 발행
@@ -493,8 +497,8 @@ sequenceDiagram
         EmailSvc-->>NotifSvc: 전송 성공/실패 로깅
     else notiType = "sms"
         NotifSvc->>SmsSvc: sendPaymentCompleteSms(...)
-        SmsSvc->>SmsSvc: HMAC-SHA256 서명 생성
-        SmsSvc->>SmsSvc: NCP SENS API 호출
+        SmsSvc->>SmsSvc: Solapi SDK 초기화/호출
+        SmsSvc->>SmsSvc: Solapi 메시지 API 발송
         SmsSvc-->>NotifSvc: 전송 성공/실패 로깅
     end
     
@@ -715,7 +719,7 @@ erDiagram
 
 ### 5. 이메일 & SMS 알림 선택
 - **Google SMTP (이메일)**: 안정적이고 설정이 간단, 전 세계 사용 가능
-- **NCP SENS (SMS)**: 한국 최적화, 저렴한 비용, 빠른 전송
+- **Solapi (SMS)**: 한국 문자 서비스 플랫폼(https://solapi.com), API Key/Secret 인증, RestAPI 발송
 
 ## 이메일 & SMS 구현 상세
 
@@ -779,7 +783,7 @@ MAIL_USERNAME=your-email@gmail.com
 MAIL_PASSWORD=xxxx xxxx xxxx xxxx  # 16자 앱 비밀번호
 ```
 
-### 2. SMS 시스템 (NCP SENS)
+### 2. SMS 시스템 (Solapi)
 
 #### 아키텍처
 ```
@@ -787,71 +791,35 @@ PaymentService (Kafka Event 발행)
        ↓
 PaymentCompleteEventConsumer (Kafka 이벤트 수신)
        ↓
-NotificationService (라우팅 로직)
+PaymentNotificationService (라우팅 로직)
        ↓
-SmsService (NCP SENS API 호출)
+SmsService (Solapi SDK / RestAPI 발송)
 ```
 
 #### 구현 세부사항
-- **Provider**: 네이버 클라우드 플랫폼 (NCP SENS)
-- **인증**: HMAC-SHA256 서명 기반 (REST API)
-- **엔드포인트**: `POST https://sens.apigw.ntruss.com/sms/v2/services/{serviceId}/messages`
-- **전송 형식**: JSON
-- **응답**: 메시지 ID 및 전송 상태 반환
-
-#### API 요청 구조
-```
-Request Headers:
-- x-ncp-apigw-timestamp: {타임스탬프 (밀리초)}
-- x-ncp-iam-access-key: {접근 키}
-- x-ncp-apigw-signature-v2: {HMAC-SHA256 서명}
-- Content-Type: application/json
-
-Request Body (JSON):
-{
-  "type": "SMS",
-  "contentType": "COMM",
-  "countryCode": "82",
-  "from": "발신번호 (예: 01012345678)",
-  "messages": [
-    {
-      "to": "수신번호 (예: 01087654321)"
-    }
-  ],
-  "content": "메시지 내용"
-}
-```
-
-#### HMAC-SHA256 서명 생성
-```java
-String message = "POST\n/sms/v2/services/{serviceId}/messages\n{timestamp}\n{accessKey}";
-Mac mac = Mac.getInstance("HmacSHA256");
-SecretKeySpec secretKey = new SecretKeySpec(secretKey.getBytes(), "HmacSHA256");
-mac.init(secretKey);
-byte[] signature = mac.doFinal(message.getBytes());
-String encodedSignature = Base64.getEncoder().encodeToString(signature);
-```
+- **Provider**: Solapi (https://solapi.com, 한국 문자 서비스 플랫폼)
+- **인증**: API Key + API Secret
+- **SDK**: net.nurigo:sdk (NurigoApp.INSTANCE.initialize)
+- **전송**: DefaultMessageService.send(Message)
+- **Lazy 초기화**: 첫 SMS 발송 시 메시지 서비스 초기화
 
 #### 설정 (application.properties)
 ```properties
-# NCP SENS 설정 (.env에서 주입)
-ncp.sens.service-id=${NCP_SENS_SERVICE_ID}
-ncp.sens.access-key=${NCP_SENS_ACCESS_KEY}
-ncp.sens.secret-key=${NCP_SENS_SECRET_KEY}
-ncp.sens.from-number=${NCP_SENS_FROM_NUMBER}
-ncp.sens.api-url=https://sens.apigw.ntruss.com
+# Solapi SMS 설정 (.env에서 주입)
+solapi.api-key=${SOLAPI_API_KEY}
+solapi.api-secret=${SOLAPI_API_SECRET}
+solapi.from-number=${SOLAPI_FROM_NUMBER}
+solapi.api-url=https://api.solapi.com
 ```
 
 #### 환경 설정
-1. NCP 콘솔에서 SENS 서비스 신청
-2. API 인증키 발급 (Access Key, Secret Key)
-3. 발신 번호 등록 (비용 발생할 수 있음)
-4. `.env` 파일에 추가:
+1. [Solapi](https://solapi.com) 가입 후 API Key, API Secret 발급
+2. 발신 번호 등록 (비용 발생할 수 있음)
+3. `.env` 파일에 추가:
 ```env
-NCP_SENS_SERVICE_ID=ncp-service-id
-NCP_SENS_ACCESS_KEY=ncp-access-key
-NCP_SENS_SECRET_KEY=ncp-secret-key
-NCP_SENS_FROM_NUMBER=01012345678  # 회사 발신 전용 번호
+SOLAPI_API_KEY=your_solapi_api_key
+SOLAPI_API_SECRET=your_solapi_api_secret
+SOLAPI_FROM_NUMBER=01012345678
 ```
 
 #### 사용 예시
@@ -859,8 +827,8 @@ NCP_SENS_FROM_NUMBER=01012345678  # 회사 발신 전용 번호
 // PaymentCompleteEventConsumer에서
 paymentNotificationService.notifyPaymentComplete(userId, concertId, amount);
     ↓
-// NotificationService에서
-if (user.getNotiType().equals("sms")) {
+// PaymentNotificationService에서 notiType에 따라
+if ("sms".equals(notiType)) {
     smsService.sendPaymentCompleteSms(
         user.getPhone(),
         user.getUsername(),
@@ -870,51 +838,9 @@ if (user.getNotiType().equals("sms")) {
 }
 ```
 
-### 3. 알림 라우팅 (NotificationService)
+### 3. 알림 라우팅 (PaymentNotificationService)
 
-```java
-@Service
-public class PaymentNotificationService {
-    @Autowired
-    private UsersRepository usersRepository;
-    
-    @Autowired
-    private ConcertRepository concertRepository;
-    
-    @Autowired
-    private EmailService emailService;
-    
-    @Autowired
-    private SmsService smsService;
-    
-    // 사용자의 notiType에 따라 이메일 또는 SMS 전송
-    public void notifyPaymentComplete(String userId, Long concertId, Long amount) {
-        Users user = usersRepository.findByUserId(userId)
-            .orElseThrow(() -> new RuntimeException("User not found"));
-        
-        Concert concert = concertRepository.findById(concertId)
-            .orElseThrow(() -> new RuntimeException("Concert not found"));
-        
-        String notiType = user.getNotiType();  // "email" 또는 "sms"
-        
-        if ("email".equals(notiType)) {
-            emailService.sendPaymentCompleteEmail(
-                user.getEmail(),
-                user.getUsername(),
-                concert.getTitle(),
-                amount
-            );
-        } else if ("sms".equals(notiType)) {
-            smsService.sendPaymentCompleteSms(
-                user.getPhone(),
-                user.getUsername(),
-                concert.getTitle(),
-                amount
-            );
-        }
-    }
-}
-```
+`PaymentNotificationService`가 사용자 `notiType`(email/sms)에 따라 `EmailService` 또는 `SmsService`를 호출합니다. Kafka 이벤트 수신 후 비동기로 알림만 전송하며, 결제 프로세스와 분리됩니다.
 
 ### 4. 오류 처리 및 재시도
 
@@ -932,7 +858,3 @@ public class PaymentNotificationService {
 spring.kafka.listener.error-handler=paymentCompleteErrorHandler
 spring.kafka.listener.ack-mode=manual
 ```
-
----
-
-[이전 기술적 의사결정 섹션]

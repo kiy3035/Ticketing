@@ -25,6 +25,7 @@
 
 ### 2. 좌석 홀드/만료 시스템 (Hold System)
 - **Redis TTL + 분산 락**: 경쟁 상태 해결 및 중복 홀드 방지. 락 키 `lock:seat:{seatId}`, TTL은 설정으로 조정 ([docs/concurrency.md](docs/concurrency.md))
+- **홀드 TTL**: 10분(600초, `ticketing.hold.ttl-seconds`). 결제 진행 시 연장 설정 가능
 - **자동 만료 처리**: 스케줄러가 만료된 홀드를 스캔하여 자동 정리
 - **이벤트 기반 알림**: Kafka로 만료 이벤트 발행 후 SSE로 실시간 전달
 
@@ -58,11 +59,13 @@
 - **글로벌 예외 처리**: `GlobalExceptionHandler`로 예외 상황 일관성 있게 처리
 - **에러 로깅**: 보안/에러 로그를 파일로 기록하여 운영 관찰 가능
 
-### 8. 취소된 공연 환불 배치 (Refund Batch for Cancelled Concerts)
-- **배치 처리**: `CANCELLED` 상태 공연의 완료 결제를 청크 단위로 환불
-- **포인트 환불 + 결제/예약/좌석 정리**: Payment CANCELED, Reservation CANCELLED, Seat AVAILABLE
-- **스케줄 기반**: 5분 주기, 배치 크기 50건으로 서버 부하 분산
-- **멱등성**: 이미 취소된 결제는 스킵, 실패 건 로그 후 계속 진행
+### 8. 배치·스케줄러 (4종, 주기 설정 가능)
+- **QueueProcessingScheduler**: 대기열 상위 N명 입장 허용. 기본 2초 주기.
+- **QueueCleanupScheduler**: 대기열 만료 토큰 제거. 기본 60초 주기.
+- **HoldCleanupScheduler**: 만료된 좌석 홀드 정리 + Kafka HOLD_EXPIRED 발행. 기본 60초 주기.
+- **RefundForCancelledConcertScheduler**: CANCELLED 공연의 COMPLETED 결제 청크 환불. 기본 5분 주기, 배치 50건.
+
+주기는 모두 `application.properties`/환경 변수로 변경 가능. 주기 선택 근거·튜닝은 [docs/infra.md](docs/infra.md)의 "스케줄러 주기 가이드" 참고.
 
 ## 🔧 문제 해결 포인트
 
@@ -154,7 +157,7 @@
 - 대기열 나가기
 
 ### 좌석 예매
-- 좌석 선택 및 홀드 생성 (5분 TTL)
+- 좌석 선택 및 홀드 생성 (10분 TTL, 설정 가능)
 - 홀드 만료 알림 (SSE 실시간 전달)
 - 예약 확정
 - 예약 내역 조회
@@ -210,7 +213,7 @@
 ### 1. 환경 변수 설정
 `.env` 파일 생성:
 ```env
-DB_URL=jdbc:mysql://localhost:3306/ticketing?useSSL=false&serverTimezone=UTC
+DB_URL=jdbc:mysql://localhost:3306/ticketing?useSSL=false&serverTimezone=Asia/Seoul
 DB_USERNAME=root
 DB_PASSWORD=your_password
 
@@ -219,6 +222,13 @@ REDIS_PORT=6379
 
 KAFKA_BOOTSTRAP_SERVERS=localhost:29092
 KAFKA_CONSUMER_GROUP=ticketing-notification
+
+# 이메일/SMS 알림 사용 시 (선택)
+# MAIL_USERNAME=your@gmail.com
+# MAIL_PASSWORD=app_password
+# SOLAPI_API_KEY=...
+# SOLAPI_API_SECRET=...
+# SOLAPI_FROM_NUMBER=01000000000
 ```
 
 ### 2. 인프라 실행
@@ -267,7 +277,7 @@ docker compose up -d
    - 입장 허용 시 `/concert.html?concertId={id}&queueToken={token}`로 자동 이동
 
 6. **좌석 선택**
-   - 좌석 선택 후 홀드 생성 (5분 TTL)
+   - 좌석 선택 후 홀드 생성 (10분 TTL, 설정 가능)
    - 홀드 생성 시 Kafka로 `HOLD_CREATED` 이벤트 발행
 
 7. **예약 확정**
@@ -288,7 +298,7 @@ docker compose up -d
 ### 대기열 시스템
 - **Redis ZSet**: O(log N) 순번 조회로 성능 최적화
 - **배치 처리**: 2초마다 상위 50명 처리로 서버 부하 분산
-- **토큰 TTL**: 30분으로 자동 정리
+- **토큰 TTL**: `ticketing.queue.token-ttl-seconds`로 설정 (기본 30분)
 
 ### 서버 캐시
 - **콘서트 목록**: Redis 캐시로 응답 속도 향상 및 DB 부하 최적화
@@ -301,6 +311,7 @@ docker compose up -d
 ### 세션 외부화
 - **Redis 세션**: 다중 인스턴스 확장 대응
 - **세션 TTL**: 30분으로 자동 만료
+- **대기열 토큰 TTL**: `ticketing.queue.token-ttl-seconds` (기본 30분, 설정 가능)
 
 ### 실시간 알림
 - **SSE**: 즉시 전달로 사용자 경험 향상
@@ -345,7 +356,13 @@ ticketing/
 - [API 및 응답 스키마](docs/api.md) - 모든 API 엔드포인트 상세 문서
 - [인프라/환경 설정](docs/infra.md) - 인프라 설정 및 환경 변수 가이드
 - [Redis/Kafka/세션 구조](docs/data.md) - 데이터 구조 및 저장 방식 상세 설명
+- [동시성/락](docs/concurrency.md) - 좌석 락 및 동시성 제어
 - [관리자 설정](docs/admin-setup.md) - ADMIN 계정 및 관리자 대시보드 가이드
+- [EC2 배포](docs/deployment-ec2.md) - 목표 인프라 및 배포 가이드
+- [부하 테스트 결과](docs/load-test-results.md) - knee point 및 결과 기록
+- [Prometheus/Grafana 모니터링](docs/monitoring.md) - 지표 수집·대시보드 최소 가이드
+
+**API 명세 (Swagger)**: 앱 실행 후 [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html) 에서 전체 API를 한눈에 확인할 수 있습니다.
 
 ## 🎓 학습 포인트
 

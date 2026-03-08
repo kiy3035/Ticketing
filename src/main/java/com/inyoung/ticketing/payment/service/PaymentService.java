@@ -209,7 +209,8 @@ public class PaymentService {
 		try {
 			refundPoints(payment.getUserId(), payment.getAmount());
 		} catch (Exception e) {
-			log.warn("Refund points failed for paymentId={}, userId={}, continuing to cancel payment. {}", paymentId, payment.getUserId(), e.getMessage());
+			log.warn("Refund points failed for paymentId={}, userId={}; skipping payment cancel until points are refunded. {}", paymentId, payment.getUserId(), e.getMessage());
+			return false; // 포인트 환불 실패 시 결제 취소하지 않음. 다음 배치에서 재시도.
 		}
 
 		payment.setStatus(PaymentStatus.CANCELED);

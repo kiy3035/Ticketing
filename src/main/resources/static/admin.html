@@ -202,7 +202,6 @@
 			<button class="admin-tab active" data-tab="statistics">통계</button>
 			<button class="admin-tab" data-tab="payments">결제 관리</button>
 			<button class="admin-tab" data-tab="users">사용자 관리</button>
-			<button class="admin-tab" data-tab="concerts">공연 관리</button>
 		</div>
 
 		<!-- 통계 탭 -->
@@ -267,32 +266,6 @@
 			</div>
 		</div>
 
-		<!-- 공연 관리 탭 -->
-		<div id="concerts" class="admin-tabpanel">
-			<h2>공연 목록</h2>
-			<div class="search-bar">
-				<input id="concertSearchInput" type="text" placeholder="공연명으로 검색">
-				<button class="primary" id="concertSearchBtn">검색</button>
-			</div>
-			<div id="concertTableContainer">
-				<table class="admin-table" id="concertTable">
-					<thead>
-						<tr>
-							<th>공연명</th>
-							<th>장소</th>
-							<th>시작</th>
-							<th>상태</th>
-							<th>좌석 수</th>
-						</tr>
-					</thead>
-					<tbody id="concertTableBody">
-						<tr>
-							<td colspan="5" class="no-data">데이터를 불러오는 중...</td>
-						</tr>
-					</tbody>
-				</table>
-			</div>
-		</div>
 	</main>
 
 	<script src="/js/api.js"></script>

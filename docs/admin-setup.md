@@ -90,11 +90,6 @@ VALUES (
 - 사용자 역할(ADMIN/USER) 표시
 - 가입 일시 확인
 
-### 4. 공연 관리 탭
-- 전체 공연 목록 조회
-- 공연명으로 검색
-- 공연 상태(UPCOMING, ONGOING, COMPLETED, CANCELLED) 표시
-
 ---
 
 ## API 엔드포인트 (ADMIN 전용)

@@ -19,7 +19,6 @@ import org.springframework.web.bind.annotation.RestController;
 public class ReservationController {
 	private final ReservationService reservationService;
 
-	// 서비스 주입
 	public ReservationController(ReservationService reservationService) {
 		this.reservationService = reservationService;
 	}

@@ -54,9 +54,6 @@ const loadTabData = async (tabName) => {
 		case 'users':
 			loadUsers();
 			break;
-		case 'concerts':
-			loadConcerts();
-			break;
 	}
 };
 
@@ -164,44 +161,6 @@ const loadUsers = async (searchQuery = '') => {
 };
 
 /**
- * 공연 데이터 로드
- */
-const loadConcerts = async (searchQuery = '') => {
-	try {
-		const url = searchQuery
-			? `/api/concerts?query=${encodeURIComponent(searchQuery)}`
-			: '/api/concerts';
-
-		const result = await window.fetchJson(url);
-		const tbody = document.getElementById('concertTableBody');
-
-		if (!result.ok || !result.data || result.data.length === 0) {
-			tbody.innerHTML = '<tr><td colspan="5" class="no-data">공연이 없습니다.</td></tr>';
-			return;
-		}
-
-		// 각 공연의 좌석 수를 조회하기 위해 Promise.all 사용 (필요시)
-		const html = result.data.map((concert) => `
-			<tr>
-				<td>${concert.title}</td>
-				<td>${concert.venue}</td>
-				<td>${new Date(concert.concertAt).toLocaleString()}</td>
-				<td>
-					<span class="badge" style="background: ${getStatusColor(concert.status)}">${concert.status}</span>
-				</td>
-				<td>-</td>
-			</tr>
-		`).join('');
-
-		tbody.innerHTML = html;
-	} catch (error) {
-		console.error('Concerts load failed:', error);
-		document.getElementById('concertTableBody').innerHTML = 
-			'<tr><td colspan="5" class="no-data">데이터를 불러오지 못했습니다.</td></tr>';
-	}
-};
-
-/**
  * 상태별 색상 반환
  */
 const getStatusColor = (status) => {
@@ -227,11 +186,6 @@ document.getElementById('userSearchBtn').addEventListener('click', () => {
 	loadUsers(query);
 });
 
-document.getElementById('concertSearchBtn').addEventListener('click', () => {
-	const query = document.getElementById('concertSearchInput').value;
-	loadConcerts(query);
-});
-
 // Enter 키 검색 지원
 document.getElementById('paymentSearchInput').addEventListener('keypress', (e) => {
 	if (e.key === 'Enter') {
@@ -242,12 +196,6 @@ document.getElementById('paymentSearchInput').addEventListener('keypress', (e) =
 document.getElementById('userSearchInput').addEventListener('keypress', (e) => {
 	if (e.key === 'Enter') {
 		document.getElementById('userSearchBtn').click();
-	}
-});
-
-document.getElementById('concertSearchInput').addEventListener('keypress', (e) => {
-	if (e.key === 'Enter') {
-		document.getElementById('concertSearchBtn').click();
 	}
 });
 

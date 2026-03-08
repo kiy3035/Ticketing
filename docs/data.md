@@ -25,7 +25,7 @@ ZCARD queue:concert:1  # 2 (대기인원 수)
 - **키 형식**: `queue:token:c13bb5d9-6b59-467e-80ab-...`
 - **값**: `{"userId":"user123","concertId":1,"enteredAt":"2026-01-25T10:00:00+09:00"}`
 - **용도**: 토큰별 사용자 정보 저장
-- **TTL**: 1800초 (30분)
+- **TTL**: `ticketing.queue.token-ttl-seconds` (기본값 1800초=30분, application.properties에서 60 등으로 조정 가능)
 
 **데이터 구조**:
 ```json
@@ -41,7 +41,7 @@ ZCARD queue:concert:1  # 2 (대기인원 수)
 - **키 형식**: `queue:allowed:c13bb5d9-6b59-467e-80ab-...`
 - **값**: `{"concertId":1,"allowedAt":"2026-01-25T10:00:00+09:00"}`
 - **용도**: 입장 허용 상태 저장
-- **TTL**: 1800초 (30분)
+- **TTL**: `ticketing.queue.token-ttl-seconds` (토큰과 동일)
 
 **데이터 구조**:
 ```json
@@ -58,11 +58,11 @@ ZCARD queue:concert:1  # 2 (대기인원 수)
 - **키 형식**: `hold:seat:1`, `hold:seat:2`, ...
 - **값**: 홀드 토큰 (UUID 문자열)
 - **용도**: 좌석별 홀드 토큰 매핑
-- **TTL**: 300초 (5분, 홀드 TTL과 동일)
+- **TTL**: 600초 (10분, 홀드 TTL과 동일. `ticketing.hold.ttl-seconds`로 조정)
 
 **예시**:
 ```
-SET hold:seat:1 "a1b2c3d4-e5f6-7890-abcd-ef1234567890" EX 300
+SET hold:seat:1 "a1b2c3d4-e5f6-7890-abcd-ef1234567890" EX 600
 GET hold:seat:1  # "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 ```
 
@@ -71,7 +71,7 @@ GET hold:seat:1  # "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 - **키 형식**: `hold:token:a1b2c3d4-e5f6-7890-abcd-...`
 - **값**: 홀드 정보 (JSON)
 - **용도**: 홀드 토큰별 상세 정보 저장
-- **TTL**: 300초 (5분)
+- **TTL**: 600초 (10분. `ticketing.hold.ttl-seconds`)
 
 **데이터 구조**:
 ```json
@@ -80,7 +80,7 @@ GET hold:seat:1  # "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
   "concertId": 1,
   "seatId": 1,
   "userId": "user123",
-  "expiresAt": "2026-01-25T10:05:00+09:00"
+  "expiresAt": "2026-01-25T10:10:00+09:00"
 }
 ```
 
@@ -427,8 +427,8 @@ ZREM queue:concert:1 {token}
 - **정책**: `allkeys-lru` (모든 키에 대해 LRU 기반 eviction)
 
 ### TTL 관리
-- **대기열 토큰**: 30분
-- **홀드**: 5분
+- **대기열 토큰**: `ticketing.queue.token-ttl-seconds` (기본 30분, 설정 가능)
+- **홀드**: 10분 (600초, `ticketing.hold.ttl-seconds`)
 - **세션**: 30분
 - **알림**: 7일
 - **캐시**: 5분

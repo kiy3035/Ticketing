@@ -104,6 +104,17 @@ logging.level.org.springframework.cache=DEBUG
 - **캐시 타입**: Redis를 캐시 저장소로 사용
 - **로깅**: 캐시 동작 디버깅용
 
+### 스케줄러 주기 가이드 (배치 4종)
+
+| 스케줄러 | 설정 키 | 기본 주기 | 주기 선택 근거 |
+|----------|---------|-----------|----------------|
+| **QueueProcessingScheduler** | `ticketing.queue.processing-interval-ms` | 2초 | 대기열 입장 허용. 2초면 사용자 체감 "틱"과 서버/Redis 부하 균형. 부하 시 3~5초로 완화 가능. |
+| **HoldCleanupScheduler** | `ticketing.hold.cleanup-interval-ms` | 60초 | 만료 홀드 스캔. 홀드 TTL 10분 대비 1분마다 정리면 충분. 과부하 시 120초 등으로 완화. |
+| **QueueCleanupScheduler** | `ticketing.queue.cleanup-interval-ms` | 60초 | 대기열 만료 토큰 제거. `token-ttl-seconds`와 비슷하게 두면 유령 데이터 적게 유지. |
+| **RefundForCancelledConcertScheduler** | `ticketing.refund.interval-ms` | 5분(300000ms) | 취소 공연 환불은 급하지 않음. 5분으로 DB/포인트 연산 부하 분산. |
+
+모든 주기는 **설정(properties/env)으로 변경 가능**하며, 인프라 스펙·트래픽에 맞춰 튜닝한다.
+
 ### 취소된 공연 환불 배치 설정
 ```properties
 # 취소된 공연 환불 배치
@@ -119,30 +130,32 @@ ticketing.refund.interval-ms=300000               # 배치 실행 주기 (5분)
 ```properties
 # 대기열 설정
 ticketing.queue.batch-size=50                     # 한 번에 처리할 사용자 수
-ticketing.queue.processing-interval-ms=2000        # 스케줄러 실행 주기 (밀리초)
-ticketing.queue.token-ttl-seconds=60            # 대기열 토큰 TTL (초, 1분)
-ticketing.queue.cleanup-interval-ms=60000          # 만료 토큰 정리 주기 (밀리초)
+ticketing.queue.processing-interval-ms=2000      # 대기열 입장 허용 주기 (2초)
+ticketing.queue.token-ttl-seconds=60               # 대기열 토큰 TTL (초). TicketingProperties 기본값 1800(30분), 여기서 오버라이드 가능(60=1분 등)
+ticketing.queue.cleanup-interval-ms=60000        # 만료 토큰 정리 주기 (60초)
 ticketing.queue.cleanup-batch-size=200            # 한 번에 정리할 토큰 수
 ```
 
 **설명**:
-- **batch-size**: 스케줄러가 한 번에 처리할 사용자 수 (서버 부하 조절)
-- **processing-interval-ms**: 대기열 처리 주기 (2초)
-- **token-ttl-seconds**: 토큰 자동 만료 시간 (30분)
+- **batch-size**: 스케줄러가 한 번에 입장 허용할 사용자 수 (서버 부하 조절)
+- **processing-interval-ms**: 대기열 처리 주기 (2초, 설정으로 조정 가능)
+- **token-ttl-seconds**: 대기열 토큰 자동 만료 시간
 - **cleanup-interval-ms**: 만료 토큰 정리 주기 (기본 60초)
 - **cleanup-batch-size**: 정리 시 스캔할 토큰 수
 
 ### 홀드 설정
 ```properties
 # 좌석 홀드 설정
-ticketing.hold.ttl-seconds=300                    # 홀드 TTL (초, 5분)
-ticketing.hold.cleanup-interval-ms=60000          # 홀드 정리 스케줄러 주기 (밀리초)
+ticketing.hold.ttl-seconds=600                    # 홀드 TTL (초, 10분)
+ticketing.hold.cleanup-interval-ms=60000          # 홀드 정리 스케줄러 주기 (60초)
+ticketing.hold.cleanup-batch-size=200             # 한 번에 처리할 만료 홀드 수
 ticketing.kafka.hold-topic=ticketing.seat-hold-events  # Kafka 토픽 이름
 ```
 
 **설명**:
-- **ttl-seconds**: 홀드 유지 시간 (5분)
-- **cleanup-interval-ms**: 만료 홀드 정리 주기 (60초)
+- **ttl-seconds**: 좌석 선택 후 결제 전 홀드 유지 시간 (10분)
+- **cleanup-interval-ms**: 만료 홀드 정리 주기 (60초, 설정으로 조정 가능)
+- **cleanup-batch-size**: 한 번에 스캔·정리할 만료 홀드 건수
 - **hold-topic**: Kafka 이벤트 토픽 이름
 
 ### 로깅 설정
@@ -353,17 +366,12 @@ spring.kafka.producer.properties.enable.idempotence=true  # 멱등성
 - **idempotence**: 중복 메시지 방지
 
 ### 스케줄러 주기 최적화
-```properties
-# 대기열 처리 주기
-ticketing.queue.processing-interval-ms=2000        # 2초 (빠른 응답)
+4종 스케줄러의 기본 주기·설정 키·선택 근거는 상단 **[스케줄러 주기 가이드 (배치 4종)](#스케줄러-주기-가이드-배치-4종)** 표를 참고.
 
-# 홀드 만료 처리 주기
-ticketing.hold.cleanup-interval-ms=60000          # 60초 (적절한 주기)
-```
-
-**튜닝 가이드**:
-- **대기열 처리**: 짧을수록 빠른 응답, 하지만 서버 부하 증가
-- **홀드 만료**: 길수록 서버 부하 감소, 하지만 만료 지연
+**튜닝 원칙**:
+- **대기열 입장(QueueProcessing)**: 짧을수록 사용자 체감 빠름, 길수록 서버/Redis 부하 감소. 부하 시 3~5초로 완화.
+- **만료 정리(Hold/Queue Cleanup)**: 길수록 부하 감소, 짧을수록 유령 데이터 적게 유지.
+- **환불(Refund)**: 급하지 않으므로 5분 이상 두어 DB 부하 분산.
 
 ## 모니터링 도구
 

@@ -14,7 +14,6 @@ import org.springframework.web.bind.annotation.RestController;
 public class SeatController {
 	private final SeatService seatService;
 
-	// 서비스 주입
 	public SeatController(SeatService seatService) {
 		this.seatService = seatService;
 	}

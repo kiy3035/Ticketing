@@ -14,7 +14,6 @@ import org.springframework.web.bind.annotation.RestController;
 public class ConcertController {
 	private final ConcertService concertService;
 
-	// 서비스 주입
 	public ConcertController(ConcertService concertService) {
 		this.concertService = concertService;
 	}

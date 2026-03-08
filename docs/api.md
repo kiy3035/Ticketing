@@ -121,8 +121,8 @@ Authorization: (세션 쿠키)
       "venue": "올림픽공원 KSPO DOME",
       "startAt": "2026-02-02T04:00:00+09:00",
       "endAt": "2026-02-02T07:00:00+09:00",
-"status": "UPCOMING",
-    "category": "IDOL"
+      "status": "UPCOMING",
+      "category": "IDOL"
     }
   ],
   "message": "OK",
@@ -734,3 +734,14 @@ curl -N "http://localhost:8080/api/notifications/stream" \
 ### 폴링 최적화
 - 대기열 상태: 2초마다 폴링
 - 알림 목록: 30초마다 폴링 (SSE 백업용)
+
+## 관리자 API (ADMIN 전용)
+
+ADMIN 역할 사용자만 접근 가능합니다. 엔드포인트 목록 및 사용법은 [관리자 설정 가이드](admin-setup.md#api-엔드포인트-admin-전용)를 참고하세요.  
+Swagger UI (`/swagger-ui.html`)에서도 동일 API를 확인할 수 있습니다.
+
+- `GET /api/admin/statistics/users` — 전체 사용자 수
+- `GET /api/admin/statistics/reservations` — 전체 예약 수
+- `GET /api/admin/statistics/payments` — 결제 통계 (오늘, 총액)
+- `GET /api/admin/payments?search=&page=&size=` — 결제 내역 조회
+- `GET /api/admin/users?search=&page=&size=` — 사용자 목록 조회
