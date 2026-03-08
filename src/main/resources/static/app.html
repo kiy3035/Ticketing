@@ -59,7 +59,7 @@
 				<p>실시간 좌석 현황과 안전한 예약 프로세스를 제공합니다.</p>
 				<div class="hero-actions">
 					<button class="primary">인기 공연 보기</button>
-					<button class="outline">예매 가이드</button>
+					<button type="button" class="outline" id="openGuideBtn">예매 가이드</button>
 				</div>
 			</div>
 			<div class="stats">
@@ -99,6 +99,33 @@
 			<div id="concertList" class="card-grid"></div>
 		</section>
 	</main>
+
+	<!-- 예매 가이드 모달 -->
+	<div id="guideOverlay" class="guide-overlay" aria-hidden="true">
+		<div class="guide-modal" role="dialog" aria-labelledby="guideModalTitle" aria-modal="true">
+			<div class="guide-modal-header">
+				<h2 id="guideModalTitle">예매 가이드</h2>
+				<button type="button" class="guide-modal-close" id="closeGuideBtn" aria-label="닫기">&times;</button>
+			</div>
+			<div class="guide-modal-body">
+				<h3>예매 절차</h3>
+				<ol>
+					<li><strong>콘서트 선택</strong> — 목록에서 원하는 공연을 고른 뒤 「좌석 보기」를 누릅니다.</li>
+					<li><strong>대기열 입장</strong> — 인기 공연은 대기열이 적용될 수 있습니다. 순번이 되면 자동으로 좌석 선택 화면으로 이동합니다.</li>
+					<li><strong>좌석 선택</strong> — 예매 가능한 좌석을 클릭해 잠금(hold)합니다. 다른 고객에게 선점되지 않도록 결제까지 진행해 주세요.</li>
+					<li><strong>결제 완료</strong> — 결제 페이지에서 정보를 확인한 뒤 결제하면 예매가 확정됩니다.</li>
+				</ol>
+				<h3>유의사항</h3>
+				<ul>
+					<li>좌석을 잠근 후 <strong>제한 시간 내</strong>에 결제를 완료하지 않으면 예약이 자동 취소됩니다.</li>
+					<li>한 번에 한 좌석만 잠금할 수 있으며, 결제 완료 전까지 다른 좌석을 선택하려면 기존 잠금을 취소해야 합니다.</li>
+					<li>예매 확정 후 취소·환불 정책은 공연별로 상이할 수 있으니 공연 상세 페이지를 확인해 주세요.</li>
+				</ul>
+				<h3>이용 팁</h3>
+				<p>인기 공연은 오픈 시간에 동시 접속이 몰릴 수 있습니다. 미리 로그인해 두시고, 원하는 공연을 즐겨찾기해 두면 빠르게 접근할 수 있습니다.</p>
+			</div>
+		</div>
+	</div>
 
 	<script src="/js/api.js"></script>
 	<script src="/js/notifications.js"></script>

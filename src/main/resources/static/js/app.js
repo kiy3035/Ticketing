@@ -199,3 +199,31 @@ loadConcerts();
 loadMetrics();
 
 setInterval(loadMetrics, 5000);
+
+// 예매 가이드 모달
+(function () {
+	const overlay = document.getElementById('guideOverlay');
+	const openBtn = document.getElementById('openGuideBtn');
+	const closeBtn = document.getElementById('closeGuideBtn');
+	if (!overlay || !openBtn) return;
+
+	function openGuide() {
+		overlay.classList.add('open');
+		overlay.setAttribute('aria-hidden', 'false');
+		document.body.style.overflow = 'hidden';
+	}
+	function closeGuide() {
+		overlay.classList.remove('open');
+		overlay.setAttribute('aria-hidden', 'true');
+		document.body.style.overflow = '';
+	}
+
+	openBtn.addEventListener('click', openGuide);
+	if (closeBtn) closeBtn.addEventListener('click', closeGuide);
+	overlay.addEventListener('click', (e) => {
+		if (e.target === overlay) closeGuide();
+	});
+	document.addEventListener('keydown', (e) => {
+		if (e.key === 'Escape' && overlay.classList.contains('open')) closeGuide();
+	});
+})();

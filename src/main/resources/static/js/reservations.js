@@ -224,3 +224,31 @@ document.querySelectorAll('.reservations-tab').forEach((tab) => {
 
 loadHolds();
 loadReservations();
+
+// 이용 안내 모달
+(function () {
+	const overlay = document.getElementById('usageGuideOverlay');
+	const openBtn = document.getElementById('openUsageGuideBtn');
+	const closeBtn = document.getElementById('closeUsageGuideBtn');
+	if (!overlay || !openBtn) return;
+
+	function openUsageGuide() {
+		overlay.classList.add('open');
+		overlay.setAttribute('aria-hidden', 'false');
+		document.body.style.overflow = 'hidden';
+	}
+	function closeUsageGuide() {
+		overlay.classList.remove('open');
+		overlay.setAttribute('aria-hidden', 'true');
+		document.body.style.overflow = '';
+	}
+
+	openBtn.addEventListener('click', openUsageGuide);
+	if (closeBtn) closeBtn.addEventListener('click', closeUsageGuide);
+	overlay.addEventListener('click', (e) => {
+		if (e.target === overlay) closeUsageGuide();
+	});
+	document.addEventListener('keydown', (e) => {
+		if (e.key === 'Escape' && overlay.classList.contains('open')) closeUsageGuide();
+	});
+})();

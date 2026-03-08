@@ -56,7 +56,7 @@
 				<p>완료된 예매 내역과 좌석 정보를 확인할 수 있습니다.</p>
 				<div class="hero-actions">
 					<a class="primary" href="/app.html">새 공연 예매</a>
-					<button class="outline" type="button">이용 안내</button>
+					<button type="button" class="outline" id="openUsageGuideBtn">이용 안내</button>
 				</div>
 			</div>
 			<div class="balance-card">
@@ -88,6 +88,29 @@
 			<div id="reservationStatus" class="status info"></div>
 		</section>
 	</main>
+
+	<!-- 이용 안내 모달 -->
+	<div id="usageGuideOverlay" class="guide-overlay" aria-hidden="true">
+		<div class="guide-modal" role="dialog" aria-labelledby="usageGuideModalTitle" aria-modal="true">
+			<div class="guide-modal-header">
+				<h2 id="usageGuideModalTitle">이용 안내</h2>
+				<button type="button" class="guide-modal-close" id="closeUsageGuideBtn" aria-label="닫기">&times;</button>
+			</div>
+			<div class="guide-modal-body">
+				<h3>예매내역이란?</h3>
+				<p>예매한 콘서트의 예약·결제 상태를 한곳에서 확인할 수 있는 페이지입니다. 「예약 중」과 「예매 내역」 탭으로 나뉘어 있습니다.</p>
+				<h3>예약 중 vs 예매 내역</h3>
+				<ul>
+					<li><strong>예약 중</strong> — 좌석을 선택했지만 아직 결제를 완료하지 않은 상태입니다. 표시된 만료 시간까지 결제를 진행하지 않으면 자동으로 취소되며, 다른 분이 해당 좌석을 예매할 수 있습니다.</li>
+					<li><strong>예매 내역</strong> — 결제가 완료된 예매만 표시됩니다. 여기에 보이는 공연은 예매가 확정된 것이므로, 공연일과 좌석 정보를 꼭 확인해 주세요.</li>
+				</ul>
+				<h3>결제 기한</h3>
+				<p>좌석을 잠근 후에는 안내된 시간(보통 약 10분) 내에 결제를 완료해야 합니다. 시간이 지나면 예약이 자동 해제되니, 결제 페이지에서 바로 진행해 주시기 바랍니다.</p>
+				<h3>취소 및 환불</h3>
+				<p>결제 완료 후 취소·환불을 원하시면 공연별 취소 정책을 확인하시고, 고객센터 또는 마이페이지의 문의하기를 이용해 주세요. 단, 좌석만 잠근 「예약 중」 상태는 결제를 진행하지 않으면 자동 취소되므로 별도 신청이 필요 없습니다.</p>
+			</div>
+		</div>
+	</div>
 
 	<script src="/js/api.js"></script>
 	<script src="/js/notifications.js"></script>
