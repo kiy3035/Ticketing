@@ -7,6 +7,7 @@ import java.util.stream.Collectors;
 import com.inyoung.ticketing.hold.event.SeatHoldEventPublisher;
 import com.inyoung.ticketing.hold.event.SeatHoldEventType;
 import com.inyoung.ticketing.hold.store.HoldInfo;
+import com.inyoung.ticketing.config.TicketingProperties;
 import com.inyoung.ticketing.hold.store.HoldStore;
 import com.inyoung.ticketing.lock.LockService;
 import com.inyoung.ticketing.reservation.domain.Reservation;
@@ -18,6 +19,8 @@ import com.inyoung.ticketing.reservation.repository.ReservationRepository;
 import com.inyoung.ticketing.seat.domain.Seat;
 import com.inyoung.ticketing.seat.domain.SeatStatus;
 import com.inyoung.ticketing.seat.repository.SeatRepository;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,22 +32,30 @@ public class ReservationService {
 	private final SeatRepository seatRepository;
 	private final ReservationRepository reservationRepository;
 	private final LockService lockService;
+	private final TicketingProperties properties;
 	private final HoldStore holdStore;
 	private final SeatHoldEventPublisher eventPublisher;
+	private final Counter lockFailureCounter;
 
-	// 리포지토리/락 주입
 	public ReservationService(
 		SeatRepository seatRepository,
 		ReservationRepository reservationRepository,
 		LockService lockService,
+		TicketingProperties properties,
 		HoldStore holdStore,
-		SeatHoldEventPublisher eventPublisher
+		SeatHoldEventPublisher eventPublisher,
+		MeterRegistry meterRegistry
 	) {
 		this.seatRepository = seatRepository;
 		this.reservationRepository = reservationRepository;
 		this.lockService = lockService;
+		this.properties = properties;
 		this.holdStore = holdStore;
 		this.eventPublisher = eventPublisher;
+		this.lockFailureCounter = Counter.builder("ticketing_lock_acquire_failures_total")
+			.tag("operation", "reservation")
+			.description("Number of lock acquire failures when confirming reservation")
+			.register(meterRegistry);
 	}
 
 	// 사용자 예약 내역 조회
@@ -56,8 +67,7 @@ public class ReservationService {
 				reservation.getId(),
 				reservation.getConcert().getTitle(),
 				reservation.getConcert().getVenue(),
-				reservation.getConcert().getStartAt(),
-				reservation.getConcert().getEndAt(),
+				reservation.getConcert().getConcertAt(),
 				reservation.getSeat().getSection(),
 				reservation.getSeat().getSeatNo(),
 				reservation.getSeat().getPrice(),
@@ -81,8 +91,9 @@ public class ReservationService {
 		}
 
 		String lockKey = "lock:seat:" + hold.getSeatId();
-		Optional<String> lockToken = lockService.tryLock(lockKey, Duration.ofSeconds(5));
+		Optional<String> lockToken = lockService.tryLock(lockKey, Duration.ofSeconds(properties.getLock().getTtlSeconds()));
 		if (lockToken.isEmpty()) {
+			lockFailureCounter.increment();
 			throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Seat is busy");
 		}
 
@@ -95,7 +106,7 @@ public class ReservationService {
 			if (!seat.getConcert().getId().equals(hold.getConcertId())) {
 				throw new ResponseStatusException(HttpStatus.CONFLICT, "Hold concert mismatch");
 			}
-			if (seat.getConcert().getEndAt().isBefore(Instant.now())) {
+			if (seat.getConcert().getConcertAt().isBefore(Instant.now())) {
 				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Past concert cannot be booked");
 			}
 			if (seat.getStatus() == SeatStatus.RESERVED) {

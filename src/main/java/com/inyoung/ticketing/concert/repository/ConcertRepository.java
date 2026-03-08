@@ -17,8 +17,8 @@ public interface ConcertRepository extends JpaRepository<Concert, Long> {
 	/** 상태별 콘서트 목록 (취소된 공연 환불 배치용) */
 	List<Concert> findByStatus(ConcertStatus status);
 
-	// 특정 날짜에 시작하는 콘서트 개수
-	long countByStartAtBetween(Instant start, Instant end);
+	// 특정 날짜에 공연이 있는 콘서트 개수
+	long countByConcertAtBetween(Instant start, Instant end);
 
 	@Query("""
 		select c from Concert c
@@ -32,15 +32,15 @@ public interface ConcertRepository extends JpaRepository<Concert, Long> {
 		@Param("query") String query
 	);
 
-	/** 예매 가능 공연: 종료 시각이 현재 이후. 오늘 날짜·현재 시간 기준 */
+	/** 예매 가능 공연: 공연 일시가 현재 이후 */
 	@Query("""
 		select c from Concert c
 		where (:category is null or c.category = :category)
 		and (:query is null
 			or lower(c.title) like lower(concat('%', :query, '%'))
 			or lower(c.venue) like lower(concat('%', :query, '%')))
-		and c.endAt >= :now
-		order by c.startAt asc
+		and c.concertAt >= :now
+		order by c.concertAt asc
 	""")
 	List<Concert> searchUpcomingConcerts(
 		@Param("category") ConcertCategory category,
@@ -48,15 +48,15 @@ public interface ConcertRepository extends JpaRepository<Concert, Long> {
 		@Param("now") java.time.Instant now
 	);
 
-	/** 지난 공연: 종료 시각이 현재 이전. 오늘 날짜·현재 시간 기준 */
+	/** 지난 공연: 공연 일시가 현재 이전 */
 	@Query("""
 		select c from Concert c
 		where (:category is null or c.category = :category)
 		and (:query is null
 			or lower(c.title) like lower(concat('%', :query, '%'))
 			or lower(c.venue) like lower(concat('%', :query, '%')))
-		and c.endAt < :now
-		order by c.endAt desc
+		and c.concertAt < :now
+		order by c.concertAt desc
 	""")
 	List<Concert> searchPastConcerts(
 		@Param("category") ConcertCategory category,

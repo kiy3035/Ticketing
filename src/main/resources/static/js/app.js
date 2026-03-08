@@ -41,15 +41,21 @@ const renderConcerts = (concerts) => {
 		return;
 	}
 
-	listEl.innerHTML = concerts.map((concert) => `
+	listEl.innerHTML = concerts.map((concert) => {
+		const isPast = showPast;
+		const label = isPast ? '상세 보기' : '좌석 보기';
+		const href = isPast ? `/concert.html?concertId=${concert.id}` : '#';
+		const attrs = isPast ? '' : ` data-queue-check="true" data-concert-id="${concert.id}"`;
+		return `
 		<div class="card">
 			<h3>${concert.title}</h3>
 			<div class="meta">${concert.venue}</div>
-			<div class="meta">${formatDate(concert.startAt)} ~ ${formatDate(concert.endAt)}</div>
+			<div class="meta">${formatDate(concert.concertAt)}</div>
 			<div class="meta">상태: ${concert.status}</div>
-			<a class="primary" href="/concert.html?concertId=${concert.id}">${showPast ? '상세 보기' : '좌석 보기'}</a>
+			<a class="primary" href="${href}"${attrs}>${label}</a>
 		</div>
-	`).join('');
+	`;
+	}).join('');
 };
 
 const applyClientFilters = (concerts) => {
@@ -170,6 +176,24 @@ if (searchInput) {
 		searchTimer = setTimeout(loadConcerts, 300);
 	});
 }
+
+// 패턴 B: 대기열 필요 시에만 queue 페이지로, 아니면 바로 좌석 페이지로
+listEl.addEventListener('click', async (e) => {
+	const link = e.target.closest('a[data-queue-check][data-concert-id]');
+	if (!link) return;
+	e.preventDefault();
+	const concertId = link.getAttribute('data-concert-id');
+	if (!concertId) return;
+	try {
+		const result = await window.fetchJson(`/api/queue/required?concertId=${concertId}`);
+		const required = result.ok && result.data && result.data.required;
+		window.location.href = required
+			? `/queue.html?concertId=${concertId}`
+			: `/concert.html?concertId=${concertId}`;
+	} catch (err) {
+		window.location.href = `/concert.html?concertId=${concertId}`;
+	}
+});
 
 loadConcerts();
 loadMetrics();

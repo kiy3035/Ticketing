@@ -10,8 +10,7 @@ public class ConcertResponse {
 	private Long id;
 	private String title;
 	private String venue;
-	private Instant startAt;
-	private Instant endAt;
+	private Instant concertAt;
 	private ConcertStatus status;
 	private ConcertCategory category;
 
@@ -21,37 +20,23 @@ public class ConcertResponse {
 		this.id = concert.getId();
 		this.title = concert.getTitle();
 		this.venue = concert.getVenue();
-		this.startAt = concert.getStartAt();
-		this.endAt = concert.getEndAt();
+		this.concertAt = concert.getConcertAt();
 		this.status = calculateStatus(concert);
 		this.category = concert.getCategory();
 	}
 
 	/**
 	 * 현재 시간 기준으로 콘서트 상태 계산
-	 * 
 	 * CANCELLED → CANCELLED (명시적 취소)
-	 * 현재 < startAt → UPCOMING (예정)
-	 * startAt ≤ 현재 < endAt → ONGOING (진행중)
-	 * 현재 ≥ endAt → COMPLETED (완료)
+	 * 현재 < concertAt → UPCOMING (예정)
+	 * 현재 ≥ concertAt → COMPLETED (완료)
 	 */
 	private ConcertStatus calculateStatus(Concert concert) {
-		// 명시적 취소는 유지
 		if (concert.getStatus() == ConcertStatus.CANCELLED) {
 			return ConcertStatus.CANCELLED;
 		}
-
 		Instant now = Instant.now();
-		Instant startAt = concert.getStartAt();
-		Instant endAt = concert.getEndAt();
-
-		if (now.isBefore(startAt)) {
-			return ConcertStatus.UPCOMING;
-		} else if (now.isBefore(endAt)) {
-			return ConcertStatus.ONGOING;
-		} else {
-			return ConcertStatus.COMPLETED;
-		}
+		return now.isBefore(concert.getConcertAt()) ? ConcertStatus.UPCOMING : ConcertStatus.COMPLETED;
 	}
 
 	// 콘서트 ID
@@ -69,14 +54,9 @@ public class ConcertResponse {
 		return venue;
 	}
 
-	// 시작 시각
-	public Instant getStartAt() {
-		return startAt;
-	}
-
-	// 종료 시각
-	public Instant getEndAt() {
-		return endAt;
+	// 공연 일시
+	public Instant getConcertAt() {
+		return concertAt;
 	}
 
 	// 진행 상태

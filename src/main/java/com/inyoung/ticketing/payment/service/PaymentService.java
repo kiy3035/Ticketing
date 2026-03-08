@@ -21,6 +21,8 @@ import com.inyoung.ticketing.reservation.dto.ReservationResponse;
 import com.inyoung.ticketing.reservation.service.ReservationService;
 import com.inyoung.ticketing.seat.domain.Seat;
 import com.inyoung.ticketing.seat.repository.SeatRepository;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -40,6 +42,7 @@ public class PaymentService {
 	private final ReservationService reservationService;
 	private final PaymentCompleteEventPublisher paymentCompleteEventPublisher;
 	private final TicketingProperties properties;
+	private final Timer paymentCompleteTimer;
 
 	public PaymentService(
 		PaymentRepository paymentRepository,
@@ -48,7 +51,8 @@ public class PaymentService {
 		UsersRepository usersRepository,
 		ReservationService reservationService,
 		PaymentCompleteEventPublisher paymentCompleteEventPublisher,
-		TicketingProperties properties
+		TicketingProperties properties,
+		MeterRegistry meterRegistry
 	) {
 		this.paymentRepository = paymentRepository;
 		this.holdStore = holdStore;
@@ -57,6 +61,9 @@ public class PaymentService {
 		this.reservationService = reservationService;
 		this.paymentCompleteEventPublisher = paymentCompleteEventPublisher;
 		this.properties = properties;
+		this.paymentCompleteTimer = Timer.builder("ticketing_payment_complete_duration_seconds")
+			.description("Time to complete payment (request to COMPLETED)")
+			.register(meterRegistry);
 	}
 
 	@Transactional
@@ -117,34 +124,39 @@ public class PaymentService {
 
 	@Transactional
 	public PaymentResponse completePayment(String paymentKey, String userId) {
-		Payment payment = paymentRepository.findWithLockByPaymentKey(paymentKey)
-			.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Payment not found"));
-		validateOwner(payment, userId);
+		Timer.Sample sample = Timer.start();
+		try {
+			Payment payment = paymentRepository.findWithLockByPaymentKey(paymentKey)
+				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Payment not found"));
+			validateOwner(payment, userId);
 
-		if (payment.getStatus() == PaymentStatus.COMPLETED) {
+			if (payment.getStatus() == PaymentStatus.COMPLETED) {
+				return new PaymentResponse(payment);
+			}
+			if (payment.getStatus() != PaymentStatus.APPROVED) {
+				throw new ResponseStatusException(HttpStatus.CONFLICT, "Payment not approved");
+			}
+
+			ReservationRequest reservationRequest = new ReservationRequest();
+			reservationRequest.setHoldToken(payment.getHoldToken());
+			ReservationResponse reservation = reservationService.confirm(reservationRequest, userId);
+
+			payment.setStatus(PaymentStatus.COMPLETED);
+			payment.setCompletedAt(now());
+			payment.setReservationId(reservation.getReservationId());
+
+			// 결제 완료 이벤트 발행 (Kafka를 통해 비동기로 이메일/SMS 전송)
+			paymentCompleteEventPublisher.publishPaymentComplete(
+				paymentKey,
+				userId,
+				payment.getConcertId(),
+				payment.getAmount()
+			);
+
 			return new PaymentResponse(payment);
+		} finally {
+			sample.stop(paymentCompleteTimer);
 		}
-		if (payment.getStatus() != PaymentStatus.APPROVED) {
-			throw new ResponseStatusException(HttpStatus.CONFLICT, "Payment not approved");
-		}
-
-		ReservationRequest reservationRequest = new ReservationRequest();
-		reservationRequest.setHoldToken(payment.getHoldToken());
-		ReservationResponse reservation = reservationService.confirm(reservationRequest, userId);
-
-		payment.setStatus(PaymentStatus.COMPLETED);
-		payment.setCompletedAt(now());
-		payment.setReservationId(reservation.getReservationId());
-
-		// 결제 완료 이벤트 발행 (Kafka를 통해 비동기로 이메일/SMS 전송)
-		paymentCompleteEventPublisher.publishPaymentComplete(
-			paymentKey,
-			userId,
-			payment.getConcertId(),
-			payment.getAmount()
-		);
-
-		return new PaymentResponse(payment);
 	}
 
 	@Transactional

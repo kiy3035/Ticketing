@@ -10,8 +10,7 @@ public class HoldItemResponse {
 	private Long concertId;
 	private String concertTitle;
 	private String venue;
-	private Instant startAt;
-	private Instant endAt;
+	private Instant concertAt;
 	private Long seatId;
 	private String section;
 	private String seatNo;
@@ -22,13 +21,12 @@ public class HoldItemResponse {
 	}
 
 	public HoldItemResponse(String holdToken, Long concertId, String concertTitle, String venue,
-		Instant startAt, Instant endAt, Long seatId, String section, String seatNo, Long price, Instant expiresAt) {
+		Instant concertAt, Long seatId, String section, String seatNo, Long price, Instant expiresAt) {
 		this.holdToken = holdToken;
 		this.concertId = concertId;
 		this.concertTitle = concertTitle;
 		this.venue = venue;
-		this.startAt = startAt;
-		this.endAt = endAt;
+		this.concertAt = concertAt;
 		this.seatId = seatId;
 		this.section = section;
 		this.seatNo = seatNo;
@@ -44,10 +42,8 @@ public class HoldItemResponse {
 	public void setConcertTitle(String concertTitle) { this.concertTitle = concertTitle; }
 	public String getVenue() { return venue; }
 	public void setVenue(String venue) { this.venue = venue; }
-	public Instant getStartAt() { return startAt; }
-	public void setStartAt(Instant startAt) { this.startAt = startAt; }
-	public Instant getEndAt() { return endAt; }
-	public void setEndAt(Instant endAt) { this.endAt = endAt; }
+	public Instant getConcertAt() { return concertAt; }
+	public void setConcertAt(Instant concertAt) { this.concertAt = concertAt; }
 	public Long getSeatId() { return seatId; }
 	public void setSeatId(Long seatId) { this.seatId = seatId; }
 	public String getSection() { return section; }

@@ -185,7 +185,7 @@ const loadConcerts = async (searchQuery = '') => {
 			<tr>
 				<td>${concert.title}</td>
 				<td>${concert.venue}</td>
-				<td>${new Date(concert.startAt).toLocaleString()}</td>
+				<td>${new Date(concert.concertAt).toLocaleString()}</td>
 				<td>
 					<span class="badge" style="background: ${getStatusColor(concert.status)}">${concert.status}</span>
 				</td>

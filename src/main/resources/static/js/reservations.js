@@ -71,15 +71,15 @@ const buildReservationCard = (item) => {
 	const seatSection = item.seatSection ?? item.section ?? '';
 	const seatNo = item.seatNo ?? item.seatNumber ?? '';
 	const seatInfo = seatSection || seatNo ? `${seatSection}구역 ${seatNo}번` : '좌석 정보 없음';
-	const period = `${formatDate(item.startAt)} ~ ${formatDate(item.endAt)}`;
-	const dday = formatDday(item.startAt);
+	const dateTime = formatDate(item.concertAt);
+	const dday = formatDday(item.concertAt);
 	return `
 		<div class="reservation-card">
 			<div class="reservation-main">
 				<div>
 					<h3>${item.concertTitle}</h3>
 					<div class="meta">${item.venue}</div>
-					<div class="meta">${period}</div>
+					<div class="meta">${dateTime}</div>
 				</div>
 				<div class="reservation-status ${getStatusClass(item.status)}">${getStatusLabel(item.status)}</div>
 			</div>
@@ -136,7 +136,7 @@ const formatRemaining = (expiresAt) => {
 };
 
 const buildHoldCard = (item) => {
-	const period = `${formatDate(item.startAt)} ~ ${formatDate(item.endAt)}`;
+	const dateTime = formatDate(item.concertAt);
 	const seatInfo = `${item.section || ''}구역 ${item.seatNo || ''}번`.trim() || '좌석 정보 없음';
 	const paymentUrl = `/payment.html?concertId=${item.concertId}&seatId=${item.seatId}&holdToken=${encodeURIComponent(item.holdToken)}`;
 	return `
@@ -145,7 +145,7 @@ const buildHoldCard = (item) => {
 				<div>
 					<h3>${item.concertTitle || '-'}</h3>
 					<div class="meta">${item.venue || '-'}</div>
-					<div class="meta">${period}</div>
+					<div class="meta">${dateTime}</div>
 				</div>
 				<div class="reservation-status status-pending">예약 중</div>
 			</div>

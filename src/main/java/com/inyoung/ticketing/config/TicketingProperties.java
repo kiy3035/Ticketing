@@ -6,6 +6,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "ticketing")
 public class TicketingProperties {
 	private Hold hold = new Hold();
+	private Lock lock = new Lock();
 	private Kafka kafka = new Kafka();
 	private Queue queue = new Queue();
 	private Payment payment = new Payment();
@@ -14,6 +15,11 @@ public class TicketingProperties {
 	// 홀드 관련 설정 접근자
 	public Hold getHold() {
 		return hold;
+	}
+
+	// 좌석 락 관련 설정 접근자
+	public Lock getLock() {
+		return lock;
 	}
 
 	public Refund getRefund() {
@@ -39,6 +45,8 @@ public class TicketingProperties {
 		/** 좌석 선택 단계 홀드 유효 시간(초). 기본 10분. */
 		private long ttlSeconds = 600;
 		private long cleanupIntervalMs = 60000;
+		/** 홀드 정리 배치 한 번에 처리할 만료 홀드 수. 기본 200. */
+		private int cleanupBatchSize = 200;
 
 		// 홀드 TTL(초)
 		public long getTtlSeconds() {
@@ -58,6 +66,48 @@ public class TicketingProperties {
 		// 홀드 정리 스케줄러 주기 설정
 		public void setCleanupIntervalMs(long cleanupIntervalMs) {
 			this.cleanupIntervalMs = cleanupIntervalMs;
+		}
+
+		public int getCleanupBatchSize() {
+			return cleanupBatchSize;
+		}
+
+		public void setCleanupBatchSize(int cleanupBatchSize) {
+			this.cleanupBatchSize = cleanupBatchSize;
+		}
+	}
+
+	/** 좌석 동시 선점용 Redis 락 설정. 키: lock:seat:{seatId}, TTL 초과 시 자동 해제 */
+	public static class Lock {
+		/** 좌석 락 유지 시간(초). 홀드/예약 확정 시 해당 좌석 락 TTL. 기본 5초 */
+		private long ttlSeconds = 5;
+		/** 락 획득 실패 시 재시도 횟수. 0이면 재시도 없음. 기본 0 */
+		private int retryCount = 0;
+		/** 재시도 간 대기 시간(밀리초). 기본 50 */
+		private long retryDelayMs = 50;
+
+		public long getTtlSeconds() {
+			return ttlSeconds;
+		}
+
+		public void setTtlSeconds(long ttlSeconds) {
+			this.ttlSeconds = ttlSeconds;
+		}
+
+		public int getRetryCount() {
+			return retryCount;
+		}
+
+		public void setRetryCount(int retryCount) {
+			this.retryCount = retryCount;
+		}
+
+		public long getRetryDelayMs() {
+			return retryDelayMs;
+		}
+
+		public void setRetryDelayMs(long retryDelayMs) {
+			this.retryDelayMs = retryDelayMs;
 		}
 	}
 
@@ -81,6 +131,10 @@ public class TicketingProperties {
 		private long tokenTtlSeconds = 1800;
 		private long cleanupIntervalMs = 60000;
 		private int cleanupBatchSize = 200;
+		/** 대기 인원이 이 값 이하이고 예매 가능 좌석이 있으면 진입 시 즉시 입장 허용 (0이면 비활성화) */
+		private int immediateAllowThreshold = 30;
+		/** 대기 인원이 이 값 초과일 때만 대기열 필요(패턴 B). 이하면 바로 좌석 페이지 진입 가능. 0이면 항상 대기열 없음. */
+		private int activationThreshold = 50;
 
 		// 배치 크기 (한 번에 처리할 사용자 수)
 		public int getBatchSize() {
@@ -125,6 +179,22 @@ public class TicketingProperties {
 		// 한 번에 정리할 토큰 수
 		public int getCleanupBatchSize() {
 			return cleanupBatchSize;
+		}
+
+		public int getImmediateAllowThreshold() {
+			return immediateAllowThreshold;
+		}
+
+		public void setImmediateAllowThreshold(int immediateAllowThreshold) {
+			this.immediateAllowThreshold = immediateAllowThreshold;
+		}
+
+		public int getActivationThreshold() {
+			return activationThreshold;
+		}
+
+		public void setActivationThreshold(int activationThreshold) {
+			this.activationThreshold = activationThreshold;
 		}
 
 		// 정리 배치 크기 설정

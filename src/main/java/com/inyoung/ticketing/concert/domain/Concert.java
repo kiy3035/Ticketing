@@ -31,11 +31,9 @@ public class Concert {
 	@Column(nullable = false, length = 200)
 	private String venue;
 
-	@Column(nullable = false)
-	private Instant startAt;
-
-	@Column(nullable = false)
-	private Instant endAt;
+	/** 공연 일시 (날짜·시각 단일 값). 기존 DB 마이그레이션 후 nullable=false로 변경 가능 */
+	@Column(nullable = true)
+	private Instant concertAt;
 
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 20)
@@ -83,24 +81,14 @@ public class Concert {
 		this.venue = venue;
 	}
 
-	// 시작 시각
-	public Instant getStartAt() {
-		return startAt;
+	// 공연 일시
+	public Instant getConcertAt() {
+		return concertAt;
 	}
 
-	// 시작 시각 설정
-	public void setStartAt(Instant startAt) {
-		this.startAt = startAt;
-	}
-
-	// 종료 시각
-	public Instant getEndAt() {
-		return endAt;
-	}
-
-	// 종료 시각 설정
-	public void setEndAt(Instant endAt) {
-		this.endAt = endAt;
+	// 공연 일시 설정
+	public void setConcertAt(Instant concertAt) {
+		this.concertAt = concertAt;
 	}
 
 	// 진행 상태

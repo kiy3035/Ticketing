@@ -9,8 +9,7 @@ public class ReservationItemResponse {
 	private final Long reservationId;
 	private final String concertTitle;
 	private final String venue;
-	private final Instant startAt;
-	private final Instant endAt;
+	private final Instant concertAt;
 	private final String seatSection;
 	private final String seatNo;
 	private final Long seatPrice;
@@ -21,8 +20,7 @@ public class ReservationItemResponse {
 		Long reservationId,
 		String concertTitle,
 		String venue,
-		Instant startAt,
-		Instant endAt,
+		Instant concertAt,
 		String seatSection,
 		String seatNo,
 		Long seatPrice,
@@ -32,8 +30,7 @@ public class ReservationItemResponse {
 		this.reservationId = reservationId;
 		this.concertTitle = concertTitle;
 		this.venue = venue;
-		this.startAt = startAt;
-		this.endAt = endAt;
+		this.concertAt = concertAt;
 		this.seatSection = seatSection;
 		this.seatNo = seatNo;
 		this.seatPrice = seatPrice;
@@ -53,12 +50,8 @@ public class ReservationItemResponse {
 		return venue;
 	}
 
-	public Instant getStartAt() {
-		return startAt;
-	}
-
-	public Instant getEndAt() {
-		return endAt;
+	public Instant getConcertAt() {
+		return concertAt;
 	}
 
 	public String getSeatSection() {

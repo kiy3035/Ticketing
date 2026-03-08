@@ -929,6 +929,26 @@ img { max-width: 100%; display: block; }
 	font-size: 12px;
 }
 
+.queue-actions {
+	display: flex;
+	justify-content: center;
+	margin-top: 8px;
+}
+
+.queue-card.sold-out .queue-actions .btn {
+	background: linear-gradient(135deg, var(--primary), var(--primary-2));
+	color: #fff;
+	border: none;
+	font-weight: 600;
+	padding: 12px 24px;
+}
+
+.queue-card.sold-out .queue-message {
+	background: rgba(239, 68, 68, 0.08);
+	border-color: rgba(239, 68, 68, 0.25);
+	color: #b91c1c;
+}
+
 @keyframes queue-progress {
 	0% { transform: translateX(-60%); }
 	50% { transform: translateX(0%); }

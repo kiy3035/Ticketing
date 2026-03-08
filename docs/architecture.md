@@ -187,6 +187,11 @@ sequenceDiagram
     end
 ```
 
+#### 대기열 패턴 B (유동 활성화)
+- **GET /api/queue/required?concertId=...**: 현재 대기 인원이 `ticketing.queue.activation-threshold` 초과일 때만 `required: true` 반환.
+- 클라이언트는 예매하기 클릭 시 이 API로 분기: `required=false`면 대기열 페이지 없이 바로 좌석 페이지(`/concert.html`)로, `required=true`면 대기열 페이지(`/queue.html`)로 이동.
+- 설정: `application.properties`의 `ticketing.queue.activation-threshold`, `ticketing.queue.immediate-allow-threshold`.
+
 #### 만료 토큰 정리 플로우
 - 토큰 TTL(30분)이 만료되면 `queue:token:{token}` 키가 자동으로 사라집니다.
 - 주기적으로 ZSet을 스캔하여 **토큰 키가 없는 멤버를 제거**합니다.
@@ -705,6 +710,7 @@ erDiagram
 ### 4. 분산 락 구현
 - **Lua 스크립트**: 원자적 연산 보장
 - **토큰 검증**: 락 해제 시 토큰 일치 확인으로 안전성 확보
+- **키·TTL 설정**: `lock:seat:{seatId}`, TTL은 `ticketing.lock.ttl-seconds`로 조정 ([docs/concurrency.md](concurrency.md))
 - **TTL**: 락 획득 실패 시 자동 해제
 
 ### 5. 이메일 & SMS 알림 선택

@@ -18,11 +18,13 @@
 - **Redis ZSet 기반**: 콘서트별 대기열로 대규모 트래픽 처리
 - **O(log N) 순번 조회**: ZSet의 RANK 연산으로 효율적인 순번 관리
 - **배치 처리**: 스케줄러가 주기적으로 상위 N명을 입장 허용하여 서버 부하 분산
+- **패턴 B (유동 활성화)**: 대기 인원이 `activation-threshold` 초과일 때만 대기열 페이지 진입, 이하면 바로 좌석 페이지 ([설정](src/main/resources/application.properties): `ticketing.queue.activation-threshold`)
+- **즉시 입장**: 대기 인원이 적고 좌석이 있으면 진입 시 즉시 입장 허용 (`immediate-allow-threshold`)
 - **토큰 기반 인증**: UUID 토큰으로 사용자 식별 및 중복 진입 방지
 - **만료 정리**: 토큰 TTL + 정리 스케줄러로 유령 대기열 자동 제거
 
 ### 2. 좌석 홀드/만료 시스템 (Hold System)
-- **Redis TTL + 분산 락**: 경쟁 상태 해결 및 중복 홀드 방지
+- **Redis TTL + 분산 락**: 경쟁 상태 해결 및 중복 홀드 방지. 락 키 `lock:seat:{seatId}`, TTL은 설정으로 조정 ([docs/concurrency.md](docs/concurrency.md))
 - **자동 만료 처리**: 스케줄러가 만료된 홀드를 스캔하여 자동 정리
 - **이벤트 기반 알림**: Kafka로 만료 이벤트 발행 후 SSE로 실시간 전달
 
@@ -115,6 +117,7 @@
 
 **해결**:
 - 지표 API (`GET /api/metrics`)로 실시간 접속자 수, 콘서트 수 등 제공
+- **Prometheus 커스텀 메트릭**: `ticketing_queue_waiting_count`(콘서트별 대기 인원), `ticketing_hold_created_total`, `ticketing_lock_acquire_failures_total` 등으로 대기열·락·홀드 관측
 - 보안/에러 로그를 파일로 기록 (`logs/ticketing.log`)
 - Redis Insight, Kafka UI로 인프라 상태 모니터링 가능
 
@@ -126,6 +129,10 @@
 - Spring Session으로 세션 공유
 - Redis 연결 풀링으로 연결 관리 최적화
 - Kafka로 이벤트 기반 비동기 처리
+
+### 7. 부하 테스트·수용 인원 (Knee point)
+- **k6 스크립트**: [load-tests/](load-tests/) 에 대기열 위주(`queue-load-test.js`)·풀 플로우(`full-flow.js`) 부하 테스트 제공
+- **목표 인프라**: t3a.medium 1대(Redis/Kafka/Prometheus/Grafana) + t3.small 2대(앱) 구성 시 동시 사용자 수·RPS를 단계적으로 올려 **knee point** 측정. 결과는 “동시 N명(또는 RPS)까지 검증”으로 문서화 ([docs/deployment-ec2.md](docs/deployment-ec2.md), [docs/load-test-results.md](docs/load-test-results.md)). 동시성·대기열·홀드 단위/통합 테스트, Redis·Kafka·DB 헬스, 비즈니스 메트릭·락 재시도 설정으로 검증·운영 보강.
 
 ## 📋 핵심 기능
 

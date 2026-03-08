@@ -5,12 +5,18 @@ public class QueueEnterResponse {
 	private String token;
 	private Long rank;
 	private Long totalWaiting;
+	private boolean allowed;
 
-	// 토큰, 순번, 대기인원 수를 담아 응답 생성
+	// 토큰, 순번, 대기인원 수를 담아 응답 생성 (allowed 기본 false)
 	public QueueEnterResponse(String token, Long rank, Long totalWaiting) {
+		this(token, rank, totalWaiting, false);
+	}
+
+	public QueueEnterResponse(String token, Long rank, Long totalWaiting, boolean allowed) {
 		this.token = token;
 		this.rank = rank;
 		this.totalWaiting = totalWaiting;
+		this.allowed = allowed;
 	}
 
 	// 대기열 토큰
@@ -26,5 +32,10 @@ public class QueueEnterResponse {
 	// 전체 대기인원 수
 	public Long getTotalWaiting() {
 		return totalWaiting;
+	}
+
+	// 진입 시 즉시 입장 허용 여부
+	public boolean isAllowed() {
+		return allowed;
 	}
 }

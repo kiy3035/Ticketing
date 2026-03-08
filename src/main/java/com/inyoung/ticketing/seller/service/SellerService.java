@@ -67,9 +67,7 @@ public class SellerService {
 	private static ConcertStatus computeStatus(Concert c) {
 		if (c.getStatus() == ConcertStatus.CANCELLED) return ConcertStatus.CANCELLED;
 		Instant now = Instant.now();
-		if (now.isBefore(c.getStartAt())) return ConcertStatus.UPCOMING;
-		if (now.isBefore(c.getEndAt())) return ConcertStatus.ONGOING;
-		return ConcertStatus.COMPLETED;
+		return now.isBefore(c.getConcertAt()) ? ConcertStatus.UPCOMING : ConcertStatus.COMPLETED;
 	}
 
 	@Transactional(readOnly = true)
@@ -83,7 +81,7 @@ public class SellerService {
 				long reservedCount = seatRepository.countByConcertIdAndStatus(c.getId(), SeatStatus.RESERVED);
 				Long revenue = paymentRepository.sumAmountByConcertIdAndStatus(c.getId());
 				return new SellerConcertResponse(
-					c.getId(), c.getTitle(), c.getVenue(), c.getStartAt(), c.getEndAt(),
+					c.getId(), c.getTitle(), c.getVenue(), c.getConcertAt(),
 					computeStatus(c), c.getCategory(), c.getCreatedAt(),
 					seatCount, reservedCount, revenue
 				);
@@ -97,8 +95,7 @@ public class SellerService {
 		Concert c = new Concert();
 		c.setTitle(request.getTitle());
 		c.setVenue(request.getVenue());
-		c.setStartAt(request.getStartAt());
-		c.setEndAt(request.getEndAt());
+		c.setConcertAt(request.getConcertAt());
 		c.setCategory(request.getCategory());
 		c.setStatus(ConcertStatus.UPCOMING);
 		c.setSeller(seller);
@@ -106,7 +103,7 @@ public class SellerService {
 		var cache = cacheManager.getCache(CacheNames.CONCERT_LIST);
 		if (cache != null) cache.clear();
 		return new SellerConcertResponse(
-			saved.getId(), saved.getTitle(), saved.getVenue(), saved.getStartAt(), saved.getEndAt(),
+			saved.getId(), saved.getTitle(), saved.getVenue(), saved.getConcertAt(),
 			ConcertStatus.UPCOMING, saved.getCategory(), saved.getCreatedAt(),
 			0, 0L, 0L
 		);
@@ -120,7 +117,7 @@ public class SellerService {
 		long reservedCount = seatRepository.countByConcertIdAndStatus(c.getId(), SeatStatus.RESERVED);
 		Long revenue = paymentRepository.sumAmountByConcertIdAndStatus(c.getId());
 		return new SellerConcertResponse(
-			c.getId(), c.getTitle(), c.getVenue(), c.getStartAt(), c.getEndAt(),
+			c.getId(), c.getTitle(), c.getVenue(), c.getConcertAt(),
 			computeStatus(c), c.getCategory(), c.getCreatedAt(),
 			seatCount, reservedCount, revenue
 		);
@@ -131,8 +128,7 @@ public class SellerService {
 		Concert c = getConcertOwnedBy(concertId, getSeller(username).getId());
 		if (request.getTitle() != null && !request.getTitle().isBlank()) c.setTitle(request.getTitle());
 		if (request.getVenue() != null && !request.getVenue().isBlank()) c.setVenue(request.getVenue());
-		if (request.getStartAt() != null) c.setStartAt(request.getStartAt());
-		if (request.getEndAt() != null) c.setEndAt(request.getEndAt());
+		if (request.getConcertAt() != null) c.setConcertAt(request.getConcertAt());
 		if (request.getCategory() != null) c.setCategory(request.getCategory());
 		concertRepository.save(c);
 		return getConcert(username, concertId);

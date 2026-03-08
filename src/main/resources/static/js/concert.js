@@ -103,7 +103,7 @@ const renderSeats = (seats) => {
 	seatGrid.innerHTML = html;
 };
 
-// 대기열 입장 허용 여부 확인
+// 대기열 입장 허용 여부 확인 (패턴 B: required=false면 토큰 없이도 진입 가능)
 const checkQueueAccess = async () => {
 	if (!concertId) {
 		return false;
@@ -121,7 +121,17 @@ const checkQueueAccess = async () => {
 		}
 	}
 
-	// 입장 허용되지 않았거나 토큰이 없으면 대기열로 리다이렉트
+	// 토큰 없음: 대기열 필요 여부 확인. required=false면 바로 진입 허용
+	try {
+		const result = await window.fetchJson(`/api/queue/required?concertId=${concertId}`);
+		if (result.ok && result.data && !result.data.required) {
+			return true; // 대기열 불필요 시 바로 좌석 페이지 허용
+		}
+	} catch (error) {
+		console.error('대기열 필요 여부 확인 실패:', error);
+	}
+
+	// 대기열 필요하거나 확인 실패 시 대기열로 리다이렉트
 	window.location.href = `/queue.html?concertId=${concertId}`;
 	return false;
 };
@@ -144,7 +154,7 @@ const loadConcertDetail = async () => {
 		const concert = concerts.find((item) => String(item.id) === String(concertId));
 		if (concert) {
 			concertTitle.textContent = concert.title;
-			concertMeta.textContent = `${concert.venue} | ${new Date(concert.startAt).toLocaleString()}`;
+			concertMeta.textContent = `${concert.venue} | ${new Date(concert.concertAt).toLocaleString()}`;
 		}
 	} catch (error) {
 		// 상세 정보는 실패해도 좌석 조회로 진행한다.

@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import com.inyoung.ticketing.concert.domain.Concert;
 import com.inyoung.ticketing.concert.repository.ConcertRepository;
 import com.inyoung.ticketing.config.TicketingProperties;
@@ -19,6 +20,8 @@ import com.inyoung.ticketing.lock.LockService;
 import com.inyoung.ticketing.seat.domain.Seat;
 import com.inyoung.ticketing.seat.domain.SeatStatus;
 import com.inyoung.ticketing.seat.repository.SeatRepository;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +36,8 @@ public class HoldService {
 	private final TicketingProperties properties;
 	private final HoldStore holdStore;
 	private final SeatHoldEventPublisher eventPublisher;
+	private final Counter holdCreatedCounter;
+	private final Counter lockFailureCounter;
 
 	public HoldService(
 		SeatRepository seatRepository,
@@ -40,7 +45,8 @@ public class HoldService {
 		LockService lockService,
 		TicketingProperties properties,
 		HoldStore holdStore,
-		SeatHoldEventPublisher eventPublisher
+		SeatHoldEventPublisher eventPublisher,
+		MeterRegistry meterRegistry
 	) {
 		this.seatRepository = seatRepository;
 		this.concertRepository = concertRepository;
@@ -48,6 +54,14 @@ public class HoldService {
 		this.properties = properties;
 		this.holdStore = holdStore;
 		this.eventPublisher = eventPublisher;
+		this.holdCreatedCounter = Counter.builder("ticketing_hold_created_total")
+			.tag("status", "success")
+			.description("Number of seat holds created successfully")
+			.register(meterRegistry);
+		this.lockFailureCounter = Counter.builder("ticketing_lock_acquire_failures_total")
+			.tag("operation", "hold")
+			.description("Number of lock acquire failures when creating hold")
+			.register(meterRegistry);
 	}
 
 	@Transactional
@@ -60,13 +74,28 @@ public class HoldService {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Seat does not belong to concert");
 		}
 		Concert concert = seat.getConcert();
-		if (concert.getEndAt().isBefore(Instant.now())) {
+		if (concert.getConcertAt().isBefore(Instant.now())) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Past concert cannot be booked");
 		}
 
 		String lockKey = "lock:seat:" + seat.getId();
-		Optional<String> lockToken = lockService.tryLock(lockKey, Duration.ofSeconds(5));
+		Duration ttl = Duration.ofSeconds(properties.getLock().getTtlSeconds());
+		int retryCount = Math.max(0, properties.getLock().getRetryCount());
+		long retryDelayMs = Math.max(0, properties.getLock().getRetryDelayMs());
+
+		Optional<String> lockToken = lockService.tryLock(lockKey, ttl);
+		for (int i = 0; lockToken.isEmpty() && i < retryCount; i++) {
+			try {
+				TimeUnit.MILLISECONDS.sleep(retryDelayMs);
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				lockFailureCounter.increment();
+				throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Seat is busy");
+			}
+			lockToken = lockService.tryLock(lockKey, ttl);
+		}
 		if (lockToken.isEmpty()) {
+			lockFailureCounter.increment();
 			throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Seat is busy");
 		}
 
@@ -88,6 +117,7 @@ public class HoldService {
 				throw new ResponseStatusException(HttpStatus.CONFLICT, "Seat already held");
 			}
 			eventPublisher.publish(SeatHoldEventType.HOLD_CREATED, info);
+			holdCreatedCounter.increment();
 			return new HoldResponse(holdToken, expiresAt);
 		} finally {
 			// 락 해제
@@ -116,8 +146,7 @@ public class HoldService {
 				Seat seat = seatRepository.findById(info.getSeatId()).orElse(null);
 				String title = concert != null ? concert.getTitle() : "-";
 				String venue = concert != null ? concert.getVenue() : "-";
-				Instant startAt = concert != null ? concert.getStartAt() : null;
-				Instant endAt = concert != null ? concert.getEndAt() : null;
+				Instant concertAt = concert != null ? concert.getConcertAt() : null;
 				String section = seat != null ? seat.getSection() : "-";
 				String seatNo = seat != null ? seat.getSeatNo() : "-";
 				Long price = seat != null ? seat.getPrice() : 0L;
@@ -126,8 +155,7 @@ public class HoldService {
 					info.getConcertId(),
 					title,
 					venue,
-					startAt,
-					endAt,
+					concertAt,
 					info.getSeatId(),
 					section,
 					seatNo,

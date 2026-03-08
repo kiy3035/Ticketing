@@ -46,7 +46,7 @@
 		</section>
 
 		<section class="queue-modal">
-			<div class="queue-card">
+			<div id="queueCard" class="queue-card">
 				<div class="queue-card-header">
 					<span class="badge light">대기열 안내</span>
 					<h2>예매 입장 순서를 확인 중입니다</h2>
@@ -70,6 +70,9 @@
 						<div class="queue-progress-bar"></div>
 					</div>
 					<p class="queue-progress-hint">입장 순서에 따라 자동으로 이동합니다.</p>
+				</div>
+				<div class="queue-actions">
+					<button type="button" id="queueExitBtn" class="btn ghost">대기열 나가기</button>
 				</div>
 			</div>
 		</section>

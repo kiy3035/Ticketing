@@ -12,8 +12,7 @@ public class SellerConcertResponse {
 	private Long id;
 	private String title;
 	private String venue;
-	private Instant startAt;
-	private Instant endAt;
+	private Instant concertAt;
 	private ConcertStatus status;
 	private ConcertCategory category;
 	private OffsetDateTime createdAt;
@@ -24,14 +23,13 @@ public class SellerConcertResponse {
 	public SellerConcertResponse() {
 	}
 
-	public SellerConcertResponse(Long id, String title, String venue, Instant startAt, Instant endAt,
+	public SellerConcertResponse(Long id, String title, String venue, Instant concertAt,
 		ConcertStatus status, ConcertCategory category, OffsetDateTime createdAt,
 		int seatCount, long reservedCount, Long totalRevenue) {
 		this.id = id;
 		this.title = title;
 		this.venue = venue;
-		this.startAt = startAt;
-		this.endAt = endAt;
+		this.concertAt = concertAt;
 		this.status = status;
 		this.category = category;
 		this.createdAt = createdAt;
@@ -46,10 +44,8 @@ public class SellerConcertResponse {
 	public void setTitle(String title) { this.title = title; }
 	public String getVenue() { return venue; }
 	public void setVenue(String venue) { this.venue = venue; }
-	public Instant getStartAt() { return startAt; }
-	public void setStartAt(Instant startAt) { this.startAt = startAt; }
-	public Instant getEndAt() { return endAt; }
-	public void setEndAt(Instant endAt) { this.endAt = endAt; }
+	public Instant getConcertAt() { return concertAt; }
+	public void setConcertAt(Instant concertAt) { this.concertAt = concertAt; }
 	public ConcertStatus getStatus() { return status; }
 	public void setStatus(ConcertStatus status) { this.status = status; }
 	public ConcertCategory getCategory() { return category; }

@@ -39,7 +39,7 @@ async function loadConcerts() {
 			<tr>
 				<td>${c.title}</td>
 				<td>${c.venue}</td>
-				<td>${formatDate(c.startAt)}</td>
+				<td>${formatDate(c.concertAt)}</td>
 				<td><span class="badge" style="background:${statusColor(c.status)}">${c.status}</span></td>
 				<td>${c.seatCount}</td>
 				<td>${c.reservedCount}</td>
@@ -82,7 +82,7 @@ async function loadDetailMeta(concertId) {
 	const c = result.data;
 	document.getElementById('detailTitle').textContent = c.title;
 	document.getElementById('detailMeta').innerHTML = `
-		장소: ${c.venue} · ${formatDate(c.startAt)} ~ ${formatDate(c.endAt)} ·
+		장소: ${c.venue} · ${formatDate(c.concertAt)} ·
 		<span class="badge" style="background:${statusColor(c.status)}">${c.status}</span>
 		· 좌석 ${c.seatCount} · 예매 ${c.reservedCount} · 매출 ${(c.totalRevenue || 0).toLocaleString()}P
 	`;
@@ -188,8 +188,7 @@ function toISOInstant(localStr) {
 document.getElementById('btnCreateConcert').addEventListener('click', () => {
 	document.getElementById('createTitle').value = '';
 	document.getElementById('createVenue').value = '';
-	document.getElementById('createStartAt').value = '';
-	document.getElementById('createEndAt').value = '';
+	document.getElementById('createConcertAt').value = '';
 	document.getElementById('modalCreateConcert').classList.add('visible');
 });
 
@@ -200,18 +199,17 @@ document.getElementById('modalCreateCancel').addEventListener('click', () => {
 document.getElementById('modalCreateSubmit').addEventListener('click', async () => {
 	const title = document.getElementById('createTitle').value.trim();
 	const venue = document.getElementById('createVenue').value.trim();
-	const startAt = toISOInstant(document.getElementById('createStartAt').value);
-	const endAt = toISOInstant(document.getElementById('createEndAt').value);
+	const concertAt = toISOInstant(document.getElementById('createConcertAt').value);
 	const category = document.getElementById('createCategory').value;
-	if (!title || !venue || !startAt || !endAt) {
-		alert('제목, 장소, 시작/종료 일시를 모두 입력하세요.');
+	if (!title || !venue || !concertAt) {
+		alert('제목, 장소, 공연 일시를 모두 입력하세요.');
 		return;
 	}
 	try {
 		const res = await fetch('/api/seller/concerts', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ title, venue, startAt, endAt, category })
+			body: JSON.stringify({ title, venue, concertAt, category })
 		});
 		const data = await res.json();
 		if (!res.ok) throw new Error(data.message || res.statusText);

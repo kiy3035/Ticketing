@@ -46,7 +46,7 @@ const loadPaymentInfo = async () => {
 
 		if (concert) {
 			payConcertTitle.textContent = concert.title;
-			payConcertMeta.textContent = `${concert.venue} | ${new Date(concert.startAt).toLocaleString()}`;
+			payConcertMeta.textContent = `${concert.venue} | ${new Date(concert.concertAt).toLocaleString()}`;
 		}
 		if (seat) {
 			paySeatInfo.textContent = `구역 ${seat.section} - ${seat.seatNo}`;

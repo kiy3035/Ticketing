@@ -1,11 +1,15 @@
 package com.inyoung.ticketing.queue.controller;
 
 import java.util.Optional;
+import com.inyoung.ticketing.config.TicketingProperties;
 import com.inyoung.ticketing.queue.dto.QueueAllowedResponse;
 import com.inyoung.ticketing.queue.dto.QueueEnterResponse;
+import com.inyoung.ticketing.queue.dto.QueueRequiredResponse;
 import com.inyoung.ticketing.queue.dto.QueueStatusResponse;
 import com.inyoung.ticketing.queue.dto.QueueTicketResponse;
 import com.inyoung.ticketing.queue.service.QueueService;
+import com.inyoung.ticketing.seat.domain.SeatStatus;
+import com.inyoung.ticketing.seat.repository.SeatRepository;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.http.HttpStatus;
@@ -26,13 +30,16 @@ import org.springframework.web.server.ResponseStatusException;
 @RequestMapping("/api/queue")
 public class QueueController {
 	private final QueueService queueService;
+	private final SeatRepository seatRepository;
+	private final TicketingProperties properties;
 
-	// 서비스 주입
-	public QueueController(QueueService queueService) {
+	public QueueController(QueueService queueService, SeatRepository seatRepository, TicketingProperties properties) {
 		this.queueService = queueService;
+		this.seatRepository = seatRepository;
+		this.properties = properties;
 	}
 
-	// 콘서트 대기열 진입 (토큰 발급)
+	// 콘서트 대기열 진입 (토큰 발급). 대기 인원이 적고 좌석이 있으면 즉시 입장 허용.
 	@PostMapping("/enter")
 	@ResponseStatus(HttpStatus.CREATED)
 	public QueueEnterResponse enter(
@@ -44,10 +51,24 @@ public class QueueController {
 			? authentication.getName() 
 			: "test-user-" + System.currentTimeMillis();
 		QueueService.QueueTokenInfo tokenInfo = queueService.enterQueue(concertId, userId);
+
+		boolean immediatelyAllowed = false;
+		int threshold = properties.getQueue().getImmediateAllowThreshold();
+		if (threshold > 0 && tokenInfo.getTotalWaiting() <= threshold) {
+			long totalSeats = seatRepository.countByConcertId(concertId);
+			long reserved = seatRepository.countByConcertIdAndStatus(concertId, SeatStatus.RESERVED);
+			long availableSeats = Math.max(0, totalSeats - reserved);
+			if (tokenInfo.getTotalWaiting() <= availableSeats) {
+				queueService.allowEntry(tokenInfo.getToken(), concertId);
+				immediatelyAllowed = true;
+			}
+		}
+
 		return new QueueEnterResponse(
 			tokenInfo.getToken(),
 			tokenInfo.getRank(),
-			tokenInfo.getTotalWaiting()
+			tokenInfo.getTotalWaiting(),
+			immediatelyAllowed
 		);
 	}
 
@@ -64,7 +85,10 @@ public class QueueController {
 		Long totalWaiting = queueService.countWaiting(concertId);
 		Optional<Long> allowedConcertId = queueService.isAllowed(token);
 		Boolean isAllowed = allowedConcertId.isPresent() && allowedConcertId.get().equals(concertId);
-		return new QueueStatusResponse(token, rank, totalWaiting, isAllowed);
+		long totalSeats = seatRepository.countByConcertId(concertId);
+		long reserved = seatRepository.countByConcertIdAndStatus(concertId, SeatStatus.RESERVED);
+		long availableSeats = Math.max(0, totalSeats - reserved);
+		return new QueueStatusResponse(token, rank, totalWaiting, isAllowed, availableSeats);
 	}
 
 	// 입장 허용 여부 확인
@@ -72,6 +96,18 @@ public class QueueController {
 	public QueueAllowedResponse allowed(@RequestParam @NotBlank String token) {
 		Optional<Long> allowedConcertId = queueService.isAllowed(token);
 		return new QueueAllowedResponse(allowedConcertId.isPresent(), allowedConcertId.orElse(null));
+	}
+
+	/**
+	 * 대기열 필요 여부 (패턴 B). 대기 인원이 activation-threshold 초과 시에만 required=true.
+	 * required=false면 queue 페이지 없이 바로 좌석 페이지 진입 가능.
+	 */
+	@GetMapping("/required")
+	public QueueRequiredResponse required(@RequestParam @NotNull Long concertId) {
+		long waiting = queueService.countWaiting(concertId);
+		int threshold = properties.getQueue().getActivationThreshold();
+		boolean required = threshold > 0 && waiting > threshold;
+		return new QueueRequiredResponse(required);
 	}
 
 	// 콘서트별 대기인원 수 조회
