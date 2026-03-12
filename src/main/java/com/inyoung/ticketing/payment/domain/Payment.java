@@ -46,6 +46,25 @@ public class Payment {
 	@Column(nullable = false)
 	private Long amount;
 
+	/** 결제 수단: POINT(포인트 차감) / CARD(토스 모의결제) */
+	@Enumerated(EnumType.STRING)
+	@Column(name = "payment_method", nullable = false, length = 20)
+	private PaymentMethod paymentMethod = PaymentMethod.POINT;
+
+	/**
+	 * 토스 주문 ID. CARD 결제 시에만 설정.
+	 * 결제 요청 시 생성하여 프론트에 전달하고, 토스 결제창·승인 API에서 동일 값 사용.
+	 */
+	@Column(name = "order_id", length = 64)
+	private String orderId;
+
+	/**
+	 * 토스에서 발급한 결제 키. CARD 결제 승인 후 저장.
+	 * 취소 API 호출 시 사용할 수 있음 (현재 취소는 우리 DB 상태만 CANCELED 처리).
+	 */
+	@Column(name = "toss_payment_key", length = 64)
+	private String tossPaymentKey;
+
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 20)
 	private PaymentStatus status = PaymentStatus.READY;
@@ -130,6 +149,30 @@ public class Payment {
 
 	public void setAmount(Long amount) {
 		this.amount = amount;
+	}
+
+	public PaymentMethod getPaymentMethod() {
+		return paymentMethod;
+	}
+
+	public void setPaymentMethod(PaymentMethod paymentMethod) {
+		this.paymentMethod = paymentMethod;
+	}
+
+	public String getOrderId() {
+		return orderId;
+	}
+
+	public void setOrderId(String orderId) {
+		this.orderId = orderId;
+	}
+
+	public String getTossPaymentKey() {
+		return tossPaymentKey;
+	}
+
+	public void setTossPaymentKey(String tossPaymentKey) {
+		this.tossPaymentKey = tossPaymentKey;
 	}
 
 	public PaymentStatus getStatus() {

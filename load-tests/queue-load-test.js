@@ -18,7 +18,7 @@ export const options = {
 
 // Windows Docker에서는 host.docker.internal 사용
 const BASE_URL = __ENV.BASE_URL || 'http://host.docker.internal:8080';
-const CONCERT_ID = 1; // 테스트할 콘서트 ID (실제 ID로 변경)
+const CONCERT_ID = 16; // 테스트할 콘서트 ID (실제 ID로 변경)
 
 export default function () {
     // 1. 대기열 진입

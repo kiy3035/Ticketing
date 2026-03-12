@@ -10,8 +10,11 @@ import com.inyoung.ticketing.auth.repository.UsersRepository;
 import com.inyoung.ticketing.config.TicketingProperties;
 import com.inyoung.ticketing.hold.store.HoldInfo;
 import com.inyoung.ticketing.hold.store.HoldStore;
+import com.inyoung.ticketing.payment.client.TossPaymentsClient;
 import com.inyoung.ticketing.payment.domain.Payment;
+import com.inyoung.ticketing.payment.domain.PaymentMethod;
 import com.inyoung.ticketing.payment.domain.PaymentStatus;
+import com.inyoung.ticketing.payment.dto.CardApproveRequest;
 import com.inyoung.ticketing.payment.dto.PaymentRequest;
 import com.inyoung.ticketing.payment.dto.PaymentResponse;
 import com.inyoung.ticketing.payment.event.PaymentCompleteEventPublisher;
@@ -30,7 +33,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-// Mock 결제 서비스
+/**
+ * 결제 서비스: 포인트 결제(회원 포인트 차감) / 카드 결제(토스페이먼츠 승인 API) 분기 처리.
+ * 요청 → 승인 → 완료 단계에서 paymentMethod 에 따라 포인트 차감 여부 및 토스 연동 여부가 결정된다.
+ */
 @Service
 public class PaymentService {
 	private static final Logger log = LoggerFactory.getLogger(PaymentService.class);
@@ -42,6 +48,7 @@ public class PaymentService {
 	private final ReservationService reservationService;
 	private final PaymentCompleteEventPublisher paymentCompleteEventPublisher;
 	private final TicketingProperties properties;
+	private final TossPaymentsClient tossPaymentsClient;
 	private final Timer paymentCompleteTimer;
 
 	public PaymentService(
@@ -52,6 +59,7 @@ public class PaymentService {
 		ReservationService reservationService,
 		PaymentCompleteEventPublisher paymentCompleteEventPublisher,
 		TicketingProperties properties,
+		TossPaymentsClient tossPaymentsClient,
 		MeterRegistry meterRegistry
 	) {
 		this.paymentRepository = paymentRepository;
@@ -61,17 +69,21 @@ public class PaymentService {
 		this.reservationService = reservationService;
 		this.paymentCompleteEventPublisher = paymentCompleteEventPublisher;
 		this.properties = properties;
+		this.tossPaymentsClient = tossPaymentsClient;
 		this.paymentCompleteTimer = Timer.builder("ticketing_payment_complete_duration_seconds")
 			.description("Time to complete payment (request to COMPLETED)")
 			.register(meterRegistry);
 	}
 
+	/**
+	 * 결제 요청: READY 상태 Payment 생성. CARD 일 경우 orderId 부여(토스 결제창용).
+	 */
 	@Transactional
 	public PaymentResponse requestPayment(PaymentRequest request, String userId) {
 		String holdToken = request.getHoldToken();
 		HoldInfo hold = loadHold(holdToken, userId);
 
-		// 결제 진행 단계: 홀드 TTL을 20분으로 연장 (결제 완료까지 유지)
+		// 결제 진행 단계: 홀드 TTL 을 설정값(기본 20분)으로 연장
 		long extensionSeconds = properties.getPayment().getHoldExtensionTtlSeconds();
 		holdStore.extendHoldTtl(holdToken, Duration.ofSeconds(extensionSeconds));
 
@@ -81,6 +93,7 @@ public class PaymentService {
 		}
 
 		Seat seat = loadSeat(hold.getSeatId(), hold.getConcertId());
+		PaymentMethod method = request.getPaymentMethod() != null ? request.getPaymentMethod() : PaymentMethod.POINT;
 		Payment payment = new Payment();
 		payment.setPaymentKey(generatePaymentKey());
 		payment.setHoldToken(holdToken);
@@ -88,14 +101,30 @@ public class PaymentService {
 		payment.setConcertId(hold.getConcertId());
 		payment.setSeatId(hold.getSeatId());
 		payment.setAmount(seat.getPrice());
+		payment.setPaymentMethod(method);
 		payment.setStatus(PaymentStatus.READY);
+		// 카드 결제 시 토스 주문 ID 부여 (6~64자, 우리 쪽·토스 양쪽 동일 값 사용)
+		if (method == PaymentMethod.CARD) {
+			payment.setOrderId("TICKET_" + payment.getPaymentKey().replace("-", "").substring(0, 24));
+		}
 
 		Payment saved = paymentRepository.save(payment);
 		return new PaymentResponse(saved);
 	}
 
+	/** 포인트 결제 승인: body 없이 호출 시 포인트 차감 후 APPROVED */
 	@Transactional
 	public PaymentResponse approvePayment(String paymentKey, String userId) {
+		return approvePaymentWithOption(paymentKey, userId, null);
+	}
+
+	/**
+	 * 결제 승인: paymentMethod 에 따라 분기.
+	 * - CARD: body 에 토스 paymentKey/orderId/amount 필요. 토스 승인 API 호출 후 APPROVED (포인트 미차감).
+	 * - POINT: body 불필요. 포인트 차감 후 APPROVED.
+	 */
+	@Transactional
+	public PaymentResponse approvePaymentWithOption(String paymentKey, String userId, CardApproveRequest cardRequest) {
 		Payment payment = paymentRepository.findWithLockByPaymentKey(paymentKey)
 			.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Payment not found"));
 		validateOwner(payment, userId);
@@ -108,6 +137,21 @@ public class PaymentService {
 			throw new ResponseStatusException(HttpStatus.CONFLICT, "Payment already canceled");
 		}
 
+		if (payment.getPaymentMethod() == PaymentMethod.CARD) {
+			if (cardRequest == null || cardRequest.getPaymentKey() == null || cardRequest.getOrderId() == null || cardRequest.getAmount() == null) {
+				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Card payment requires paymentKey, orderId, amount from Toss redirect");
+			}
+			if (!payment.getOrderId().equals(cardRequest.getOrderId()) || !payment.getAmount().equals(cardRequest.getAmount())) {
+				throw new ResponseStatusException(HttpStatus.CONFLICT, "OrderId or amount mismatch");
+			}
+			tossPaymentsClient.confirmPayment(cardRequest.getPaymentKey(), cardRequest.getOrderId(), cardRequest.getAmount());
+			payment.setTossPaymentKey(cardRequest.getPaymentKey());
+			payment.setStatus(PaymentStatus.APPROVED);
+			payment.setApprovedAt(now());
+			return new PaymentResponse(payment);
+		}
+
+		// POINT: 보유 포인트 차감 후 APPROVED
 		Users account = usersRepository.findWithLockByUsername(userId)
 			.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
 		long currentPoint = account.getPoint() == null ? 0L : account.getPoint();
@@ -115,10 +159,8 @@ public class PaymentService {
 			throw new ResponseStatusException(HttpStatus.CONFLICT, "Insufficient points");
 		}
 		account.setPoint(currentPoint - payment.getAmount());
-
 		payment.setStatus(PaymentStatus.APPROVED);
 		payment.setApprovedAt(now());
-
 		return new PaymentResponse(payment);
 	}
 
@@ -172,7 +214,8 @@ public class PaymentService {
 			throw new ResponseStatusException(HttpStatus.CONFLICT, "Payment already completed");
 		}
 
-		if (payment.getStatus() == PaymentStatus.APPROVED) {
+		// POINT 결제만 승인 후 취소 시 포인트 환불; CARD 는 토스 모의결제라 환불 로직 생략
+		if (payment.getStatus() == PaymentStatus.APPROVED && payment.getPaymentMethod() == PaymentMethod.POINT) {
 			refundPoints(userId, payment.getAmount());
 		}
 
@@ -190,8 +233,8 @@ public class PaymentService {
 	}
 
 	/**
-	 * 취소된 공연 환불 배치용: 완료된 결제 1건에 대해 포인트 환불, 결제 취소, 예약/좌석 해제.
-	 * 이미 CANCELED이면 스킵(idempotent). COMPLETED가 아니면 false 반환.
+	 * 취소된 공연 환불 배치용: 완료된 결제 1건에 대해 포인트 환불(POINT만), 결제 취소, 예약/좌석 해제.
+	 * CARD 결제는 포인트를 쓰지 않았으므로 환불 생략. 이미 CANCELED 이면 스킵(idempotent).
 	 */
 	@Transactional
 	public boolean refundCompletedPaymentForCancelledConcert(Long paymentId) {
@@ -206,11 +249,13 @@ public class PaymentService {
 			return false; // 완료된 결제만 환불 대상
 		}
 
-		try {
-			refundPoints(payment.getUserId(), payment.getAmount());
-		} catch (Exception e) {
+		if (payment.getPaymentMethod() == PaymentMethod.POINT) {
+			try {
+				refundPoints(payment.getUserId(), payment.getAmount());
+			} catch (Exception e) {
 			log.warn("Refund points failed for paymentId={}, userId={}; skipping payment cancel until points are refunded. {}", paymentId, payment.getUserId(), e.getMessage());
-			return false; // 포인트 환불 실패 시 결제 취소하지 않음. 다음 배치에서 재시도.
+				return false; // 포인트 환불 실패 시 결제 취소하지 않음. 다음 배치에서 재시도.
+			}
 		}
 
 		payment.setStatus(PaymentStatus.CANCELED);

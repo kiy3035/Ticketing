@@ -1,5 +1,6 @@
 package com.inyoung.ticketing.admin.service;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
@@ -8,14 +9,22 @@ import java.util.stream.Collectors;
 
 import com.inyoung.ticketing.admin.dto.AdminPaymentResponse;
 import com.inyoung.ticketing.admin.dto.AdminUserResponse;
+import com.inyoung.ticketing.admin.dto.UnsoldSeatSummaryItem;
 import com.inyoung.ticketing.auth.domain.Users;
+import com.inyoung.ticketing.concert.domain.Concert;
+import com.inyoung.ticketing.concert.domain.ConcertStatus;
+import com.inyoung.ticketing.concert.repository.ConcertRepository;
+import com.inyoung.ticketing.seat.domain.SeatStatus;
+import com.inyoung.ticketing.seat.repository.SeatRepository;
 import com.inyoung.ticketing.auth.repository.UsersRepository;
 import com.inyoung.ticketing.payment.domain.Payment;
 import com.inyoung.ticketing.payment.domain.PaymentStatus;
 import com.inyoung.ticketing.payment.repository.PaymentRepository;
-import com.inyoung.ticketing.reservation.domain.Reservation;
 import com.inyoung.ticketing.reservation.repository.ReservationRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,15 +39,21 @@ public class AdminService {
 	private final UsersRepository usersRepository;
 	private final PaymentRepository paymentRepository;
 	private final ReservationRepository reservationRepository;
+	private final ConcertRepository concertRepository;
+	private final SeatRepository seatRepository;
 
 	public AdminService(
 		UsersRepository usersRepository,
 		PaymentRepository paymentRepository,
-		ReservationRepository reservationRepository
+		ReservationRepository reservationRepository,
+		ConcertRepository concertRepository,
+		SeatRepository seatRepository
 	) {
 		this.usersRepository = usersRepository;
 		this.paymentRepository = paymentRepository;
 		this.reservationRepository = reservationRepository;
+		this.concertRepository = concertRepository;
+		this.seatRepository = seatRepository;
 	}
 
 	/**
@@ -203,5 +218,36 @@ public class AdminService {
 				user.getCreatedAt() != null ? user.getCreatedAt().toString() : "-"
 			))
 			.collect(Collectors.toList());
+	}
+
+	/**
+	 * 마감된 공연(concertAt 경과, 취소 제외)별 미판매 좌석 통계.
+	 * from/to가 모두 null이면 기간 제한 없음. 하나라도 있으면 해당 구간(한국 시간 기준)으로 필터.
+	 */
+	@Transactional(readOnly = true)
+	public Page<UnsoldSeatSummaryItem> getUnsoldSeatStatistics(Instant from, Instant to, Pageable pageable) {
+		Instant now = Instant.now();
+		Instant fromBound = from != null ? from : Instant.EPOCH;
+		Instant toBound = to != null ? to : now;
+		Page<Concert> ended = concertRepository.findEndedConcertsNotCancelledBetween(
+			now, fromBound, toBound, ConcertStatus.CANCELLED, pageable
+		);
+		List<UnsoldSeatSummaryItem> items = ended.getContent().stream()
+			.map(c -> {
+				long totalSeats = seatRepository.countByConcertId(c.getId());
+				long soldSeats = seatRepository.countByConcertIdAndStatus(c.getId(), SeatStatus.RESERVED);
+				long unsoldSeats = totalSeats - soldSeats;
+				return new UnsoldSeatSummaryItem(
+					c.getId(),
+					c.getTitle(),
+					c.getVenue(),
+					c.getConcertAt(),
+					totalSeats,
+					soldSeats,
+					unsoldSeats
+				);
+			})
+			.collect(Collectors.toList());
+		return new PageImpl<>(items, ended.getPageable(), ended.getTotalElements());
 	}
 }

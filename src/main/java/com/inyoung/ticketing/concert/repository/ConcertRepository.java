@@ -5,6 +5,8 @@ import java.util.List;
 import com.inyoung.ticketing.concert.domain.Concert;
 import com.inyoung.ticketing.concert.domain.ConcertCategory;
 import com.inyoung.ticketing.concert.domain.ConcertStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -62,5 +64,28 @@ public interface ConcertRepository extends JpaRepository<Concert, Long> {
 		@Param("category") ConcertCategory category,
 		@Param("query") String query,
 		@Param("now") java.time.Instant now
+	);
+
+	/** 마감된 공연(concertAt < now) 중 취소가 아닌 것. 미판매 좌석 통계용 */
+	@Query("select c from Concert c where c.concertAt < :now and c.status <> :excludeStatus order by c.concertAt desc")
+	Page<Concert> findEndedConcertsNotCancelled(
+		@Param("now") Instant now,
+		@Param("excludeStatus") ConcertStatus excludeStatus,
+		Pageable pageable
+	);
+
+	/** 마감된 공연 중 취소 아닌 것 + 기간 필터(concertAt between from and to). from/to는 서비스에서 기본값 적용 후 호출 */
+	@Query("""
+		select c from Concert c
+		where c.concertAt < :now and c.status <> :excludeStatus
+		and c.concertAt >= :from and c.concertAt <= :to
+		order by c.concertAt desc
+		""")
+	Page<Concert> findEndedConcertsNotCancelledBetween(
+		@Param("now") Instant now,
+		@Param("from") Instant from,
+		@Param("to") Instant to,
+		@Param("excludeStatus") ConcertStatus excludeStatus,
+		Pageable pageable
 	);
 }

@@ -48,6 +48,9 @@ const loadTabData = async (tabName) => {
 		case 'statistics':
 			loadStatistics();
 			break;
+		case 'unsoldSeats':
+			loadUnsoldSeats();
+			break;
 		case 'payments':
 			loadPayments();
 			break;
@@ -83,6 +86,42 @@ const loadStatistics = async () => {
 		}
 	} catch (error) {
 		console.error('Statistics load failed:', error);
+	}
+};
+
+/**
+ * 마감 후 미판매 좌석 통계 로드
+ */
+const loadUnsoldSeats = async () => {
+	const tbody = document.getElementById('unsoldTableBody');
+	const fromInput = document.getElementById('unsoldFrom');
+	const toInput = document.getElementById('unsoldTo');
+	try {
+		let url = '/api/admin/statistics/unsold-seats?page=0&size=100';
+		if (fromInput && fromInput.value) url += `&from=${fromInput.value}`;
+		if (toInput && toInput.value) url += `&to=${toInput.value}`;
+		const result = await window.fetchJson(url);
+		// Spring Page: content 배열은 result.content 또는 result.data?.content
+		const page = result.data != null ? result.data : result;
+		const list = page.content || [];
+		const fmt = window.formatDateKorea || ((v) => new Date(v).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }));
+		if (!list.length) {
+			tbody.innerHTML = '<tr><td colspan="6" class="no-data">해당 조건의 마감 공연이 없습니다.</td></tr>';
+			return;
+		}
+		tbody.innerHTML = list.map((row) => `
+			<tr>
+				<td>${row.title ?? '-'}</td>
+				<td>${row.venue ?? '-'}</td>
+				<td>${fmt(row.concertAt)}</td>
+				<td>${(row.totalSeats ?? 0).toLocaleString()}</td>
+				<td>${(row.soldSeats ?? 0).toLocaleString()}</td>
+				<td>${(row.unsoldSeats ?? 0).toLocaleString()}</td>
+			</tr>
+		`).join('');
+	} catch (error) {
+		console.error('Unsold seats load failed:', error);
+		tbody.innerHTML = '<tr><td colspan="6" class="no-data">데이터를 불러오지 못했습니다.</td></tr>';
 	}
 };
 
@@ -185,6 +224,11 @@ document.getElementById('userSearchBtn').addEventListener('click', () => {
 	const query = document.getElementById('userSearchInput').value;
 	loadUsers(query);
 });
+
+const unsoldSearchBtn = document.getElementById('unsoldSearchBtn');
+if (unsoldSearchBtn) {
+	unsoldSearchBtn.addEventListener('click', () => loadUnsoldSeats());
+}
 
 // Enter 키 검색 지원
 document.getElementById('paymentSearchInput').addEventListener('keypress', (e) => {

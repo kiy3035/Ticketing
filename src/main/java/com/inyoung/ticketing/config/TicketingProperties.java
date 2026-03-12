@@ -11,6 +11,7 @@ public class TicketingProperties {
 	private Queue queue = new Queue();
 	private Payment payment = new Payment();
 	private Refund refund = new Refund();
+	private Toss toss = new Toss();
 
 	// 홀드 관련 설정 접근자
 	public Hold getHold() {
@@ -38,6 +39,15 @@ public class TicketingProperties {
 	// 결제 관련 설정 접근자 (결제 진행 중 홀드 연장 등)
 	public Payment getPayment() {
 		return payment;
+	}
+
+	// 토스페이먼츠 PG 설정 접근자
+	public Toss getToss() {
+		return toss;
+	}
+
+	public void setToss(Toss toss) {
+		this.toss = toss;
 	}
 
 	// 홀드 설정 묶음 (좌석 선택 단계 TTL)
@@ -238,6 +248,43 @@ public class TicketingProperties {
 
 		public void setIntervalMs(long intervalMs) {
 			this.intervalMs = intervalMs;
+		}
+	}
+
+	/**
+	 * 토스페이먼츠 PG 설정. .env 의 TOSS_CLIENT_KEY, TOSS_SECRET_KEY, TOSS_SECURITY_KEY 로 주입.
+	 * 샌드박스 사용 시 test_ck_ / test_sk_ 로 시작하는 키 사용.
+	 */
+	public static class Toss {
+		/** 클라이언트 키: 프론트 토스 결제창/SDK 초기화용. 노출 가능. test_ck_ / live_ck_ */
+		private String clientKey = "";
+		/** 시크릿 키: 백엔드에서 결제 승인 API 호출 시만 사용. 노출 금지. test_sk_ / live_sk_ */
+		private String secretKey = "";
+		/** 보안키: 웹훅 서명 검증 등 선택 사항 */
+		private String securityKey = "";
+
+		public String getClientKey() {
+			return clientKey;
+		}
+
+		public void setClientKey(String clientKey) {
+			this.clientKey = clientKey != null ? clientKey : "";
+		}
+
+		public String getSecretKey() {
+			return secretKey;
+		}
+
+		public void setSecretKey(String secretKey) {
+			this.secretKey = secretKey != null ? secretKey : "";
+		}
+
+		public String getSecurityKey() {
+			return securityKey;
+		}
+
+		public void setSecurityKey(String securityKey) {
+			this.securityKey = securityKey != null ? securityKey : "";
 		}
 	}
 }

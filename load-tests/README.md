@@ -13,7 +13,14 @@ k6로 대기열·좌석 홀드·예약 확정 구간의 부하를 걸어 knee po
 | 파일 | 설명 |
 |------|------|
 | `queue-load-test.js` | 대기열 진입 → 입장 허용 폴링 → 좌석 조회까지. 인증 불필요. |
-| `full-flow.js` | 대기열 필요 확인 → (필요 시) 진입/폴링 → 좌석 조회 → 홀드 → 예약 확정. 인증 필요. |
+| `full-flow.js` | 대기열 필요 확인 → (필요 시) 진입/폴링 → 좌석 조회 → 홀드 → **결제 수단별** → 예약 확정. 인증 필요. |
+
+### 결제 수단 구분 (full-flow.js)
+
+| 환경 변수 | 설명 |
+|-----------|------|
+| `PAYMENT_METHOD=POINT` (기본) | 포인트 결제 플로우: 결제 요청 → 승인(포인트 차감) → 완료. 실제 포인트 사용. |
+| `PAYMENT_METHOD=CARD` | 카드 선택 시 k6에서는 토스 리다이렉트를 수행할 수 없어, **직접 예약 확정**(POST /api/reservations)으로 대체. 부하 검증용. |
 
 ## 실행 예
 
@@ -21,8 +28,14 @@ k6로 대기열·좌석 홀드·예약 확정 구간의 부하를 걸어 knee po
 # 대기열 위주 (인증 없음, BASE_URL·CONCERT_ID만 지정)
 k6 run -e BASE_URL=http://localhost:8080 -e CONCERT_ID=1 queue-load-test.js
 
-# 풀 플로우 (테스트 사용자로 로그인 후 홀드·예약까지)
+# 풀 플로우 - 포인트 결제 (기본)
 k6 run -e BASE_URL=http://localhost:8080 -e CONCERT_ID=1 -e TEST_USER=loaduser -e TEST_PASS=loadpass full-flow.js
+
+# 풀 플로우 - 결제 수단 명시 (포인트)
+k6 run -e BASE_URL=http://localhost:8080 -e CONCERT_ID=1 -e TEST_USER=loaduser -e TEST_PASS=loadpass -e PAYMENT_METHOD=POINT load-tests/full-flow.js
+
+# 풀 플로우 - 카드 선택 시 (직접 예약 확정으로 대체)
+k6 run -e BASE_URL=http://localhost:8080 -e CONCERT_ID=1 -e TEST_USER=loaduser -e TEST_PASS=loadpass -e PAYMENT_METHOD=CARD load-tests/full-flow.js
 ```
 
 Docker에서 앱이 호스트에서 돌 때:

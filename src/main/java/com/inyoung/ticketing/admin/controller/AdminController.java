@@ -1,10 +1,18 @@
 package com.inyoung.ticketing.admin.controller;
 
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import com.inyoung.ticketing.admin.dto.AdminPaymentResponse;
 import com.inyoung.ticketing.admin.dto.AdminUserResponse;
+import com.inyoung.ticketing.admin.dto.UnsoldSeatSummaryItem;
 import com.inyoung.ticketing.admin.service.AdminService;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.format.annotation.DateTimeFormat.ISO;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -58,6 +66,31 @@ public class AdminController {
 	@PreAuthorize("hasRole('ADMIN')")
 	public ResponseEntity<AdminService.PaymentStatisticsResponse> getPaymentStatistics() {
 		return ResponseEntity.ok(adminService.getPaymentStatistics());
+	}
+
+	/**
+	 * 마감된 공연별 미판매 좌석 통계 (공연 일시 경과, 취소 제외).
+	 * from, to는 선택(YYYY-MM-DD). 지정 시 해당 기간(한국 시간) 공연만 조회.
+	 *
+	 * @param from 공연일 시작 (포함), 예: 2026-01-01
+	 * @param to 공연일 끝 (포함), 예: 2026-01-31
+	 * @param page 페이지 번호 (기본값: 0)
+	 * @param size 페이지 크기 (기본값: 20)
+	 * @return 공연별 totalSeats, soldSeats, unsoldSeats
+	 */
+	@GetMapping("/statistics/unsold-seats")
+	@PreAuthorize("hasRole('ADMIN')")
+	public ResponseEntity<Page<UnsoldSeatSummaryItem>> getUnsoldSeatStatistics(
+		@RequestParam(required = false) @DateTimeFormat(iso = ISO.DATE) LocalDate from,
+		@RequestParam(required = false) @DateTimeFormat(iso = ISO.DATE) LocalDate to,
+		@RequestParam(defaultValue = "0") int page,
+		@RequestParam(defaultValue = "20") int size
+	) {
+		ZoneId seoul = ZoneId.of("Asia/Seoul");
+		Instant fromInstant = from != null ? from.atStartOfDay(seoul).toInstant() : null;
+		Instant toInstant = to != null ? to.plusDays(1).atStartOfDay(seoul).toInstant() : null;
+		Pageable pageable = PageRequest.of(page, size);
+		return ResponseEntity.ok(adminService.getUnsoldSeatStatistics(fromInstant, toInstant, pageable));
 	}
 
 	/**

@@ -160,7 +160,6 @@
 		</a>
 		<nav class="nav">
 			<span class="admin-badge">관리자</span>
-			<a href="/admin.html" class="active">대시보드</a>
 		</nav>
 		<div class="user">
 			<a class="ghost topbar-link" href="/app.html">일반 사용자로 전환</a>
@@ -200,6 +199,7 @@
 		<!-- 탭 네비게이션 -->
 		<div class="admin-tabs">
 			<button class="admin-tab active" data-tab="statistics">통계</button>
+			<button class="admin-tab" data-tab="unsoldSeats">마감 후 미판매 좌석</button>
 			<button class="admin-tab" data-tab="payments">결제 관리</button>
 			<button class="admin-tab" data-tab="users">사용자 관리</button>
 		</div>
@@ -209,6 +209,34 @@
 			<h2>예매 통계</h2>
 			<div style="margin-top: 20px; padding: 40px; background: var(--panel); border-radius: 12px; text-align: center; color: var(--muted);">
 				통계 차트는 추후 추가 예정입니다.
+			</div>
+		</div>
+
+		<!-- 마감 후 미판매 좌석 탭 -->
+		<div id="unsoldSeats" class="admin-tabpanel">
+			<h2>마감 후 미판매 좌석 통계</h2>
+			<p class="helper" style="margin-bottom: 16px;">마감되었고 취소되지 않은 공연 기준, 공연별 판매/미판매 좌석 수입니다.</p>
+			<div class="search-bar">
+				<input id="unsoldFrom" type="date" placeholder="시작일">
+				<input id="unsoldTo" type="date" placeholder="종료일">
+				<button class="primary" id="unsoldSearchBtn">조회</button>
+			</div>
+			<div id="unsoldTableContainer">
+				<table class="admin-table" id="unsoldTable">
+					<thead>
+						<tr>
+							<th>공연명</th>
+							<th>장소</th>
+							<th>공연일시</th>
+							<th>총 좌석</th>
+							<th>판매</th>
+							<th>미판매</th>
+						</tr>
+					</thead>
+					<tbody id="unsoldTableBody">
+						<tr><td colspan="6" class="no-data">탭을 선택하면 데이터를 불러옵니다.</td></tr>
+					</tbody>
+				</table>
 			</div>
 		</div>
 
