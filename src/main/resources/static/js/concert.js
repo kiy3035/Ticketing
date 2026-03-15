@@ -172,26 +172,13 @@ const holdSeat = async (seatId) => {
 	return result.data;
 };
 
+// 예약 확정은 결제 완료(POST /api/payments/{paymentKey}/complete) 시에만 이루어짐. 별도 예약 확정 API 없음.
 const reserveSeat = async () => {
 	if (!holdTokenInput.value) {
 		actionResult.textContent = '홀드 토큰이 없습니다.';
 		return;
 	}
-	actionResult.textContent = '예약 확정 중...';
-	try {
-		const result = await window.fetchJson('/api/reservations', {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ holdToken: holdTokenInput.value })
-		});
-		if (!result.ok) {
-			throw new Error(result.error?.message || '예약 실패');
-		}
-		actionResult.textContent = `예약 완료: 예약번호 ${result.data.reservationId}`;
-		await loadConcertDetail();
-	} catch (error) {
-		actionResult.textContent = `예약 실패: ${error.message}`;
-	}
+	actionResult.textContent = '예약은 결제 완료 시 자동으로 확정됩니다. 아래 "결제하기"를 이용해 주세요.';
 };
 
 const startPayment = () => {

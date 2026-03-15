@@ -2,11 +2,11 @@ package com.inyoung.ticketing.payment.service;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
 import java.util.Optional;
 import java.util.UUID;
 import com.inyoung.ticketing.auth.domain.Users;
 import com.inyoung.ticketing.auth.repository.UsersRepository;
+import com.inyoung.ticketing.concert.domain.ConcertStatus;
 import com.inyoung.ticketing.config.TicketingProperties;
 import com.inyoung.ticketing.hold.store.HoldInfo;
 import com.inyoung.ticketing.hold.store.HoldStore;
@@ -98,6 +98,9 @@ public class PaymentService {
 		}
 
 		Seat seat = loadSeat(hold.getSeatId(), hold.getConcertId());
+		if (seat.getConcert().getStatus() == ConcertStatus.CANCELLED) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Concert is cancelled");
+		}
 		PaymentMethod method = request.getPaymentMethod() != null ? request.getPaymentMethod() : PaymentMethod.POINT;
 		Payment payment = new Payment();
 		payment.setPaymentKey(generatePaymentKey());
@@ -238,8 +241,9 @@ public class PaymentService {
 	}
 
 	/**
-	 * 취소된 공연 환불 배치용: 완료된 결제 1건에 대해 포인트 환불(POINT만), 결제 취소, 예약/좌석 해제.
-	 * CARD 결제는 포인트를 쓰지 않았으므로 환불 생략. 이미 CANCELED 이면 스킵(idempotent).
+	 * 취소된 공연 환불 배치용: 예약/좌석 해제 → 포인트 환불(POINT만) → 결제 취소 순으로 수행.
+	 * 실패 시 불일치를 막기 위해 예약 취소를 먼저 하고, 그 다음 환불·결제 상태 변경.
+	 * CARD 결제는 포인트 미사용이므로 환불 생략. 이미 CANCELED 이면 스킵(idempotent).
 	 */
 	@Transactional
 	public boolean refundCompletedPaymentForCancelledConcert(Long paymentId) {
@@ -254,22 +258,25 @@ public class PaymentService {
 			return false; // 완료된 결제만 환불 대상
 		}
 
+		// 1) 예약 취소·좌석 해제를 먼저 수행 (실패 시 포인트/결제 상태 변경하지 않음)
+		if (payment.getReservationId() != null) {
+			reservationService.cancelReservationForRefund(payment.getReservationId());
+		}
+
+		// 2) 포인트 환불 (POINT 결제만)
 		if (payment.getPaymentMethod() == PaymentMethod.POINT) {
 			try {
 				refundPoints(payment.getUserId(), payment.getAmount());
 			} catch (Exception e) {
-			log.warn("Refund points failed for paymentId={}, userId={}; skipping payment cancel until points are refunded. {}", paymentId, payment.getUserId(), e.getMessage());
-				return false; // 포인트 환불 실패 시 결제 취소하지 않음. 다음 배치에서 재시도.
+				log.warn("Refund points failed for paymentId={}, userId={}; skipping payment cancel until points are refunded. {}", paymentId, payment.getUserId(), e.getMessage());
+				return false; // 다음 배치에서 재시도
 			}
 		}
 
+		// 3) 결제 취소 상태로 저장
 		payment.setStatus(PaymentStatus.CANCELED);
 		payment.setCanceledAt(now());
 		paymentRepository.save(payment);
-
-		if (payment.getReservationId() != null) {
-			reservationService.cancelReservationForRefund(payment.getReservationId());
-		}
 		return true;
 	}
 

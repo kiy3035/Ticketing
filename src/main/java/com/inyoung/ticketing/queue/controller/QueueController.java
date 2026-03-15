@@ -1,7 +1,9 @@
 package com.inyoung.ticketing.queue.controller;
 
+import java.util.List;
 import java.util.Optional;
 import com.inyoung.ticketing.config.TicketingProperties;
+import com.inyoung.ticketing.hold.store.HoldStore;
 import com.inyoung.ticketing.queue.dto.QueueAllowedResponse;
 import com.inyoung.ticketing.queue.dto.QueueEnterResponse;
 import com.inyoung.ticketing.queue.dto.QueueRequiredResponse;
@@ -31,11 +33,13 @@ import org.springframework.web.server.ResponseStatusException;
 public class QueueController {
 	private final QueueService queueService;
 	private final SeatRepository seatRepository;
+	private final HoldStore holdStore;
 	private final TicketingProperties properties;
 
-	public QueueController(QueueService queueService, SeatRepository seatRepository, TicketingProperties properties) {
+	public QueueController(QueueService queueService, SeatRepository seatRepository, HoldStore holdStore, TicketingProperties properties) {
 		this.queueService = queueService;
 		this.seatRepository = seatRepository;
+		this.holdStore = holdStore;
 		this.properties = properties;
 	}
 
@@ -57,7 +61,9 @@ public class QueueController {
 		if (threshold > 0 && tokenInfo.getTotalWaiting() <= threshold) {
 			long totalSeats = seatRepository.countByConcertId(concertId);
 			long reserved = seatRepository.countByConcertIdAndStatus(concertId, SeatStatus.RESERVED);
-			long availableSeats = Math.max(0, totalSeats - reserved);
+			List<Long> seatIds = seatRepository.findSeatIdsByConcertId(concertId);
+			int heldCount = holdStore.findHeldSeatIds(seatIds).size();
+			long availableSeats = Math.max(0, totalSeats - reserved - heldCount);
 			if (tokenInfo.getTotalWaiting() <= availableSeats) {
 				queueService.allowEntry(tokenInfo.getToken(), concertId);
 				immediatelyAllowed = true;
@@ -87,7 +93,9 @@ public class QueueController {
 		Boolean isAllowed = allowedConcertId.isPresent() && allowedConcertId.get().equals(concertId);
 		long totalSeats = seatRepository.countByConcertId(concertId);
 		long reserved = seatRepository.countByConcertIdAndStatus(concertId, SeatStatus.RESERVED);
-		long availableSeats = Math.max(0, totalSeats - reserved);
+		List<Long> seatIds = seatRepository.findSeatIdsByConcertId(concertId);
+		int heldCount = holdStore.findHeldSeatIds(seatIds).size();
+		long availableSeats = Math.max(0, totalSeats - reserved - heldCount);
 		return new QueueStatusResponse(token, rank, totalWaiting, isAllowed, availableSeats);
 	}
 

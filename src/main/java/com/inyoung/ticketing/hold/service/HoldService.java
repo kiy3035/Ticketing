@@ -7,6 +7,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import com.inyoung.ticketing.concert.domain.Concert;
+import com.inyoung.ticketing.concert.domain.ConcertStatus;
 import com.inyoung.ticketing.concert.repository.ConcertRepository;
 import com.inyoung.ticketing.config.TicketingProperties;
 import com.inyoung.ticketing.hold.dto.HoldItemResponse;
@@ -74,6 +75,9 @@ public class HoldService {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Seat does not belong to concert");
 		}
 		Concert concert = seat.getConcert();
+		if (concert.getStatus() == ConcertStatus.CANCELLED) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Concert is cancelled");
+		}
 		if (concert.getConcertAt().isBefore(Instant.now())) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Past concert cannot be booked");
 		}

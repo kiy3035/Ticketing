@@ -259,7 +259,7 @@ end
 ```
 
 #### `RESERVATION_CONFIRMED`
-예약 확정 시 발행
+결제 완료 처리 시 예약 확정 후 발행 (DB 커밋 후 `ReservationConfirmedEventListener`에서 발행)
 
 **이벤트 데이터**:
 ```json
@@ -415,7 +415,7 @@ ZREM queue:concert:1 {token}
    - Kafka로 `HOLD_EXPIRED` 이벤트 발행
 
 ### 홀드 해제
-- **예약 확정 시**: `ReservationService`에서 호출
+- **예약 확정 시**: DB 커밋 후 `ReservationConfirmedEventListener`에서 호출 (트랜잭션 경계 일치)
 - **홀드 취소 시**: `HoldService`에서 호출
 - **만료 시**: 스케줄러에서 호출
 - **Lua 스크립트**: 원자적으로 모든 관련 키 삭제

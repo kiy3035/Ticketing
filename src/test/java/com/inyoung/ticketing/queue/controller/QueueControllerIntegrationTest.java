@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.inyoung.ticketing.config.TicketingProperties;
+import com.inyoung.ticketing.hold.store.HoldStore;
 import com.inyoung.ticketing.metrics.service.ActiveUserTracker;
 import com.inyoung.ticketing.queue.service.QueueService;
 import com.inyoung.ticketing.seat.repository.SeatRepository;
@@ -39,6 +40,8 @@ class QueueControllerIntegrationTest {
 	private QueueService queueService;
 	@MockitoBean
 	private SeatRepository seatRepository;
+	@MockitoBean
+	private HoldStore holdStore;
 	@MockitoBean
 	private TicketingProperties properties;
 

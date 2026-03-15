@@ -2,18 +2,17 @@ package com.inyoung.ticketing.reservation.controller;
 
 import java.util.List;
 import com.inyoung.ticketing.reservation.dto.ReservationItemResponse;
-import com.inyoung.ticketing.reservation.dto.ReservationRequest;
-import com.inyoung.ticketing.reservation.dto.ReservationResponse;
 import com.inyoung.ticketing.reservation.service.ReservationService;
-import jakarta.validation.Valid;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-// 예약 확정 API 컨트롤러
+/**
+ * 예약 API 컨트롤러.
+ * 예약 확정은 결제 완료(POST /api/payments/{paymentKey}/complete) 시에만 이루어지며,
+ * 별도 예약 확정 엔드포인트는 제공하지 않는다.
+ */
 @RestController
 @RequestMapping("/api/reservations")
 public class ReservationController {
@@ -21,12 +20,6 @@ public class ReservationController {
 
 	public ReservationController(ReservationService reservationService) {
 		this.reservationService = reservationService;
-	}
-
-	// 홀드 토큰으로 예약 확정
-	@PostMapping
-	public ReservationResponse confirm(Authentication authentication, @Valid @RequestBody ReservationRequest request) {
-		return reservationService.confirm(request, authentication.getName());
 	}
 
 	// 로그인 사용자 예매내역 조회

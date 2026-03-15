@@ -299,60 +299,51 @@ sequenceDiagram
 - **이벤트 기반**: Kafka로 비동기 이벤트 처리
 - **실시간 알림**: SSE로 즉시 알림 전달
 
-### 3. 예약 확정 플로우
+### 3. 예약 확정 플로우 (결제 완료 시)
+
+예약 확정은 **별도 API 없이**, `POST /api/payments/{paymentKey}/complete` 호출 시에만 수행된다.  
+`PaymentService.completePayment()` → `ReservationService.confirm()` 순으로 호출되며, DB 커밋이 성공한 뒤 `ReservationConfirmedEventListener`(AFTER_COMMIT)에서 Redis 홀드 해제와 Kafka 이벤트 발행을 수행해 DB·Redis 일관성을 유지한다.
 
 ```mermaid
 sequenceDiagram
     participant U as User
     participant FE as Frontend
-    participant API as ReservationController
+    participant API as PaymentController
+    participant PSvc as PaymentService
     participant RSvc as ReservationService
     participant Store as HoldStore
     participant Lock as RedisLockService
     participant R as Redis
     participant DB as MySQL
+    participant Listener as ReservationConfirmedEventListener
     participant K as Kafka
 
-    U->>FE: 예약 확정 버튼 클릭
-    FE->>API: POST /api/reservations
-    API->>RSvc: confirm(request, userId)
+    U->>FE: 결제 완료하기 클릭
+    FE->>API: POST /api/payments/{paymentKey}/complete
+    API->>PSvc: completePayment(paymentKey, userId)
+    PSvc->>RSvc: confirm(ReservationRequest(holdToken), userId)
     
     RSvc->>Store: getHold(holdToken)
-    Store->>R: GET hold:token:{holdToken}
-    Store-->>RSvc: HoldInfo
-    
-    RSvc->>RSvc: 홀드 검증
-    Note over RSvc: 1. 만료 시간 확인<br/>2. 사용자 일치 확인
-    
+    RSvc->>RSvc: 홀드 검증 (만료·소유자·취소된 공연)
     RSvc->>Lock: tryLock(lock:seat:{seatId}, 5s)
-    Lock-->>RSvc: lockToken
-    
-    RSvc->>Store: isSeatHeldByToken(seatId, holdToken)
-    Store->>R: GET hold:seat:{seatId}
-    Store-->>RSvc: true/false
-    
-    alt 홀드 유효
-        RSvc->>DB: 좌석 상태 확인
-        RSvc->>DB: 좌석 상태를 RESERVED로 변경
-        RSvc->>DB: 예약 레코드 생성
-        RSvc->>Store: releaseHold(holdToken)
-        Store->>R: Lua Script 실행 (홀드 제거)
-        RSvc->>K: publish(RESERVATION_CONFIRMED, info)
-        RSvc->>Lock: unlock(lockKey, lockToken)
-        RSvc-->>API: ReservationResponse
-        API-->>FE: 예약 완료
-    else 홀드 만료/무효
-        RSvc->>Lock: unlock(lockKey, lockToken)
-        RSvc-->>API: 409 Conflict
-        API-->>FE: 홀드 만료 에러
-    end
+    RSvc->>DB: 좌석 RESERVED, 예약 레코드 생성
+    RSvc->>RSvc: publishEvent(ReservationConfirmedEvent)
+    RSvc-->>PSvc: ReservationResponse
+    PSvc->>DB: Payment COMPLETED, reservationId 저장
+    PSvc-->>API: PaymentResponse
+    API-->>FE: 예약 완료
+
+    Note over DB,Listener: DB 트랜잭션 커밋 성공 후
+    Listener->>Store: releaseHold(holdToken)
+    Store->>R: Lua Script (홀드 제거)
+    Listener->>K: publish(RESERVATION_CONFIRMED, info)
 ```
 
 **핵심 포인트**:
-- **홀드 검증**: 만료 시간 및 사용자 일치 확인
-- **분산 락**: 예약 확정 시에도 락으로 동시성 제어
-- **트랜잭션**: `@Transactional`로 DB 작업의 원자성 보장
-- **홀드 해제**: 예약 확정 시 홀드 자동 해제
+- **결제 후 예약만 허용**: 예약 확정은 결제 완료 API를 통해서만 이루어짐 (POST /api/reservations 없음)
+- **홀드 검증**: 만료 시간·사용자 일치·취소된 공연 여부 확인
+- **분산 락**: 예약 확정 시에도 좌석 락으로 동시성 제어
+- **트랜잭션 경계**: 홀드 해제·Kafka 발행은 DB 커밋 후 리스너에서 수행해 롤백 시 불일치 방지
 
 ### 4. 취소된 공연 환불 배치 플로우
 
@@ -374,10 +365,10 @@ sequenceDiagram
         loop 결제별
             SCH->>PSvc: refundCompletedPaymentForCancelledConcert(paymentId)
             PSvc->>PR: findWithLockById(paymentId)
-            PSvc->>PSvc: 포인트 환불 (Users.point += amount)
-            PSvc->>DB: Payment.status = CANCELED, canceledAt
             PSvc->>RSvc: cancelReservationForRefund(reservationId)
-            RSvc->>DB: Reservation.status = CANCELLED, Seat.status = AVAILABLE
+            RSvc->>DB: findWithLockById → Reservation CANCELLED, Seat AVAILABLE
+            PSvc->>PSvc: 포인트 환불 (Users.point += amount, POINT만)
+            PSvc->>DB: Payment.status = CANCELED, canceledAt
         end
     end
 ```
@@ -451,7 +442,7 @@ sequenceDiagram
 
     FE->>API: POST /api/payments/{paymentKey}/complete
     API->>PSvc: completePayment()
-    PSvc->>API: 예약 확정 처리 (ReservationService)
+    PSvc->>PSvc: ReservationService.confirm() (예약 확정)
     PSvc->>DB: 결제 상태 COMPLETED + reservationId 저장
     API-->>FE: status=COMPLETED
 ```
@@ -560,19 +551,19 @@ sequenceDiagram
      → 락 해제
 ```
 
-#### 5. 예약 확정
+#### 5. 결제 완료 및 예약 확정
 ```
-사용자 → 예약 확정 버튼 → POST /api/reservations
-     → ReservationService.confirm()
-     → 홀드 검증 (만료 시간, 사용자 일치)
+사용자 → 결제 완료하기 클릭 → POST /api/payments/{paymentKey}/complete
+     → PaymentService.completePayment()
+     → ReservationService.confirm(holdToken, userId)
+     → 홀드 검증 (만료 시간, 사용자 일치, 취소된 공연 아님)
      → 분산 락 획득
-     → DB 트랜잭션 시작
-     → 좌석 상태를 RESERVED로 변경
-     → 예약 레코드 생성
-     → HoldStore.releaseHold() (홀드 제거)
-     → Kafka로 RESERVATION_CONFIRMED 이벤트 발행
+     → DB: 좌석 RESERVED, 예약 레코드 생성
+     → publishEvent(ReservationConfirmedEvent)
      → 트랜잭션 커밋
      → 락 해제
+     → (AFTER_COMMIT) ReservationConfirmedEventListener
+        → HoldStore.releaseHold(), Kafka RESERVATION_CONFIRMED 발행
 ```
 
 #### 6. 홀드 만료 및 알림

@@ -4,12 +4,12 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.stream.Collectors;
-import com.inyoung.ticketing.hold.event.SeatHoldEventPublisher;
-import com.inyoung.ticketing.hold.event.SeatHoldEventType;
 import com.inyoung.ticketing.hold.store.HoldInfo;
+import com.inyoung.ticketing.reservation.event.ReservationConfirmedEvent;
 import com.inyoung.ticketing.config.TicketingProperties;
 import com.inyoung.ticketing.hold.store.HoldStore;
 import com.inyoung.ticketing.lock.LockService;
+import com.inyoung.ticketing.concert.domain.ConcertStatus;
 import com.inyoung.ticketing.reservation.domain.Reservation;
 import com.inyoung.ticketing.reservation.domain.ReservationStatus;
 import com.inyoung.ticketing.reservation.dto.ReservationItemResponse;
@@ -22,6 +22,7 @@ import com.inyoung.ticketing.seat.domain.SeatStatus;
 import com.inyoung.ticketing.seat.repository.SeatRepository;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,7 +36,7 @@ public class ReservationService {
 	private final LockService lockService;
 	private final TicketingProperties properties;
 	private final HoldStore holdStore;
-	private final SeatHoldEventPublisher eventPublisher;
+	private final ApplicationEventPublisher applicationEventPublisher;
 	private final PaymentRepository paymentRepository;
 	private final Counter lockFailureCounter;
 
@@ -45,7 +46,7 @@ public class ReservationService {
 		LockService lockService,
 		TicketingProperties properties,
 		HoldStore holdStore,
-		SeatHoldEventPublisher eventPublisher,
+		ApplicationEventPublisher applicationEventPublisher,
 		PaymentRepository paymentRepository,
 		MeterRegistry meterRegistry
 	) {
@@ -54,7 +55,7 @@ public class ReservationService {
 		this.lockService = lockService;
 		this.properties = properties;
 		this.holdStore = holdStore;
-		this.eventPublisher = eventPublisher;
+		this.applicationEventPublisher = applicationEventPublisher;
 		this.paymentRepository = paymentRepository;
 		this.lockFailureCounter = Counter.builder("ticketing_lock_acquire_failures_total")
 			.tag("operation", "reservation")
@@ -122,6 +123,9 @@ public class ReservationService {
 			if (!seat.getConcert().getId().equals(hold.getConcertId())) {
 				throw new ResponseStatusException(HttpStatus.CONFLICT, "Hold concert mismatch");
 			}
+			if (seat.getConcert().getStatus() == ConcertStatus.CANCELLED) {
+				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Concert is cancelled");
+			}
 			if (seat.getConcert().getConcertAt().isBefore(Instant.now())) {
 				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Past concert cannot be booked");
 			}
@@ -139,8 +143,8 @@ public class ReservationService {
 			reservation.setStatus(ReservationStatus.CONFIRMED);
 
 			Reservation saved = reservationRepository.save(reservation);
-			holdStore.releaseHold(hold.getHoldToken());
-			eventPublisher.publish(SeatHoldEventType.RESERVATION_CONFIRMED, hold);
+			// DB 커밋 후 리스너에서 홀드 해제·이벤트 발행 (트랜잭션 경계 일치)
+			applicationEventPublisher.publishEvent(new ReservationConfirmedEvent(hold.getHoldToken(), hold));
 
 			return new ReservationResponse(saved);
 		} finally {
@@ -152,13 +156,14 @@ public class ReservationService {
 	/**
 	 * 환불 배치용: 예약 취소 및 좌석 해제.
 	 * 공연 취소 등으로 결제가 환불될 때 예약 상태를 CANCELLED로, 좌석을 AVAILABLE로 되돌린다.
+	 * 동시 실행 시 일관성을 위해 PESSIMISTIC_WRITE 락으로 조회한다.
 	 */
 	@Transactional
 	public void cancelReservationForRefund(Long reservationId) {
 		if (reservationId == null) {
 			return;
 		}
-		Optional<Reservation> opt = reservationRepository.findById(reservationId);
+		Optional<Reservation> opt = reservationRepository.findWithLockById(reservationId);
 		if (opt.isEmpty() || opt.get().getStatus() == ReservationStatus.CANCELLED) {
 			return;
 		}

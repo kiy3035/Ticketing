@@ -44,7 +44,7 @@
 | 파일 | 변경 내용 |
 |------|------------|
 | `.env`, `.env.example` | `TOSS_CLIENT_KEY`, `TOSS_SECRET_KEY`, `TOSS_SECURITY_KEY` 변수. |
-| `load-tests/full-flow.js` | `PAYMENT_METHOD` 환경 변수 추가. POINT 시 결제 요청→승인→완료, CARD 시 직접 예약 확정으로 대체. |
+| `load-tests/full-flow.js` | `PAYMENT_METHOD` 환경 변수. POINT 시 결제 요청→승인→완료(예약 확정 자동). CARD 시 부하 테스트는 브라우저/수동 플로우 필요. |
 | `load-tests/README.md` | 결제 수단 구분 및 실행 예 보강. |
 
 ---
@@ -69,7 +69,7 @@
 | 환경 변수 | 동작 |
 |-----------|------|
 | `PAYMENT_METHOD=POINT` (기본) | 홀드 → 결제 요청(POINT) → 승인(본문 없음) → 완료. 실제 포인트 차감. |
-| `PAYMENT_METHOD=CARD` | 카드 승인은 브라우저(토스 리다이렉트) 필요하므로, k6에서는 **직접 예약 확정**(POST /api/reservations)으로 대체. 부하 검증용. |
+| `PAYMENT_METHOD=CARD` | 카드 승인은 브라우저(토스 리다이렉트) 필요하므로, k6 풀 플로우 자동화 불가. 카드 결제 부하는 브라우저/수동 시나리오로 검증. |
 
 실행 예:
 

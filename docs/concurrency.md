@@ -13,7 +13,7 @@
 ### 사용 위치
 
 - **홀드 생성** (`HoldService.createHold`): 좌석 선택 후 홀드 저장 전에 락 획득, 처리 후 즉시 해제
-- **예약 확정** (`ReservationService.confirm`): 홀드 → 예약 전환 시 해당 좌석 락 획득, 처리 후 즉시 해제
+- **예약 확정** (`ReservationService.confirm`): 결제 완료 시 호출되며, 홀드 → 예약 전환 시 해당 좌석 락 획득, 처리 후 즉시 해제
 
 ### 설정
 

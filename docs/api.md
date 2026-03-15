@@ -379,58 +379,12 @@ Authorization: (세션 쿠키)
 
 ## 예약 API
 
-### 예약 확정
-```http
-POST /api/reservations
-Content-Type: application/json
-Authorization: (세션 쿠키)
-```
-
-**요청 본문**:
-```json
-{
-  "holdToken": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-}
-```
-
-**응답** (201 Created):
-```json
-{
-  "success": true,
-  "data": {
-    "id": 1,
-    "concertId": 1,
-    "seatId": 1,
-    "userId": "user123",
-    "status": "CONFIRMED",
-    "reservedAt": "2026-01-25T10:00:00+09:00"
-  },
-  "message": "OK",
-  "timestamp": "2026-01-25T10:00:00+09:00"
-}
-```
-
-**동작**:
-1. 홀드 조회 및 검증 (만료 시간, 사용자 일치)
-2. 분산 락 획득
-3. 홀드 유효성 재확인
-4. DB 트랜잭션 시작
-5. 좌석 상태를 RESERVED로 변경
-6. 예약 레코드 생성
-7. 홀드 해제
-8. Kafka로 `RESERVATION_CONFIRMED` 이벤트 발행
-9. 트랜잭션 커밋
-10. 락 해제
-
-**에러 케이스**:
-- `400 Bad Request`: 요청 본문 오류
-- `404 Not Found`: 홀드 없음
-- `409 Conflict`: 홀드 만료 또는 좌석이 이미 예약됨
-- `429 Too Many Requests`: 락 획득 실패
+예약 확정은 **별도 엔드포인트 없이**, 결제 완료 시에만 이루어진다.  
+`POST /api/payments/{paymentKey}/complete` 호출 시 내부에서 `ReservationService.confirm()`이 호출되어 예약이 생성되며, DB 커밋 후 `ReservationConfirmedEventListener`에서 Redis 홀드 해제 및 Kafka `RESERVATION_CONFIRMED` 이벤트가 발행된다.
 
 ### 예약 내역 조회
 ```http
-GET /api/reservations
+GET /api/reservations/me
 Authorization: (세션 쿠키)
 ```
 
@@ -462,7 +416,7 @@ Authorization: (세션 쿠키)
 결제는 실제 PG 연동이 아닌 **포인트 기반 Mock 결제**로 동작합니다.  
 흐름은 `READY → APPROVED → COMPLETED`이며, 필요 시 `CANCELED`로 전환됩니다.
 
-**배치 환불**: 공연이 `CANCELLED`로 변경된 경우, 스케줄러가 주기적으로 해당 공연의 `COMPLETED` 결제를 청크 단위로 환불(포인트 복원, 결제/예약/좌석 취소)합니다. 사용자 API가 아닌 백그라운드 배치로만 동작합니다.
+**배치 환불**: 공연이 `CANCELLED`로 변경된 경우, 스케줄러가 주기적으로 해당 공연의 `COMPLETED` 결제를 청크 단위로 환불합니다. 순서는 예약 취소·좌석 해제 → 포인트 환불(POINT만) → 결제 CANCELED 저장이며, 실패 시 불일치를 막기 위해 예약 취소를 먼저 수행합니다. 사용자 API가 아닌 백그라운드 배치로만 동작합니다.
 
 ### 결제 요청 생성 (READY)
 ```http
@@ -544,7 +498,7 @@ Authorization: (세션 쿠키)
 
 **동작**:
 1. 결제 상태가 APPROVED인지 검증
-2. 예약 확정 처리 (`/api/reservations` 내부 호출)
+2. 예약 확정 처리 (`ReservationService.confirm()` 호출; DB 커밋 후 리스너에서 홀드 해제·이벤트 발행)
 3. 결제 상태 COMPLETED로 변경
 
 ### 결제 취소 (CANCELED)

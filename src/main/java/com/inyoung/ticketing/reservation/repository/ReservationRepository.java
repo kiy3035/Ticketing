@@ -1,11 +1,19 @@
 package com.inyoung.ticketing.reservation.repository;
 
+import java.util.Optional;
 import com.inyoung.ticketing.reservation.domain.Reservation;
 import com.inyoung.ticketing.reservation.domain.ReservationStatus;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 
 // 예약 저장/조회 리포지토리
 public interface ReservationRepository extends JpaRepository<Reservation, Long> {
+
+	/** 환불 배치 등에서 동시 취소 시 일관성 유지를 위한 배타 락 조회 */
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	Optional<Reservation> findWithLockById(Long id);
+
 	// 상태별 예약 개수
 	long countByStatus(ReservationStatus status);
 
