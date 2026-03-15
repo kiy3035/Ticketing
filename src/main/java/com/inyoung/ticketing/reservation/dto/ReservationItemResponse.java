@@ -4,7 +4,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import com.inyoung.ticketing.reservation.domain.ReservationStatus;
 
-// 예매내역 목록 응답 DTO
+// 예매내역 목록 응답 DTO. paymentMethod: POINT(포인트 차감) / CARD(토스 결제)
 public class ReservationItemResponse {
 	private final Long reservationId;
 	private final String concertTitle;
@@ -13,6 +13,7 @@ public class ReservationItemResponse {
 	private final String seatSection;
 	private final String seatNo;
 	private final Long seatPrice;
+	private final String paymentMethod;
 	private final ReservationStatus status;
 	private final OffsetDateTime reservedAt;
 
@@ -24,6 +25,7 @@ public class ReservationItemResponse {
 		String seatSection,
 		String seatNo,
 		Long seatPrice,
+		String paymentMethod,
 		ReservationStatus status,
 		OffsetDateTime reservedAt
 	) {
@@ -34,6 +36,7 @@ public class ReservationItemResponse {
 		this.seatSection = seatSection;
 		this.seatNo = seatNo;
 		this.seatPrice = seatPrice;
+		this.paymentMethod = paymentMethod != null ? paymentMethod : "POINT";
 		this.status = status;
 		this.reservedAt = reservedAt;
 	}
@@ -64,6 +67,10 @@ public class ReservationItemResponse {
 
 	public Long getSeatPrice() {
 		return seatPrice;
+	}
+
+	public String getPaymentMethod() {
+		return paymentMethod;
 	}
 
 	public ReservationStatus getStatus() {

@@ -1,20 +1,23 @@
 package com.inyoung.ticketing.reservation.dto;
 
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import com.inyoung.ticketing.reservation.domain.Reservation;
 import com.inyoung.ticketing.reservation.domain.ReservationStatus;
 
-// 예약 확정 응답 DTO
+// 예약 확정 응답 DTO. reservedAt 은 DB(서울 LocalDateTime) → API용 OffsetDateTime(Asia/Seoul) 변환
 public class ReservationResponse {
+	private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
+
 	private Long reservationId;
 	private ReservationStatus status;
 	private OffsetDateTime reservedAt;
 
-	// 엔티티에서 응답 DTO로 변환
 	public ReservationResponse(Reservation reservation) {
 		this.reservationId = reservation.getId();
 		this.status = reservation.getStatus();
-		this.reservedAt = reservation.getReservedAt();
+		java.time.LocalDateTime ldt = reservation.getReservedAt();
+		this.reservedAt = ldt == null ? null : ldt.atZone(SEOUL).toOffsetDateTime();
 	}
 
 	// 예약 ID

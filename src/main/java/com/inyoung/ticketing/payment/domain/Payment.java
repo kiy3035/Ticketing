@@ -1,7 +1,6 @@
 package com.inyoung.ticketing.payment.domain;
 
-import java.time.OffsetDateTime;
-import java.time.ZoneId;
+import java.time.LocalDateTime;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -14,7 +13,10 @@ import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 
-// Mock 결제 엔티티
+/**
+ * 결제 엔티티. READY → APPROVED → COMPLETED. paymentMethod 에 따라 포인트 차감 또는 토스 승인 연동.
+ * CARD 시 orderId(위젯 requestPayment 용), tossPaymentKey(토스 승인 후 저장) 사용. reservationId 는 complete 시 설정.
+ */
 @Entity
 @Table(
 	name = "payment",
@@ -72,31 +74,32 @@ public class Payment {
 	@Column(name = "reservation_id")
 	private Long reservationId;
 
+	/** 승인 시각 (서울 시간, DB DATETIME 저장) */
 	@Column(name = "approved_at")
-	private OffsetDateTime approvedAt;
+	private LocalDateTime approvedAt;
 
 	@Column(name = "completed_at")
-	private OffsetDateTime completedAt;
+	private LocalDateTime completedAt;
 
 	@Column(name = "canceled_at")
-	private OffsetDateTime canceledAt;
+	private LocalDateTime canceledAt;
 
 	@Column(nullable = false, updatable = false)
-	private OffsetDateTime createdAt;
+	private LocalDateTime createdAt;
 
 	@Column(nullable = false)
-	private OffsetDateTime updatedAt;
+	private LocalDateTime updatedAt;
 
 	@PrePersist
 	void prePersist() {
-		OffsetDateTime now = OffsetDateTime.now(ZoneId.of("Asia/Seoul")).withNano(0);
+		LocalDateTime now = LocalDateTime.now().withNano(0);
 		this.createdAt = now;
 		this.updatedAt = now;
 	}
 
 	@PreUpdate
 	void preUpdate() {
-		this.updatedAt = OffsetDateTime.now(ZoneId.of("Asia/Seoul")).withNano(0);
+		this.updatedAt = LocalDateTime.now().withNano(0);
 	}
 
 	public Long getId() {
@@ -191,35 +194,35 @@ public class Payment {
 		this.reservationId = reservationId;
 	}
 
-	public OffsetDateTime getApprovedAt() {
+	public LocalDateTime getApprovedAt() {
 		return approvedAt;
 	}
 
-	public void setApprovedAt(OffsetDateTime approvedAt) {
+	public void setApprovedAt(LocalDateTime approvedAt) {
 		this.approvedAt = approvedAt;
 	}
 
-	public OffsetDateTime getCompletedAt() {
+	public LocalDateTime getCompletedAt() {
 		return completedAt;
 	}
 
-	public void setCompletedAt(OffsetDateTime completedAt) {
+	public void setCompletedAt(LocalDateTime completedAt) {
 		this.completedAt = completedAt;
 	}
 
-	public OffsetDateTime getCanceledAt() {
+	public LocalDateTime getCanceledAt() {
 		return canceledAt;
 	}
 
-	public void setCanceledAt(OffsetDateTime canceledAt) {
+	public void setCanceledAt(LocalDateTime canceledAt) {
 		this.canceledAt = canceledAt;
 	}
 
-	public OffsetDateTime getCreatedAt() {
+	public LocalDateTime getCreatedAt() {
 		return createdAt;
 	}
 
-	public OffsetDateTime getUpdatedAt() {
+	public LocalDateTime getUpdatedAt() {
 		return updatedAt;
 	}
 }

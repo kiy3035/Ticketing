@@ -5,6 +5,7 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.time.Instant;
+import java.util.TimeZone;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.event.ApplicationFailedEvent;
@@ -19,6 +20,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 public class TicketingApplication {
 
 	public static void main(String[] args) {
+		// 프로젝트 전체 기본 시간대: DB·엔티티·LocalDateTime.now() 모두 서울 시간으로 통일
+		TimeZone.setDefault(TimeZone.getTimeZone("Asia/Seoul"));
 		// #region agent log
 		writeDebugLog("TicketingApplication.main", "main entered", null, "H-main");
 		// #endregion

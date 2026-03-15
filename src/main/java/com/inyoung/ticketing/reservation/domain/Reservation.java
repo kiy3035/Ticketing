@@ -1,7 +1,6 @@
 package com.inyoung.ticketing.reservation.domain;
 
-import java.time.OffsetDateTime;
-import java.time.ZoneId;
+import java.time.LocalDateTime;
 import com.inyoung.ticketing.concert.domain.Concert;
 import com.inyoung.ticketing.seat.domain.Seat;
 import jakarta.persistence.Column;
@@ -40,13 +39,13 @@ public class Reservation {
 	@Column(nullable = false, length = 20)
 	private ReservationStatus status = ReservationStatus.CONFIRMED;
 
+	/** 예약 확정 시각 (서울 시간, DB DATETIME 저장) */
 	@Column(nullable = false)
-	private OffsetDateTime reservedAt;
+	private LocalDateTime reservedAt;
 
-	// 예약 시각 자동 설정 (한국시간, 초단위까지만 저장)
 	@PrePersist
 	void prePersist() {
-		this.reservedAt = OffsetDateTime.now(ZoneId.of("Asia/Seoul")).withNano(0);
+		this.reservedAt = LocalDateTime.now().withNano(0);
 	}
 
 	// 식별자
@@ -94,8 +93,7 @@ public class Reservation {
 		this.status = status;
 	}
 
-	// 예약 시각
-	public OffsetDateTime getReservedAt() {
+	public LocalDateTime getReservedAt() {
 		return reservedAt;
 	}
 }

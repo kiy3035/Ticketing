@@ -162,7 +162,6 @@
 			<span class="admin-badge">관리자</span>
 		</nav>
 		<div class="user">
-			<a class="ghost topbar-link" href="/app.html">일반 사용자로 전환</a>
 			<span id="userName" class="badge">admin</span>
 			<button id="logoutBtn" class="ghost">로그아웃</button>
 		</div>
@@ -191,29 +190,24 @@
 				<div class="value" id="statTodayPayments">-</div>
 			</div>
 			<div class="stat-card">
-				<div class="label">총 매출</div>
-				<div class="value" id="statTotalRevenue">-</div>
+				<div class="label">포인트 매출 누적</div>
+				<div class="value" id="statTotalRevenuePoint">-</div>
+			</div>
+			<div class="stat-card">
+				<div class="label">카드 결제 누적</div>
+				<div class="value" id="statTotalRevenueCard">-</div>
 			</div>
 		</div>
 
 		<!-- 탭 네비게이션 -->
 		<div class="admin-tabs">
-			<button class="admin-tab active" data-tab="statistics">통계</button>
-			<button class="admin-tab" data-tab="unsoldSeats">마감 후 미판매 좌석</button>
+			<button class="admin-tab active" data-tab="unsoldSeats">마감 후 미판매 좌석</button>
 			<button class="admin-tab" data-tab="payments">결제 관리</button>
 			<button class="admin-tab" data-tab="users">사용자 관리</button>
 		</div>
 
-		<!-- 통계 탭 -->
-		<div id="statistics" class="admin-tabpanel active">
-			<h2>예매 통계</h2>
-			<div style="margin-top: 20px; padding: 40px; background: var(--panel); border-radius: 12px; text-align: center; color: var(--muted);">
-				통계 차트는 추후 추가 예정입니다.
-			</div>
-		</div>
-
 		<!-- 마감 후 미판매 좌석 탭 -->
-		<div id="unsoldSeats" class="admin-tabpanel">
+		<div id="unsoldSeats" class="admin-tabpanel active">
 			<h2>마감 후 미판매 좌석 통계</h2>
 			<p class="helper" style="margin-bottom: 16px;">마감되었고 취소되지 않은 공연 기준, 공연별 판매/미판매 좌석 수입니다.</p>
 			<div class="search-bar">
@@ -253,6 +247,7 @@
 						<tr>
 							<th>결제 번호</th>
 							<th>사용자</th>
+							<th>결제수단</th>
 							<th>금액</th>
 							<th>상태</th>
 							<th>결제 시각</th>
@@ -260,7 +255,7 @@
 					</thead>
 					<tbody id="paymentTableBody">
 						<tr>
-							<td colspan="5" class="no-data">데이터를 불러오는 중...</td>
+							<td colspan="6" class="no-data">데이터를 불러오는 중...</td>
 						</tr>
 					</tbody>
 				</table>

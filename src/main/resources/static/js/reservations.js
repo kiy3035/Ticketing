@@ -64,6 +64,10 @@ const formatReservationId = (value) => {
 	return `#${String(value).padStart(6, '0')}`;
 };
 
+/**
+ * 예매 내역 카드 1건 렌더. item.paymentMethod(API에서 예약별 결제 조회로 채움)에 따라
+ * 결제수단·금액 문구: POINT → "N포인트 차감", CARD → "N원 카드 결제".
+ */
 const buildReservationCard = (item) => {
 	const seatSection = item.seatSection ?? item.section ?? '';
 	const seatNo = item.seatNo ?? item.seatNumber ?? '';
@@ -82,7 +86,7 @@ const buildReservationCard = (item) => {
 			</div>
 			<div class="reservation-badges">
 				<span class="badge light">예매번호 ${formatReservationId(item.reservationId)}</span>
-				<span class="badge light">결제수단 카드</span>
+				<span class="badge light">결제수단 ${(item.paymentMethod === 'CARD') ? '카드' : '포인트'}</span>
 				${dday ? `<span class="badge dday">${dday}</span>` : ''}
 			</div>
 			<div class="reservation-detail">
@@ -98,9 +102,9 @@ const buildReservationCard = (item) => {
 					<svg viewBox="0 0 24 24" aria-hidden="true">
 						<path d="M12 3 2 7v6c0 5 4.5 7.5 10 9 5.5-1.5 10-4 10-9V7l-10-4Zm0 5a3 3 0 1 1 0 6 3 3 0 0 1 0-6Z"/>
 					</svg>
-					가격
+					결제 금액
 				</span>
-				<strong class="value">${formatNumber(item.seatPrice)}원</strong>
+				<strong class="value">${(item.paymentMethod === 'CARD') ? `${formatNumber(item.seatPrice)}원 카드 결제` : `${formatNumber(item.seatPrice)}포인트 차감`}</strong>
 				<span class="label date">
 					<svg viewBox="0 0 24 24" aria-hidden="true">
 						<path d="M7 2h2v3H7V2Zm8 0h2v3h-2V2ZM4 5h16a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Zm0 6v9h16v-9H4Z"/>

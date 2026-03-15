@@ -1,7 +1,6 @@
 package com.inyoung.ticketing.auth.domain;
 
-import java.time.OffsetDateTime;
-import java.time.ZoneId;
+import java.time.LocalDateTime;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -45,13 +44,13 @@ public class Users {
 	@Column(name = "point", nullable = false)
 	private Long point = 0L;
 
+	/** 가입 시각 (서울 시간, DB DATETIME 저장) */
 	@Column(nullable = false, updatable = false)
-	private OffsetDateTime createdAt;
+	private LocalDateTime createdAt;
 
-	// 생성 시각 자동 설정 (한국시간, 초단위까지만 저장)
 	@PrePersist
 	void prePersist() {
-		this.createdAt = OffsetDateTime.now(ZoneId.of("Asia/Seoul")).withNano(0);
+		this.createdAt = LocalDateTime.now().withNano(0);
 	}
 
 	// 식별자
@@ -129,8 +128,7 @@ public class Users {
 		this.role = role;
 	}
 
-	// 생성 시각
-	public OffsetDateTime getCreatedAt() {
+	public LocalDateTime getCreatedAt() {
 		return createdAt;
 	}
 }

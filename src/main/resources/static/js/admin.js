@@ -21,6 +21,34 @@ const validateAdminRole = async () => {
 // 페이지 로드 시 권한 검증
 validateAdminRole();
 
+// 상단 통계 카드(총 사용자·예약·결제 등)는 페이지 로드 시 1회 로드
+const loadStatistics = async () => {
+	try {
+		const userStats = await window.fetchJson('/api/admin/statistics/users');
+		if (userStats.ok) {
+			document.getElementById('statTotalUsers').textContent = userStats.data.total || 0;
+		}
+		const reservationStats = await window.fetchJson('/api/admin/statistics/reservations');
+		if (reservationStats.ok) {
+			document.getElementById('statTotalReservations').textContent = reservationStats.data.total || 0;
+		}
+		const paymentStats = await window.fetchJson('/api/admin/statistics/payments');
+		if (paymentStats.ok) {
+			document.getElementById('statTodayPayments').textContent = paymentStats.data.today || 0;
+			document.getElementById('statTotalRevenuePoint').textContent =
+				`${(paymentStats.data.totalRevenuePoint || 0).toLocaleString()}포인트`;
+			document.getElementById('statTotalRevenueCard').textContent =
+				`${(paymentStats.data.totalRevenueCard || 0).toLocaleString()}원`;
+		}
+	} catch (error) {
+		console.error('Statistics load failed:', error);
+	}
+};
+document.addEventListener('DOMContentLoaded', () => {
+	loadStatistics();
+	loadTabData('unsoldSeats'); // 첫 탭(마감 후 미판매 좌석) 데이터 로드
+});
+
 // 탭 전환 기능
 const tabButtons = document.querySelectorAll('.admin-tab');
 const tabPanels = document.querySelectorAll('.admin-tabpanel');
@@ -45,9 +73,6 @@ tabButtons.forEach((button) => {
 // 탭별 데이터 로드
 const loadTabData = async (tabName) => {
 	switch (tabName) {
-		case 'statistics':
-			loadStatistics();
-			break;
 		case 'unsoldSeats':
 			loadUnsoldSeats();
 			break;
@@ -57,35 +82,6 @@ const loadTabData = async (tabName) => {
 		case 'users':
 			loadUsers();
 			break;
-	}
-};
-
-/**
- * 통계 데이터 로드
- */
-const loadStatistics = async () => {
-	try {
-		// 사용자 통계
-		const userStats = await window.fetchJson('/api/admin/statistics/users');
-		if (userStats.ok) {
-			document.getElementById('statTotalUsers').textContent = userStats.data.total || 0;
-		}
-
-		// 예약 통계
-		const reservationStats = await window.fetchJson('/api/admin/statistics/reservations');
-		if (reservationStats.ok) {
-			document.getElementById('statTotalReservations').textContent = reservationStats.data.total || 0;
-		}
-
-		// 결제 통계
-		const paymentStats = await window.fetchJson('/api/admin/statistics/payments');
-		if (paymentStats.ok) {
-			document.getElementById('statTodayPayments').textContent = paymentStats.data.today || 0;
-			document.getElementById('statTotalRevenue').textContent = 
-				`${(paymentStats.data.totalRevenue || 0).toLocaleString()}포인트`;
-		}
-	} catch (error) {
-		console.error('Statistics load failed:', error);
 	}
 };
 
@@ -138,15 +134,21 @@ const loadPayments = async (searchQuery = '') => {
 		const tbody = document.getElementById('paymentTableBody');
 
 		if (!result.ok || !result.data || result.data.length === 0) {
-			tbody.innerHTML = '<tr><td colspan="5" class="no-data">결제 내역이 없습니다.</td></tr>';
+			tbody.innerHTML = '<tr><td colspan="6" class="no-data">결제 내역이 없습니다.</td></tr>';
 			return;
 		}
+
+		const methodLabel = (m) => (m === 'CARD' ? '카드(토스)' : '포인트');
+		const amountText = (p) => p.paymentMethod === 'CARD'
+			? `${(p.amount || 0).toLocaleString()}원`
+			: `${(p.amount || 0).toLocaleString()}포인트`;
 
 		const html = result.data.map((payment) => `
 			<tr>
 				<td>${payment.paymentKey}</td>
 				<td>${payment.username}</td>
-				<td>${payment.amount.toLocaleString()}포인트</td>
+				<td>${methodLabel(payment.paymentMethod)}</td>
+				<td>${amountText(payment)}</td>
 				<td>
 					<span class="badge" style="background: ${getStatusColor(payment.status)}">${payment.status}</span>
 				</td>
@@ -158,7 +160,7 @@ const loadPayments = async (searchQuery = '') => {
 	} catch (error) {
 		console.error('Payments load failed:', error);
 		document.getElementById('paymentTableBody').innerHTML = 
-			'<tr><td colspan="5" class="no-data">데이터를 불러오지 못했습니다.</td></tr>';
+			'<tr><td colspan="6" class="no-data">데이터를 불러오지 못했습니다.</td></tr>';
 	}
 };
 

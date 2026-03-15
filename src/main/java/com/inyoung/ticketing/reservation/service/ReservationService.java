@@ -15,6 +15,7 @@ import com.inyoung.ticketing.reservation.domain.ReservationStatus;
 import com.inyoung.ticketing.reservation.dto.ReservationItemResponse;
 import com.inyoung.ticketing.reservation.dto.ReservationRequest;
 import com.inyoung.ticketing.reservation.dto.ReservationResponse;
+import com.inyoung.ticketing.payment.repository.PaymentRepository;
 import com.inyoung.ticketing.reservation.repository.ReservationRepository;
 import com.inyoung.ticketing.seat.domain.Seat;
 import com.inyoung.ticketing.seat.domain.SeatStatus;
@@ -35,6 +36,7 @@ public class ReservationService {
 	private final TicketingProperties properties;
 	private final HoldStore holdStore;
 	private final SeatHoldEventPublisher eventPublisher;
+	private final PaymentRepository paymentRepository;
 	private final Counter lockFailureCounter;
 
 	public ReservationService(
@@ -44,6 +46,7 @@ public class ReservationService {
 		TicketingProperties properties,
 		HoldStore holdStore,
 		SeatHoldEventPublisher eventPublisher,
+		PaymentRepository paymentRepository,
 		MeterRegistry meterRegistry
 	) {
 		this.seatRepository = seatRepository;
@@ -52,28 +55,41 @@ public class ReservationService {
 		this.properties = properties;
 		this.holdStore = holdStore;
 		this.eventPublisher = eventPublisher;
+		this.paymentRepository = paymentRepository;
 		this.lockFailureCounter = Counter.builder("ticketing_lock_acquire_failures_total")
 			.tag("operation", "reservation")
 			.description("Number of lock acquire failures when confirming reservation")
 			.register(meterRegistry);
 	}
 
-	// 사용자 예약 내역 조회
+	/**
+	 * 사용자 예약 내역 조회. 예약별로 결제 건을 조회해 paymentMethod(POINT/CARD) 를 채워 반환.
+	 * 예매 내역 화면에서 "결제수단 포인트/카드", "N포인트 차감" / "N원 카드 결제" 구분 표시용.
+	 */
 	@Transactional(readOnly = true)
 	public java.util.List<ReservationItemResponse> listByUser(String userId) {
 		return reservationRepository.findByUserIdOrderByReservedAtDesc(userId)
 			.stream()
-			.map(reservation -> new ReservationItemResponse(
-				reservation.getId(),
-				reservation.getConcert().getTitle(),
-				reservation.getConcert().getVenue(),
-				reservation.getConcert().getConcertAt(),
-				reservation.getSeat().getSection(),
-				reservation.getSeat().getSeatNo(),
-				reservation.getSeat().getPrice(),
-				reservation.getStatus(),
-				reservation.getReservedAt()
-			))
+			.map(reservation -> {
+				String paymentMethod = paymentRepository.findByReservationId(reservation.getId())
+					.map(p -> p.getPaymentMethod() != null ? p.getPaymentMethod().name() : "POINT")
+					.orElse("POINT");
+				java.time.LocalDateTime reservedAt = reservation.getReservedAt();
+				java.time.OffsetDateTime reservedAtOffset = reservedAt == null ? null
+					: reservedAt.atZone(java.time.ZoneId.of("Asia/Seoul")).toOffsetDateTime();
+				return new ReservationItemResponse(
+					reservation.getId(),
+					reservation.getConcert().getTitle(),
+					reservation.getConcert().getVenue(),
+					reservation.getConcert().getConcertAt(),
+					reservation.getSeat().getSection(),
+					reservation.getSeat().getSeatNo(),
+					reservation.getSeat().getPrice(),
+					paymentMethod,
+					reservation.getStatus(),
+					reservedAtOffset
+				);
+			})
 			.collect(Collectors.toList());
 	}
 

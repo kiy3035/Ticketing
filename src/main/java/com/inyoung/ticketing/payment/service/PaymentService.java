@@ -1,8 +1,8 @@
 package com.inyoung.ticketing.payment.service;
 
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
-import java.time.ZoneId;
 import java.util.Optional;
 import java.util.UUID;
 import com.inyoung.ticketing.auth.domain.Users;
@@ -34,8 +34,12 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
- * 결제 서비스: 포인트 결제(회원 포인트 차감) / 카드 결제(토스페이먼츠 승인 API) 분기 처리.
- * 요청 → 승인 → 완료 단계에서 paymentMethod 에 따라 포인트 차감 여부 및 토스 연동 여부가 결정된다.
+ * 결제 서비스: 포인트 결제(회원 포인트 차감) / 카드 결제(토스페이먼츠 주문서형 위젯 후 승인 API) 분기 처리.
+ *
+ * [흐름] request → approve → complete.
+ * - request: READY Payment 생성. CARD 시 orderId 부여(위젯 requestPayment 에 사용).
+ * - approve: POINT → users.point 차감 후 APPROVED. CARD → body(paymentKey, orderId, amount) 검증 후 토스 confirm 호출, tossPaymentKey 저장 후 APPROVED.
+ * - complete: 예약 확정(ReservationService.confirm), COMPLETED, reservationId 저장, 결제 완료 이벤트 발행.
  */
 @Service
 public class PaymentService {
@@ -76,7 +80,8 @@ public class PaymentService {
 	}
 
 	/**
-	 * 결제 요청: READY 상태 Payment 생성. CARD 일 경우 orderId 부여(토스 결제창용).
+	 * 결제 요청: hold 검증 후 READY 상태 Payment 생성. 홀드 TTL 연장.
+	 * CARD 시 orderId 부여(토스 주문서형 위젯 requestPayment 에 전달할 주문 ID). 동일 holdToken 재요청 시 기존 Payment 반환.
 	 */
 	@Transactional
 	public PaymentResponse requestPayment(PaymentRequest request, String userId) {
@@ -120,8 +125,8 @@ public class PaymentService {
 
 	/**
 	 * 결제 승인: paymentMethod 에 따라 분기.
-	 * - CARD: body 에 토스 paymentKey/orderId/amount 필요. 토스 승인 API 호출 후 APPROVED (포인트 미차감).
-	 * - POINT: body 불필요. 포인트 차감 후 APPROVED.
+	 * - CARD: body(paymentKey, orderId, amount) 필수. orderId·amount 가 우리 Payment 와 일치해야 함. 토스 POST /v1/payments/confirm 호출 후 APPROVED, tossPaymentKey 저장.
+	 * - POINT: body 불필요. 보유 포인트 차감 후 APPROVED. 부족 시 409.
 	 */
 	@Transactional
 	public PaymentResponse approvePaymentWithOption(String paymentKey, String userId, CardApproveRequest cardRequest) {
@@ -303,7 +308,8 @@ public class PaymentService {
 		return UUID.randomUUID().toString();
 	}
 
-	private OffsetDateTime now() {
-		return OffsetDateTime.now(ZoneId.of("Asia/Seoul"));
+	/** 서울 시간 기준 현재 시각 (DB 저장용 LocalDateTime). */
+	private LocalDateTime now() {
+		return LocalDateTime.now().withNano(0);
 	}
 }

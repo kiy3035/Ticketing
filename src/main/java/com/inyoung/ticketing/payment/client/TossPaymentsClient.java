@@ -15,10 +15,10 @@ import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.RestTemplate;
 
 /**
- * 토스페이먼츠 REST API 호출 클라이언트.
+ * 토스페이먼츠 REST API 호출 클라이언트. 주문서형 위젯 연동 시 결제 승인(confirm) 만 서버에서 호출.
  * <p>
- * 샌드박스(test_sk_...) 사용 시 모의결제만 수행되며 실제 카드 출금/입금은 발생하지 않는다.
- * 시크릿 키는 {@link TicketingProperties#getToss()} 에서 읽으며, .env 의 TOSS_SECRET_KEY 로 주입.
+ * 주문서형은 결제위젯 연동 키 세트 사용: 클라이언트 test_gck_..., 시크릿 test_gsk_... (.env TOSS_SECRET_KEY).
+ * 샌드박스 사용 시 모의결제만 수행되며 실제 출금/입금 없음.
  */
 @Component
 public class TossPaymentsClient {

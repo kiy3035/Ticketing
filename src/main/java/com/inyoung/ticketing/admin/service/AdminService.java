@@ -18,6 +18,7 @@ import com.inyoung.ticketing.seat.domain.SeatStatus;
 import com.inyoung.ticketing.seat.repository.SeatRepository;
 import com.inyoung.ticketing.auth.repository.UsersRepository;
 import com.inyoung.ticketing.payment.domain.Payment;
+import com.inyoung.ticketing.payment.domain.PaymentMethod;
 import com.inyoung.ticketing.payment.domain.PaymentStatus;
 import com.inyoung.ticketing.payment.repository.PaymentRepository;
 import com.inyoung.ticketing.reservation.repository.ReservationRepository;
@@ -72,23 +73,30 @@ public class AdminService {
 	}
 
 	/**
-	 * 결제 통계 응답 DTO
+	 * 결제 통계 응답 DTO.
+	 * totalRevenuePoint: 포인트 결제 누적, totalRevenueCard: 카드(토스) 결제 누적(원).
 	 */
 	public static class PaymentStatisticsResponse {
 		private Long today;
-		private Long totalRevenue;
+		private Long totalRevenuePoint;
+		private Long totalRevenueCard;
 
-		public PaymentStatisticsResponse(Long today, Long totalRevenue) {
+		public PaymentStatisticsResponse(Long today, Long totalRevenuePoint, Long totalRevenueCard) {
 			this.today = today;
-			this.totalRevenue = totalRevenue;
+			this.totalRevenuePoint = totalRevenuePoint != null ? totalRevenuePoint : 0L;
+			this.totalRevenueCard = totalRevenueCard != null ? totalRevenueCard : 0L;
 		}
 
 		public Long getToday() {
 			return today;
 		}
 
-		public Long getTotalRevenue() {
-			return totalRevenue;
+		public Long getTotalRevenuePoint() {
+			return totalRevenuePoint;
+		}
+
+		public Long getTotalRevenueCard() {
+			return totalRevenueCard;
 		}
 	}
 
@@ -115,39 +123,32 @@ public class AdminService {
 	}
 
 	/**
-	 * 결제 통계 조회
-	 * 
-	 * @return 오늘 결제 수, 총 매출액
+	 * 결제 통계 조회.
+	 * 오늘 완료 건수 + 수단별 누적(포인트 매출 / 카드 결제 누적). 관리자 대시보드 "포인트 매출 누적", "카드 결제 누적" 표시용.
 	 */
 	@Transactional(readOnly = true)
 	public PaymentStatisticsResponse getPaymentStatistics() {
-		// 오늘의 시작과 끝 시간
 		ZoneId seoulZone = ZoneId.of("Asia/Seoul");
 		LocalDate today = LocalDate.now(seoulZone);
-		OffsetDateTime todayStart = today.atStartOfDay(seoulZone).toOffsetDateTime();
-		OffsetDateTime todayEnd = today.atTime(23, 59, 59).atZone(seoulZone).toOffsetDateTime();
+		java.time.LocalDateTime todayStart = today.atStartOfDay();
+		java.time.LocalDateTime todayEnd = today.atTime(23, 59, 59);
 
-		// 오늘의 완료된 결제 조회
 		List<Payment> todayPayments = paymentRepository.findByStatusAndCompletedAtBetween(
 			PaymentStatus.COMPLETED,
 			todayStart,
 			todayEnd
 		);
-
 		long todayCount = todayPayments.size();
 
-		// 전체 결제액 조회
-		long totalRevenue = paymentRepository.sumAllAmounts();
+		Long totalPoint = paymentRepository.sumAmountByStatusAndPaymentMethod(PaymentMethod.POINT);
+		Long totalCard = paymentRepository.sumAmountByStatusAndPaymentMethod(PaymentMethod.CARD);
 
-		return new PaymentStatisticsResponse(todayCount, totalRevenue);
+		return new PaymentStatisticsResponse(todayCount, totalPoint, totalCard);
 	}
 
 	/**
-	 * 결제 내역 조회 (검색 지원)
-	 * 
-	 * @param search 사용자명 또는 결제 키로 검색
-	 * @param pageable 페이징 정보
-	 * @return 결제 목록
+	 * 결제 내역 조회 (COMPLETED 만). 검색 시 사용자명 또는 결제 키로 필터.
+	 * paymentMethod 포함해 반환 → 관리자 화면에서 "포인트 N포인트" / "카드 N원" 구분 표시.
 	 */
 	@Transactional(readOnly = true)
 	public List<AdminPaymentResponse> getPayments(String search, PageRequest pageable) {
@@ -169,9 +170,9 @@ public class AdminService {
 
 		return payments.stream()
 			.map(payment -> {
-				Users user = usersRepository.findById(Long.parseLong(payment.getUserId()))
-					.orElse(null);
-				String username = user != null ? user.getUsername() : "Unknown";
+				/* userId 는 로그인 아이디(username). findByUsername 으로 사용자명 조회 */
+				Users user = usersRepository.findByUsername(payment.getUserId()).orElse(null);
+				String username = user != null ? user.getUsername() : payment.getUserId();
 				String completedAt = payment.getCompletedAt() != null 
 					? payment.getCompletedAt().toString() 
 					: "-";
@@ -179,6 +180,7 @@ public class AdminService {
 					payment.getPaymentKey(),
 					username,
 					payment.getAmount(),
+					payment.getPaymentMethod() != null ? payment.getPaymentMethod().name() : "POINT",
 					payment.getStatus().toString(),
 					completedAt
 				);

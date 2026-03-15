@@ -1,16 +1,12 @@
 /**
  * k6 풀 플로우 부하 테스트
  *
- * 시나리오: 대기열 필요 시 진입 → 입장 허용 대기 → 좌석 조회 → 홀드 생성 → 결제(포인트/카드 구분) → 예약 확정
- * - PAYMENT_METHOD=POINT: 결제 요청 → 포인트 승인 → 결제 완료 (실제 포인트 차감)
- * - PAYMENT_METHOD=CARD: 결제 요청 후 카드 승인은 토스 리다이렉트가 필요하므로 k6에서는 불가.
- *   → CARD 선택 시 현재는 직접 예약 확정(POST /api/reservations)으로 대체하여 부하만 검증 (실제 결제 없음)
- * /api/holds, /api/payments, /api/reservations 는 인증 필요. TEST_USER, TEST_PASS 로 로그인 후 진행.
+ * 시나리오: 대기열 필요 시 진입 → 입장 허용 대기 → 좌석 조회 → 홀드 생성 → 결제(포인트) → 예약 확정
+ * 결제는 포인트 결제만 사용 (요청 → 승인 → 완료). 카드는 위젯/리다이렉트 필요로 k6 자동화 불가.
+ * /api/holds, /api/payments 는 인증 필요. TEST_USER, TEST_PASS 로 로그인 후 진행.
  *
  * 실행 예:
  *   k6 run -e BASE_URL=http://localhost:8080 -e CONCERT_ID=16 -e TEST_USER=아이디 -e TEST_PASS=비번 load-tests/full-flow.js
- *   k6 run -e BASE_URL=http://localhost:8080 -e CONCERT_ID=16 -e TEST_USER=아이디 -e TEST_PASS=비번 -e PAYMENT_METHOD=POINT load-tests/full-flow.js
- *   k6 run -e BASE_URL=... -e PAYMENT_METHOD=CARD load-tests/full-flow.js
  */
 import http from 'k6/http';
 import { check, sleep } from 'k6';
@@ -34,8 +30,6 @@ const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
 const CONCERT_ID = __ENV.CONCERT_ID || '1';
 const TEST_USER = __ENV.TEST_USER || '';
 const TEST_PASS = __ENV.TEST_PASS || '';
-/** 결제 수단: POINT(포인트 결제, 기본) | CARD(카드 선택 시 k6에서는 토스 리다이렉트 불가로 직접 예약 확정으로 대체) */
-const PAYMENT_METHOD = (__ENV.PAYMENT_METHOD || 'POINT').toUpperCase();
 
 /**
  * Spring Security form 로그인.
@@ -108,37 +102,26 @@ export default function () {
   const holdToken = holdRes.json('data.holdToken');
   if (!holdToken) return;
 
-  // --- 4) 결제 수단에 따른 분기
-  if (PAYMENT_METHOD === 'POINT') {
-    // 포인트 결제: 요청 → 승인(본문 없음) → 완료 (실제 포인트 차감)
-    const reqRes = http.post(`${BASE_URL}/api/payments/request`, JSON.stringify({
-      holdToken,
-      paymentMethod: 'POINT',
-    }), {
-      headers: { 'Content-Type': 'application/json' },
-    });
-    check(reqRes, { '결제 요청': (r) => r.status === 201 });
-    if (reqRes.status !== 201) return;
-    const paymentKey = reqRes.json('data.paymentKey');
-    if (!paymentKey) return;
+  // --- 4) 포인트 결제: 요청 → 승인(본문 없음) → 완료
+  const reqRes = http.post(`${BASE_URL}/api/payments/request`, JSON.stringify({
+    holdToken,
+    paymentMethod: 'POINT',
+  }), {
+    headers: { 'Content-Type': 'application/json' },
+  });
+  check(reqRes, { '결제 요청': (r) => r.status === 201 });
+  if (reqRes.status !== 201) return;
+  const paymentKey = reqRes.json('data.paymentKey');
+  if (!paymentKey) return;
 
-    const approveRes = http.post(`${BASE_URL}/api/payments/${paymentKey}/approve`, '{}', {
-      headers: { 'Content-Type': 'application/json' },
-    });
-    check(approveRes, { '결제 승인(포인트)': (r) => r.status === 200 });
-    if (approveRes.status !== 200) return;
+  const approveRes = http.post(`${BASE_URL}/api/payments/${paymentKey}/approve`, '{}', {
+    headers: { 'Content-Type': 'application/json' },
+  });
+  check(approveRes, { '결제 승인(포인트)': (r) => r.status === 200 });
+  if (approveRes.status !== 200) return;
 
-    const completeRes = http.post(`${BASE_URL}/api/payments/${paymentKey}/complete`, null);
-    check(completeRes, { '결제 완료': (r) => r.status === 200 });
-  } else {
-    // CARD: k6에서는 토스 결제창 리다이렉트를 할 수 없으므로, 부하 검증용으로 직접 예약 확정만 수행
-    const reserveRes = http.post(`${BASE_URL}/api/reservations`, JSON.stringify({
-      holdToken,
-    }), {
-      headers: { 'Content-Type': 'application/json' },
-    });
-    check(reserveRes, { '예약 확정(CARD 대체)': (r) => r.status === 201 || r.status === 200 });
-  }
+  const completeRes = http.post(`${BASE_URL}/api/payments/${paymentKey}/complete`, null);
+  check(completeRes, { '결제 완료': (r) => r.status === 200 });
 
   sleep(0.5);
 }

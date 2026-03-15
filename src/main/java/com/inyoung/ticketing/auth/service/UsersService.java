@@ -74,10 +74,13 @@ public class UsersService implements UserDetailsService {
 		Users account = usersRepository.findByUsername(username)
 			.orElseThrow(() -> new UsernameNotFoundException("User not found"));
 		Long point = account.getPoint() == null ? 0L : account.getPoint();
+		java.time.LocalDateTime createdAt = account.getCreatedAt();
+		java.time.OffsetDateTime createdAtOffset = createdAt == null ? null
+			: createdAt.atZone(java.time.ZoneId.of("Asia/Seoul")).toOffsetDateTime();
 		return new MyPageResponse(
 			account.getUsername(),
 			point,
-			account.getCreatedAt()
+			createdAtOffset
 		);
 	}
 

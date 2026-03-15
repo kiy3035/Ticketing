@@ -75,14 +75,17 @@ public class SellerService {
 		Users seller = getSeller(username);
 		Long sellerId = seller.getId();
 		List<Concert> concerts = concertRepository.findBySeller_IdOrderByCreatedAtDesc(sellerId);
+		java.time.ZoneId seoul = java.time.ZoneId.of("Asia/Seoul");
 		return concerts.stream()
 			.map(c -> {
 				int seatCount = seatRepository.findByConcertId(c.getId()).size();
 				long reservedCount = seatRepository.countByConcertIdAndStatus(c.getId(), SeatStatus.RESERVED);
 				Long revenue = paymentRepository.sumAmountByConcertIdAndStatus(c.getId());
+				java.time.OffsetDateTime createdAtOffset = c.getCreatedAt() == null ? null
+					: c.getCreatedAt().atZone(seoul).toOffsetDateTime();
 				return new SellerConcertResponse(
 					c.getId(), c.getTitle(), c.getVenue(), c.getConcertAt(),
-					computeStatus(c), c.getCategory(), c.getCreatedAt(),
+					computeStatus(c), c.getCategory(), createdAtOffset,
 					seatCount, reservedCount, revenue
 				);
 			})
@@ -102,9 +105,11 @@ public class SellerService {
 		Concert saved = concertRepository.save(c);
 		var cache = cacheManager.getCache(CacheNames.CONCERT_LIST);
 		if (cache != null) cache.clear();
+		java.time.OffsetDateTime createdAtOffset = saved.getCreatedAt() == null ? null
+			: saved.getCreatedAt().atZone(java.time.ZoneId.of("Asia/Seoul")).toOffsetDateTime();
 		return new SellerConcertResponse(
 			saved.getId(), saved.getTitle(), saved.getVenue(), saved.getConcertAt(),
-			ConcertStatus.UPCOMING, saved.getCategory(), saved.getCreatedAt(),
+			ConcertStatus.UPCOMING, saved.getCategory(), createdAtOffset,
 			0, 0L, 0L
 		);
 	}
@@ -116,9 +121,11 @@ public class SellerService {
 		int seatCount = seatRepository.findByConcertId(c.getId()).size();
 		long reservedCount = seatRepository.countByConcertIdAndStatus(c.getId(), SeatStatus.RESERVED);
 		Long revenue = paymentRepository.sumAmountByConcertIdAndStatus(c.getId());
+		java.time.OffsetDateTime createdAtOffset = c.getCreatedAt() == null ? null
+			: c.getCreatedAt().atZone(java.time.ZoneId.of("Asia/Seoul")).toOffsetDateTime();
 		return new SellerConcertResponse(
 			c.getId(), c.getTitle(), c.getVenue(), c.getConcertAt(),
-			computeStatus(c), c.getCategory(), c.getCreatedAt(),
+			computeStatus(c), c.getCategory(), createdAtOffset,
 			seatCount, reservedCount, revenue
 		);
 	}
@@ -171,12 +178,17 @@ public class SellerService {
 	@Transactional(readOnly = true)
 	public List<SellerReservationResponse> getReservations(String username, Long concertId) {
 		getConcertOwnedBy(concertId, getSeller(username).getId());
+		java.time.ZoneId seoul = java.time.ZoneId.of("Asia/Seoul");
 		return reservationRepository.findByConcert_IdOrderByReservedAtDesc(concertId).stream()
-			.map(r -> new SellerReservationResponse(
-				r.getId(), r.getUserId(),
-				r.getSeat().getSection(), r.getSeat().getSeatNo(), r.getSeat().getPrice(),
-				r.getStatus(), r.getReservedAt()
-			))
+			.map(r -> {
+				java.time.OffsetDateTime reservedAtOffset = r.getReservedAt() == null ? null
+					: r.getReservedAt().atZone(seoul).toOffsetDateTime();
+				return new SellerReservationResponse(
+					r.getId(), r.getUserId(),
+					r.getSeat().getSection(), r.getSeat().getSeatNo(), r.getSeat().getPrice(),
+					r.getStatus(), reservedAtOffset
+				);
+			})
 			.toList();
 	}
 
@@ -186,9 +198,11 @@ public class SellerService {
 		Long totalRevenue = paymentRepository.sumAmountByConcertIdAndStatus(concertId);
 		List<Payment> payments = paymentRepository.findByConcertIdAndStatus(concertId, PaymentStatus.COMPLETED,
 			org.springframework.data.domain.PageRequest.of(0, 100)).getContent();
+		java.time.ZoneId seoul = java.time.ZoneId.of("Asia/Seoul");
 		List<SellerPaymentResponse> list = payments.stream()
 			.map(p -> new SellerPaymentResponse(
-				p.getPaymentKey(), p.getUserId(), p.getAmount(), p.getStatus().name(), p.getCompletedAt()
+				p.getPaymentKey(), p.getUserId(), p.getAmount(), p.getStatus().name(),
+				p.getCompletedAt() != null ? p.getCompletedAt().atZone(seoul).toOffsetDateTime() : null
 			))
 			.toList();
 		return new SellerSalesSummaryResponse(totalRevenue, list.size(), list);
