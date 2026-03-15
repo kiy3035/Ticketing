@@ -364,8 +364,6 @@ ticketing/
 - [Prometheus/Grafana 모니터링](docs/monitoring.md) - 지표 수집·대시보드 최소 가이드
 - [디바운스/쓰로틀](docs/debounce-throttle.md) - 프론트 검색·버튼 연타 방지 적용 위치
 
-**API 명세 (Swagger)**: 앱 실행 후 [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html) 에서 전체 API를 한눈에 확인할 수 있습니다.
-
 ## 🎓 학습 포인트
 
 이 프로젝트를 통해 학습한 내용:

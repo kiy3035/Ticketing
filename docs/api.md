@@ -737,8 +737,7 @@ curl -N "http://localhost:8080/api/notifications/stream" \
 
 ## 관리자 API (ADMIN 전용)
 
-ADMIN 역할 사용자만 접근 가능합니다. 엔드포인트 목록 및 사용법은 [관리자 설정 가이드](admin-setup.md#api-엔드포인트-admin-전용)를 참고하세요.  
-Swagger UI (`/swagger-ui.html`)에서도 동일 API를 확인할 수 있습니다.
+ADMIN 역할 사용자만 접근 가능합니다. 엔드포인트 목록 및 사용법은 [관리자 설정 가이드](admin-setup.md#api-엔드포인트-admin-전용)를 참고하세요.
 
 - `GET /api/admin/statistics/users` — 전체 사용자 수
 - `GET /api/admin/statistics/reservations` — 전체 예약 수

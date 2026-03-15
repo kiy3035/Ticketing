@@ -16,8 +16,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.security.test.context.support.WithAnonymousUser;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
@@ -28,17 +28,18 @@ import org.springframework.test.web.servlet.MockMvc;
  */
 @WebMvcTest(QueueController.class)
 @AutoConfigureMockMvc(addFilters = false)
-@MockBean(ActiveUserTracker.class)
 class QueueControllerIntegrationTest {
 
 	@Autowired
 	private MockMvc mockMvc;
 
-	@MockBean
+	@MockitoBean
+	private ActiveUserTracker activeUserTracker;
+	@MockitoBean
 	private QueueService queueService;
-	@MockBean
+	@MockitoBean
 	private SeatRepository seatRepository;
-	@MockBean
+	@MockitoBean
 	private TicketingProperties properties;
 
 	@BeforeEach

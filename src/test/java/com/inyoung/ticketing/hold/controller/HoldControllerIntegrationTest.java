@@ -17,8 +17,8 @@ import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.test.web.servlet.MockMvc;
@@ -30,7 +30,6 @@ import org.springframework.test.web.servlet.MockMvc;
  * 인증된 사용자가 JSON body로 요청 시 200 OK와 응답 body에 holdToken이 포함되는지 확인한다.
  */
 @WebMvcTest(HoldController.class)
-@MockBean(ActiveUserTracker.class)
 class HoldControllerIntegrationTest {
 
 	@Autowired
@@ -38,7 +37,9 @@ class HoldControllerIntegrationTest {
 	@Autowired
 	private ObjectMapper objectMapper;
 
-	@MockBean
+	@MockitoBean
+	private ActiveUserTracker activeUserTracker;
+	@MockitoBean
 	private HoldService holdService;
 
 	/**
