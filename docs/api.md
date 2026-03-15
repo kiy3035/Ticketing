@@ -678,8 +678,8 @@ curl -N "http://localhost:8080/api/notifications/stream" \
 - 대기열 순번: Redis ZSet (O(log N))
 
 ### 배치 처리
-- 대기열 처리: 2초마다 상위 50명 일괄 처리
-- 홀드 만료: 60초마다 최대 200개 일괄 처리
+- 대기열 처리: 2초마다 상위 N명 일괄 입장 허용 (ticketing.queue.batch-size)
+- 홀드 만료: 60초마다 ticketing.hold.cleanup-batch-size 건 일괄 처리
 
 ### 연결 풀링
 - Redis: Lettuce 연결 풀 (최대 20개)

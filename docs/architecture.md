@@ -534,7 +534,7 @@ sequenceDiagram
          → QueueService.isAllowed() 확인
 
 스케줄러 → 2초마다 QueueProcessingScheduler.processQueue()
-        → 각 콘서트별로 상위 50명 조회
+        → 각 콘서트별로 상위 N명 조회 (ticketing.queue.batch-size)
         → 입장 허용 상태 설정 (SET queue:allowed:{token})
         → 프론트엔드 폴링에서 입장 허용 감지
         → /concert.html로 자동 리다이렉트
@@ -619,8 +619,8 @@ flowchart TB
 - **카테고리 필터**: 클라이언트 메모리 캐시 (30초 TTL)
 
 ### 3. 배치 처리
-- **대기열 처리**: 2초마다 상위 50명 일괄 처리
-- **홀드 만료**: 60초마다 최대 200개 일괄 처리
+- **대기열 처리**: 2초마다 상위 N명 일괄 입장 허용 (N = ticketing.queue.batch-size)
+- **홀드 만료**: 60초마다 최대 ticketing.hold.cleanup-batch-size 건 일괄 처리
 
 ### 4. 연결 풀링
 - **Redis**: Lettuce 연결 풀 (최대 20개)
@@ -652,10 +652,10 @@ erDiagram
         BIGINT id PK
         STRING title
         STRING venue
-        DATETIME start_at
-        DATETIME end_at
+        DATETIME concert_at
         STRING status
         ENUM category
+        BIGINT seller_id FK
         DATETIME created_at
     }
     

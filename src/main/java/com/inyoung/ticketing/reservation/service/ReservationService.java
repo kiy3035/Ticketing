@@ -39,6 +39,7 @@ public class ReservationService {
 	private final ApplicationEventPublisher applicationEventPublisher;
 	private final PaymentRepository paymentRepository;
 	private final Counter lockFailureCounter;
+	private final MeterRegistry meterRegistry;
 
 	public ReservationService(
 		SeatRepository seatRepository,
@@ -61,6 +62,7 @@ public class ReservationService {
 			.tag("operation", "reservation")
 			.description("Number of lock acquire failures when confirming reservation")
 			.register(meterRegistry);
+		this.meterRegistry = meterRegistry;
 	}
 
 	/**
@@ -143,6 +145,8 @@ public class ReservationService {
 			reservation.setStatus(ReservationStatus.CONFIRMED);
 
 			Reservation saved = reservationRepository.save(reservation);
+			meterRegistry.counter("ticketing_reservation_confirmed_total", "concert_id", String.valueOf(hold.getConcertId()))
+				.increment();
 			// DB 커밋 후 리스너에서 홀드 해제·이벤트 발행 (트랜잭션 경계 일치)
 			applicationEventPublisher.publishEvent(new ReservationConfirmedEvent(hold.getHoldToken(), hold));
 

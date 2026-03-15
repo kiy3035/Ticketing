@@ -10,6 +10,7 @@ import com.inyoung.ticketing.hold.event.SeatHoldEventType;
 import com.inyoung.ticketing.hold.store.HoldPayload;
 import com.inyoung.ticketing.hold.store.HoldStore;
 import com.inyoung.ticketing.lock.LockService;
+import com.inyoung.ticketing.metrics.HoldReleaseMetrics;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -29,6 +30,7 @@ public class HoldCleanupScheduler {
 
 	private final HoldStore holdStore;
 	private final SeatHoldEventPublisher eventPublisher;
+	private final HoldReleaseMetrics holdReleaseMetrics;
 	private final LockService lockService;
 	private final TicketingProperties properties;
 	private final Timer runTimer;
@@ -38,12 +40,14 @@ public class HoldCleanupScheduler {
 	public HoldCleanupScheduler(
 		HoldStore holdStore,
 		SeatHoldEventPublisher eventPublisher,
+		HoldReleaseMetrics holdReleaseMetrics,
 		LockService lockService,
 		TicketingProperties properties,
 		MeterRegistry registry
 	) {
 		this.holdStore = holdStore;
 		this.eventPublisher = eventPublisher;
+		this.holdReleaseMetrics = holdReleaseMetrics;
 		this.lockService = lockService;
 		this.properties = properties;
 		this.runTimer = Timer.builder("ticketing_batch_run_duration_seconds")
@@ -88,6 +92,7 @@ public class HoldCleanupScheduler {
 		List<HoldPayload> expired = holdStore.findExpiredHolds(Instant.now(), batchSize);
 		for (HoldPayload payload : expired) {
 			holdStore.releaseByPayload(payload.info(), payload.payload());
+			holdReleaseMetrics.recordReleased("timeout");
 			eventPublisher.publish(SeatHoldEventType.HOLD_EXPIRED, payload.info());
 		}
 	}

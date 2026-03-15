@@ -120,7 +120,7 @@
 
 **해결**:
 - 지표 API (`GET /api/metrics`)로 실시간 접속자 수, 콘서트 수 등 제공
-- **Prometheus 커스텀 메트릭**: `ticketing_queue_waiting_count`(콘서트별 대기 인원), `ticketing_hold_created_total`, `ticketing_lock_acquire_failures_total` 등으로 대기열·락·홀드 관측
+- **Prometheus 커스텀 메트릭**: 대기열(`ticketing_queue_waiting_count`), 홀드 생성/활성/해제(`ticketing_hold_created_total`, `ticketing_holds_active_count`, `ticketing_hold_released_total`), 전환율·결제(`ticketing_reservation_confirmed_total`, `ticketing_payment_completed_total`), 환불 배치(`ticketing_refund_processed_total`), 락 실패(`ticketing_lock_acquire_failures_total`) 등으로 관측 ([docs/monitoring.md](docs/monitoring.md))
 - 보안/에러 로그를 파일로 기록 (`logs/ticketing.log`)
 - Redis Insight, Kafka UI로 인프라 상태 모니터링 가능
 
@@ -341,27 +341,25 @@ ticketing/
 ├── src/main/resources/
 │   ├── static/            # 정적 리소스 (HTML, JS, CSS)
 │   └── application.properties
-├── docs/                  # 문서
+├── docs/                  # 문서 (포트폴리오/면접관용) — 목차: docs/README.md
+│   ├── README.md         # 문서 목차
 │   ├── architecture.md   # 아키텍처 및 플로우
 │   ├── api.md            # API 문서
-│   ├── data.md           # 데이터 구조
-│   ├── debounce-throttle.md  # 디바운스/쓰로틀 적용
-│   └── infra.md          # 인프라 설정
+│   └── ...
+├── my-docs/              # 상세/공부용 (워크플로우, 소스 구조, Redis/Kafka 등)
+│   ├── README.md         # my-docs 목차
+│   ├── 01-full-workflow.md
+│   └── ...
 └── load-tests/           # 부하 테스트 스크립트
 ```
 
 ## 📚 문서
 
-- [아키텍처/플로우](docs/architecture.md) - 시스템 아키텍처 및 핵심 플로우 상세 설명
-- [API 및 응답 스키마](docs/api.md) - 모든 API 엔드포인트 상세 문서
-- [인프라/환경 설정](docs/infra.md) - 인프라 설정 및 환경 변수 가이드
-- [Redis/Kafka/세션 구조](docs/data.md) - 데이터 구조 및 저장 방식 상세 설명
-- [동시성/락](docs/concurrency.md) - 좌석 락 및 동시성 제어
-- [관리자 설정](docs/admin-setup.md) - ADMIN 계정 및 관리자 대시보드 가이드
-- [EC2 배포](docs/deployment-ec2.md) - 목표 인프라 및 배포 가이드
-- [부하 테스트 결과](docs/load-test-results.md) - knee point 및 결과 기록
-- [Prometheus/Grafana 모니터링](docs/monitoring.md) - 지표 수집·대시보드 최소 가이드
-- [디바운스/쓰로틀](docs/debounce-throttle.md) - 프론트 검색·버튼 연타 방지 적용 위치
+- **포트폴리오/면접관용**: [docs/](docs/README.md) — 아키텍처, API, 인프라, 동시성 등 요약. 목차는 [docs/README.md](docs/README.md) 참고.
+- **상세/공부용**: [my-docs/](my-docs/README.md) — 전체 워크플로우, 소스 구조, 홀드·결제·스케줄러·Redis/Kafka 정리. 코드와 흐름 이해용.
+
+요약 링크:
+- [아키텍처/플로우](docs/architecture.md) | [API](docs/api.md) | [인프라](docs/infra.md) | [데이터 구조](docs/data.md) | [동시성](docs/concurrency.md) | [관리자](docs/admin-setup.md) | [EC2 배포](docs/deployment-ec2.md) | [부하 테스트](docs/load-test-results.md) | [모니터링](docs/monitoring.md) | [디바운스/쓰로틀](docs/debounce-throttle.md)
 
 ## 🎓 학습 포인트
 

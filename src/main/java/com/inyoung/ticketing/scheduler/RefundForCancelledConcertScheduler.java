@@ -41,6 +41,7 @@ public class RefundForCancelledConcertScheduler {
 	private final Timer runTimer;
 	private final Counter successCounter;
 	private final Counter failureCounter;
+	private final Counter refundProcessedCounter;
 
 	public RefundForCancelledConcertScheduler(
 		ConcertRepository concertRepository,
@@ -66,6 +67,9 @@ public class RefundForCancelledConcertScheduler {
 		this.failureCounter = Counter.builder("ticketing_batch_run_total")
 			.tag("batch", BATCH_NAME).tag("status", "failure")
 			.description("Batch run failure count")
+			.register(registry);
+		this.refundProcessedCounter = Counter.builder("ticketing_refund_processed_total")
+			.description("Number of refunds processed by refund batch")
 			.register(registry);
 	}
 
@@ -114,6 +118,7 @@ public class RefundForCancelledConcertScheduler {
 						boolean done = paymentService.refundCompletedPaymentForCancelledConcert(payment.getId());
 						if (done) {
 							totalRefunded++;
+							refundProcessedCounter.increment();
 						}
 					} catch (Exception e) {
 						totalFailed++;

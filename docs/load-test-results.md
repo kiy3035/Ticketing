@@ -43,5 +43,12 @@ k6 run -e BASE_URL=http://your-alb-or-app-url -e CONCERT_ID=1 load-tests/queue-l
 
 - `ticketing_queue_waiting_count`: 콘서트별 대기 인원
 - `ticketing_hold_created_total`: 홀드 생성 성공 수
+- `ticketing_holds_active_count`: 현재 활성 홀드 수 (Gauge)
+- `ticketing_reservation_confirmed_total`: 콘서트별 예약 확정 수 (전환율)
+- `ticketing_payment_completed_total`: 결제 완료 수
+- `ticketing_hold_released_total{reason="..."}`: 홀드 해제 사유별 (confirmed/timeout/cancelled)
+- `ticketing_refund_processed_total`: 환불 배치 처리 건수
 - `ticketing_lock_acquire_failures_total`: 락 획득 실패 수
 - `ticketing_payment_complete_duration_seconds`: 결제 완료 소요 시간
+
+전체 목록·설명은 [monitoring.md](monitoring.md) 참고.

@@ -187,6 +187,16 @@ public class HoldStore {
 		return result;
 	}
 
+	/**
+	 * 만료되지 않은 현재 활성 홀드 수 (ZSET에서 score > now 인 항목 수).
+	 * 메트릭 Gauge용.
+	 */
+	public long countActiveHolds() {
+		long now = Instant.now().toEpochMilli();
+		Long count = redisTemplate.opsForZSet().count(EXPIRY_ZSET_KEY, (double) now, Double.POSITIVE_INFINITY);
+		return count != null ? count : 0L;
+	}
+
 	public List<HoldPayload> findExpiredHolds(Instant now, int limit) {
 		// hold:expires ZSET에서 만료 시각이 지난 항목을 조회한다.
 		// 조회 결과는 스케줄러가 Redis에서 제거하고 Kafka 이벤트 발행에 사용한다.

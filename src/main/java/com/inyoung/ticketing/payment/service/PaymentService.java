@@ -24,6 +24,7 @@ import com.inyoung.ticketing.reservation.dto.ReservationResponse;
 import com.inyoung.ticketing.reservation.service.ReservationService;
 import com.inyoung.ticketing.seat.domain.Seat;
 import com.inyoung.ticketing.seat.repository.SeatRepository;
+import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
@@ -54,6 +55,7 @@ public class PaymentService {
 	private final TicketingProperties properties;
 	private final TossPaymentsClient tossPaymentsClient;
 	private final Timer paymentCompleteTimer;
+	private final Counter paymentCompletedCounter;
 
 	public PaymentService(
 		PaymentRepository paymentRepository,
@@ -76,6 +78,9 @@ public class PaymentService {
 		this.tossPaymentsClient = tossPaymentsClient;
 		this.paymentCompleteTimer = Timer.builder("ticketing_payment_complete_duration_seconds")
 			.description("Time to complete payment (request to COMPLETED)")
+			.register(meterRegistry);
+		this.paymentCompletedCounter = Counter.builder("ticketing_payment_completed_total")
+			.description("Number of payments completed successfully")
 			.register(meterRegistry);
 	}
 
@@ -194,6 +199,7 @@ public class PaymentService {
 			payment.setStatus(PaymentStatus.COMPLETED);
 			payment.setCompletedAt(now());
 			payment.setReservationId(reservation.getReservationId());
+			paymentCompletedCounter.increment();
 
 			// 결제 완료 이벤트 발행 (Kafka를 통해 비동기로 이메일/SMS 전송)
 			paymentCompleteEventPublisher.publishPaymentComplete(

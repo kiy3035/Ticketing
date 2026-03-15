@@ -3,6 +3,7 @@ package com.inyoung.ticketing.reservation.event;
 import com.inyoung.ticketing.hold.event.SeatHoldEventPublisher;
 import com.inyoung.ticketing.hold.event.SeatHoldEventType;
 import com.inyoung.ticketing.hold.store.HoldStore;
+import com.inyoung.ticketing.metrics.HoldReleaseMetrics;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
@@ -16,15 +17,18 @@ public class ReservationConfirmedEventListener {
 
 	private final HoldStore holdStore;
 	private final SeatHoldEventPublisher eventPublisher;
+	private final HoldReleaseMetrics holdReleaseMetrics;
 
-	public ReservationConfirmedEventListener(HoldStore holdStore, SeatHoldEventPublisher eventPublisher) {
+	public ReservationConfirmedEventListener(HoldStore holdStore, SeatHoldEventPublisher eventPublisher, HoldReleaseMetrics holdReleaseMetrics) {
 		this.holdStore = holdStore;
 		this.eventPublisher = eventPublisher;
+		this.holdReleaseMetrics = holdReleaseMetrics;
 	}
 
 	@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
 	public void onReservationConfirmed(ReservationConfirmedEvent event) {
 		holdStore.releaseHold(event.holdToken());
+		holdReleaseMetrics.recordReleased("confirmed");
 		eventPublisher.publish(SeatHoldEventType.RESERVATION_CONFIRMED, event.holdInfo());
 	}
 }

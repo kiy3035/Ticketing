@@ -37,7 +37,7 @@ k6 run -e BASE_URL=http://host.docker.internal:8080 -e CONCERT_ID=1 queue-load-t
 
 - `http_req_duration` p95: 응답 지연. knee point 구간에서 급상승하는지 확인.
 - `http_req_failed`: 실패율. 목표 10~20% 이하.
-- Prometheus/Grafana에서 `ticketing_queue_waiting_count`, `ticketing_lock_acquire_failures_total`, `ticketing_hold_created_total` 등과 함께 보면 병목 구간 파악에 유리하다.
+- Prometheus/Grafana에서 `ticketing_queue_waiting_count`, `ticketing_hold_created_total`, `ticketing_holds_active_count`, `ticketing_reservation_confirmed_total`, `ticketing_payment_completed_total`, `ticketing_hold_released_total`, `ticketing_lock_acquire_failures_total` 등([docs/monitoring.md](../docs/monitoring.md))과 함께 보면 병목·전환율 파악에 유리하다.
 
 ## Knee point
 

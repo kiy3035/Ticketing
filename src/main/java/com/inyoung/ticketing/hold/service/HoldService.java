@@ -18,6 +18,7 @@ import com.inyoung.ticketing.hold.event.SeatHoldEventType;
 import com.inyoung.ticketing.hold.store.HoldInfo;
 import com.inyoung.ticketing.hold.store.HoldStore;
 import com.inyoung.ticketing.lock.LockService;
+import com.inyoung.ticketing.metrics.HoldReleaseMetrics;
 import com.inyoung.ticketing.seat.domain.Seat;
 import com.inyoung.ticketing.seat.domain.SeatStatus;
 import com.inyoung.ticketing.seat.repository.SeatRepository;
@@ -37,6 +38,7 @@ public class HoldService {
 	private final TicketingProperties properties;
 	private final HoldStore holdStore;
 	private final SeatHoldEventPublisher eventPublisher;
+	private final HoldReleaseMetrics holdReleaseMetrics;
 	private final Counter holdCreatedCounter;
 	private final Counter lockFailureCounter;
 
@@ -47,6 +49,7 @@ public class HoldService {
 		TicketingProperties properties,
 		HoldStore holdStore,
 		SeatHoldEventPublisher eventPublisher,
+		HoldReleaseMetrics holdReleaseMetrics,
 		MeterRegistry meterRegistry
 	) {
 		this.seatRepository = seatRepository;
@@ -55,6 +58,7 @@ public class HoldService {
 		this.properties = properties;
 		this.holdStore = holdStore;
 		this.eventPublisher = eventPublisher;
+		this.holdReleaseMetrics = holdReleaseMetrics;
 		this.holdCreatedCounter = Counter.builder("ticketing_hold_created_total")
 			.tag("status", "success")
 			.description("Number of seat holds created successfully")
@@ -138,6 +142,7 @@ public class HoldService {
 			throw new ResponseStatusException(HttpStatus.CONFLICT, "Hold owner mismatch");
 		}
 		holdStore.releaseHold(holdToken);
+		holdReleaseMetrics.recordReleased("cancelled");
 		eventPublisher.publish(SeatHoldEventType.HOLD_CANCELED, info);
 	}
 
