@@ -343,9 +343,10 @@ ticketing/
 │   ├── static/            # 정적 리소스 (HTML, JS, CSS)
 │   └── application.properties
 ├── docs/                  # 문서
-│   ├── architecture.md    # 아키텍처 및 플로우
+│   ├── architecture.md   # 아키텍처 및 플로우
 │   ├── api.md            # API 문서
 │   ├── data.md           # 데이터 구조
+│   ├── debounce-throttle.md  # 디바운스/쓰로틀 적용
 │   └── infra.md          # 인프라 설정
 └── load-tests/           # 부하 테스트 스크립트
 ```
@@ -361,6 +362,7 @@ ticketing/
 - [EC2 배포](docs/deployment-ec2.md) - 목표 인프라 및 배포 가이드
 - [부하 테스트 결과](docs/load-test-results.md) - knee point 및 결과 기록
 - [Prometheus/Grafana 모니터링](docs/monitoring.md) - 지표 수집·대시보드 최소 가이드
+- [디바운스/쓰로틀](docs/debounce-throttle.md) - 프론트 검색·버튼 연타 방지 적용 위치
 
 **API 명세 (Swagger)**: 앱 실행 후 [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html) 에서 전체 API를 한눈에 확인할 수 있습니다.
 

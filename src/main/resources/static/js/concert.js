@@ -199,6 +199,8 @@ const startPayment = () => {
 		actionResult.textContent = '선택한 좌석 정보를 찾지 못했습니다.';
 		return;
 	}
+	// 연타 방지: 클릭 후 버튼 비활성화, 실패 시에만 다시 활성화
+	reserveBtn.disabled = true;
 	actionResult.textContent = '좌석을 홀드하는 중...';
 	holdSeat(selectedSeatId)
 		.then((data) => {
@@ -212,6 +214,7 @@ const startPayment = () => {
 		})
 		.catch((error) => {
 			actionResult.textContent = `홀드 실패: ${error.message}`;
+			reserveBtn.disabled = false;
 		});
 };
 

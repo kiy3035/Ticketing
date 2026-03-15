@@ -178,6 +178,8 @@ const submitPayment = async () => {
 		setError('홀드 토큰이 없습니다.');
 		return;
 	}
+	// 연타 방지: 클릭 후 버튼 비활성화, 실패 시에만 다시 활성화
+	payBtn.disabled = true;
 	const paymentMethod = getPaymentMethod();
 	setStatus('결제 요청 생성 중...');
 	try {
@@ -224,6 +226,7 @@ const submitPayment = async () => {
 		showSuccessOverlay(completeResult.data.reservationId);
 	} catch (error) {
 		setStatus(`결제 실패: ${error.message}`, 'error');
+		payBtn.disabled = false;
 	}
 };
 
