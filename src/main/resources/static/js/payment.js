@@ -32,7 +32,10 @@ const payOverlay = document.getElementById('payOverlay');
 const overlayTitle = document.getElementById('overlayTitle');
 const overlayMessage = document.getElementById('overlayMessage');
 const overlayHome = document.getElementById('overlayHome');
-const tossWidgetWrap = document.getElementById('toss-widget-wrap');
+const cardPaymentOverlay = document.getElementById('cardPaymentOverlay');
+const cardPaySubmit = document.getElementById('cardPaySubmit');
+const cardPayCancel = document.getElementById('cardPayCancel');
+const cardPaymentClose = document.getElementById('cardPaymentClose');
 
 /** 좌석 금액(원). loadPaymentInfo 에서 설정. 주문서형 위젯 setAmount 에 사용 */
 let paymentAmount = 0;
@@ -230,19 +233,103 @@ const submitPayment = async () => {
 	}
 };
 
-payBtn.addEventListener('click', submitPayment);
+/** 메인 결제하기: 포인트는 바로 결제, 카드는 모달 열기 */
+payBtn.addEventListener('click', () => {
+	if (getPaymentMethod() === 'CARD') {
+		openCardPaymentModal();
+	} else {
+		submitPayment();
+	}
+});
 
-/** 결제 수단 변경 시: 카드 선택 시 위젯 영역 표시 및 위젯 초기화, 포인트 선택 시 숨김 */
+/** 카드 결제 모달 열기 (위젯은 모달 안에서 렌더) */
+function openCardPaymentModal() {
+	if (!cardPaymentOverlay) return;
+	cardPaymentOverlay.classList.add('open');
+	cardPaymentOverlay.setAttribute('aria-hidden', 'false');
+	document.body.style.overflow = 'hidden';
+	initTossWidgetIfNeeded().catch((err) => {
+		setStatus(err?.message || '카드 결제창을 불러오지 못했습니다.', 'error');
+	});
+}
+
+function closeCardPaymentModal() {
+	if (!cardPaymentOverlay) return;
+	cardPaymentOverlay.classList.remove('open');
+	cardPaymentOverlay.setAttribute('aria-hidden', 'true');
+	document.body.style.overflow = '';
+}
+
+/** 모달 내 결제 진행: POST /request 후 토스 requestPayment(리다이렉트) */
+async function submitCardPaymentFromModal() {
+	if (!holdToken) {
+		setStatus('홀드 토큰이 없습니다.', 'error');
+		return;
+	}
+	if (cardPaySubmit) cardPaySubmit.disabled = true;
+	setStatus('결제 요청 생성 중...');
+	try {
+		const requestResult = await window.fetchJson('/api/payments/request', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ holdToken, paymentMethod: 'CARD' })
+		});
+		if (!requestResult.ok) {
+			throw new Error(requestResult.error?.message || '결제 요청 실패');
+		}
+		const paymentKey = requestResult.data.paymentKey;
+		const orderId = requestResult.data.orderId;
+		const baseUrl = window.location.origin + window.location.pathname;
+		const successUrl = baseUrl + '?' + new URLSearchParams({
+			concertId: concertId || '',
+			seatId: seatId || '',
+			holdToken: holdToken || '',
+			ourPaymentKey: paymentKey
+		}).toString();
+		const failUrl = baseUrl + '?' + new URLSearchParams({
+			concertId: concertId || '',
+			seatId: seatId || '',
+			holdToken: holdToken || '',
+			fail: '1'
+		}).toString();
+		await initTossWidgetIfNeeded();
+		await tossWidgets.requestPayment({
+			orderId: orderId,
+			orderName: '콘서트 예매',
+			successUrl: successUrl,
+			failUrl: failUrl
+		});
+	} catch (error) {
+		setStatus(`결제 실패: ${error.message}`, 'error');
+		if (cardPaySubmit) cardPaySubmit.disabled = false;
+	}
+}
+
+if (cardPaySubmit) {
+	cardPaySubmit.addEventListener('click', () => submitCardPaymentFromModal());
+}
+if (cardPayCancel) {
+	cardPayCancel.addEventListener('click', closeCardPaymentModal);
+}
+if (cardPaymentClose) {
+	cardPaymentClose.addEventListener('click', closeCardPaymentModal);
+}
+if (cardPaymentOverlay) {
+	cardPaymentOverlay.addEventListener('click', (e) => {
+		if (e.target === cardPaymentOverlay) closeCardPaymentModal();
+	});
+}
+document.addEventListener('keydown', (e) => {
+	if (e.key === 'Escape' && cardPaymentOverlay && cardPaymentOverlay.classList.contains('open')) {
+		closeCardPaymentModal();
+	}
+});
+
+/** 결제 수단 변경 시: 포인트 선택 시 카드 모달 닫기 */
 document.querySelectorAll('input[name="paymentMethod"]').forEach((radio) => {
 	radio.addEventListener('change', () => {
-		if (!tossWidgetWrap) return;
-		if (getPaymentMethod() === 'CARD') {
-			tossWidgetWrap.classList.remove('hidden');
-			tossWidgetWrap.setAttribute('aria-hidden', 'false');
-			initTossWidgetIfNeeded().catch(() => {});
-		} else {
-			tossWidgetWrap.classList.add('hidden');
-			tossWidgetWrap.setAttribute('aria-hidden', 'true');
+		if (getPaymentMethod() === 'POINT') {
+			closeCardPaymentModal();
 		}
 	});
 });

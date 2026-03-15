@@ -1183,6 +1183,67 @@ img { max-width: 100%; display: block; }
 .overlay-box p { margin: 0 0 16px 0; color: var(--muted); }
 .overlay-actions { display:flex; gap:12px; justify-content:center; }
 
+/* 카드 결제 모달 (토스 위젯) */
+.card-payment-overlay {
+	position: fixed;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: rgba(1, 6, 23, 0.5);
+	z-index: 1200;
+	opacity: 0;
+	visibility: hidden;
+	transition: opacity 0.2s, visibility 0.2s;
+}
+.card-payment-overlay.open {
+	opacity: 1;
+	visibility: visible;
+}
+.card-payment-modal {
+	background: var(--panel);
+	width: min(440px, 92vw);
+	max-height: 90vh;
+	border-radius: 16px;
+	box-shadow: 0 24px 48px rgba(2, 6, 23, 0.2);
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+.card-payment-modal-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 18px 20px;
+	border-bottom: 1px solid var(--line);
+	flex-shrink: 0;
+}
+.card-payment-modal-header h2 {
+	margin: 0;
+	font-size: 18px;
+	font-weight: 600;
+}
+.card-payment-modal-body {
+	padding: 20px;
+	overflow-y: auto;
+	font-size: 14px;
+}
+.card-payment-modal-body h3 {
+	margin: 14px 0 8px;
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--text);
+}
+.card-payment-modal-body h3:first-child { margin-top: 0; }
+.card-payment-modal-footer {
+	display: flex;
+	gap: 10px;
+	justify-content: flex-end;
+	padding: 16px 20px;
+	border-top: 1px solid var(--line);
+	flex-shrink: 0;
+}
+
 @media (max-width: 900px) {
 	.hero,
 	.payment-hero,
