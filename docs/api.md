@@ -1,700 +1,100 @@
-# API & 응답 스키마
+# API 명세
 
 ## 공통 응답 구조
 
-### 성공 응답
-모든 정상 응답은 `ApiResponse` 래퍼로 감싸집니다.
-
-```json
-{
-  "success": true,
-  "data": {},
-  "message": "OK",
-  "timestamp": "2026-01-25T10:00:00+09:00"
-}
-```
-
-### 에러 응답
-에러 발생 시 아래 형태로 반환됩니다.
-
-```json
-{
-  "status": 400,
-  "error": "Bad Request",
-  "message": "field: message",
-  "path": "/api/...",
-  "timestamp": "2026-01-25T10:00:00+09:00"
-}
-```
-
-**HTTP 상태 코드**:
-- `200 OK`: 정상 처리
-- `201 Created`: 리소스 생성 성공
-- `204 No Content`: 정상 처리 (응답 본문 없음)
-- `400 Bad Request`: 잘못된 요청
-- `401 Unauthorized`: 인증 필요
-- `403 Forbidden`: 권한 없음
-- `404 Not Found`: 리소스 없음
-- `409 Conflict`: 충돌 (중복, 만료 등)
-- `429 Too Many Requests`: 너무 많은 요청 (락 획득 실패)
-- `500 Internal Server Error`: 서버 오류
+- **성공**: `{ "success": true, "data": {}, "message": "OK", "timestamp": "..." }`
+- **에러**: `{ "status": 400, "error": "Bad Request", "message": "...", "path": "...", "timestamp": "..." }`
+- 상태 코드: 200, 201, 204, 400, 401, 403, 404, 409, 429, 500
 
 ## 인증 API
 
-### 회원가입
-```http
-POST /api/auth/signup
-Content-Type: application/json
-```
+| 메서드 | 엔드포인트 | 설명 | 인증 |
+|--------|-----------|------|------|
+| POST | `/api/auth/signup` | 회원가입 (username, password) | 불필요 |
+| GET | `/api/auth/me` | 현재 사용자 정보 조회 | 필요 |
 
-**요청 본문**:
-```json
-{
-  "username": "user123",
-  "password": "password123"
-}
-```
+인증 방식: Spring Security 세션 기반. 로그인 성공 시 세션 쿠키 발급, Redis 저장 (TTL 30분).
 
-**응답** (201 Created):
-```json
-{
-  "success": true,
-  "data": {
-    "id": 1,
-    "username": "user123",
-    "createdAt": "2026-01-25T10:00:00+09:00"
-  },
-  "message": "OK",
-  "timestamp": "2026-01-25T10:00:00+09:00"
-}
-```
-
-**에러 케이스**:
-- `400 Bad Request`: 사용자명/비밀번호 형식 오류
-- `409 Conflict`: 사용자명 중복
-
-### 현재 사용자 정보 조회
-```http
-GET /api/auth/me
-Authorization: (세션 쿠키)
-```
-
-**응답** (200 OK):
-```json
-{
-  "success": true,
-  "data": {
-    "id": 1,
-    "username": "user123",
-    "createdAt": "2026-01-25T10:00:00+09:00"
-  },
-  "message": "OK",
-  "timestamp": "2026-01-25T10:00:00+09:00"
-}
-```
-
-**에러 케이스**:
-- `401 Unauthorized`: 인증되지 않음
+인증 불필요 경로: `/`, `/login.html`, `/signup.html`, `POST /login`, `POST /logout`, `POST /api/auth/signup`, `/api/queue/**`
 
 ## 콘서트 API
 
-### 콘서트 목록 조회
-```http
-GET /api/concerts?query={검색어}&category={카테고리}
-Authorization: (세션 쿠키)
-```
+| 메서드 | 엔드포인트 | 설명 | 인증 |
+|--------|-----------|------|------|
+| GET | `/api/concerts?query=&category=` | 콘서트 목록 조회 (Redis 캐시 5분) | 필요 |
+| GET | `/api/concerts/{concertId}/seats` | 좌석 목록 조회 (DB + Redis 홀드 오버레이) | 필요 |
 
-**쿼리 파라미터**:
-- `query` (optional): 검색어 (제목/장소)
-- `category` (optional): 카테고리 (`ALL`, `IDOL`, `BALLAD`, `ROCK`, `HIPHOP`, `JAZZ`, `CLASSICAL`)
-
-**콘서트 상태** (`status`): `UPCOMING`(예정), `ONGOING`(진행중), `COMPLETED`(종료), `CANCELLED`(취소)
-
-**응답** (200 OK):
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": 1,
-      "title": "Winter Beats 2026",
-      "venue": "올림픽공원 KSPO DOME",
-      "startAt": "2026-02-02T04:00:00+09:00",
-      "endAt": "2026-02-02T07:00:00+09:00",
-      "status": "UPCOMING",
-      "category": "IDOL"
-    }
-  ],
-  "message": "OK",
-  "timestamp": "2026-01-25T10:00:00+09:00"
-}
-```
-
-**캐싱**: Redis 캐시 (5분 TTL)
-
-### 콘서트별 좌석 목록 조회
-```http
-GET /api/concerts/{concertId}/seats
-Authorization: (세션 쿠키)
-```
-
-**경로 변수**:
-- `concertId`: 콘서트 ID
-
-**응답** (200 OK):
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": 1,
-      "section": "A",
-      "seatNo": "A-1",
-      "price": 150000,
-      "status": "AVAILABLE"
-    },
-    {
-      "id": 2,
-      "section": "A",
-      "seatNo": "A-2",
-      "price": 150000,
-      "status": "HELD"
-    },
-    {
-      "id": 3,
-      "section": "B",
-      "seatNo": "B-1",
-      "price": 100000,
-      "status": "RESERVED"
-    }
-  ],
-  "message": "OK",
-  "timestamp": "2026-01-25T10:00:00+09:00"
-}
-```
-
-**좌석 상태**:
-- `AVAILABLE`: 예약 가능
-- `HELD`: 임시 홀드 (Redis에서 조회)
-- `RESERVED`: 예약 완료 (DB에서 조회)
-
-**에러 케이스**:
-- `404 Not Found`: 콘서트 없음
+- 카테고리: `ALL`, `IDOL`, `BALLAD`, `ROCK`, `HIPHOP`, `JAZZ`, `CLASSICAL`
+- 콘서트 상태: `UPCOMING`, `ONGOING`, `COMPLETED`, `CANCELLED`
+- 좌석 상태: `AVAILABLE`, `HELD` (Redis), `RESERVED` (DB)
 
 ## 대기열 API
 
-### 대기열 진입
-```http
-POST /api/queue/enter?concertId={concertId}
-Authorization: (세션 쿠키)
-```
-
-**쿼리 파라미터**:
-- `concertId`: 콘서트 ID (필수)
-
-**응답** (201 Created):
-```json
-{
-  "success": true,
-  "data": {
-    "token": "c13bb5d9-6b59-467e-80ab-6be37848c9cb",
-    "rank": 654,
-    "totalWaiting": 654
-  },
-  "message": "OK",
-  "timestamp": "2026-01-25T10:00:00+09:00"
-}
-```
-
-**동작**:
-1. 기존 토큰 확인 (중복 진입 방지)
-2. 새 토큰 발급 (UUID)
-3. Redis ZSet에 토큰 추가 (`queue:concert:{concertId}`)
-4. 토큰 정보 저장 (`queue:token:{token}`, TTL 30분)
-5. 순번 및 대기인원 수 반환
-
-**에러 케이스**:
-- `400 Bad Request`: 콘서트 ID 없음
-- `404 Not Found`: 콘서트 없음
-
-### 대기열 상태 조회
-```http
-GET /api/queue/status?token={token}&concertId={concertId}
-Authorization: (세션 쿠키)
-```
-
-**쿼리 파라미터**:
-- `token`: 대기열 토큰 (필수)
-- `concertId`: 콘서트 ID (필수)
-
-**응답** (200 OK):
-```json
-{
-  "success": true,
-  "data": {
-    "token": "c13bb5d9-6b59-467e-80ab-6be37848c9cb",
-    "rank": 654,
-    "totalWaiting": 654,
-    "isAllowed": false
-  },
-  "message": "OK",
-  "timestamp": "2026-01-25T10:00:00+09:00"
-}
-```
-
-**동작**:
-1. Redis ZSet에서 순번 조회 (`ZRANK`)
-2. 대기인원 수 조회 (`ZCARD`)
-3. 입장 허용 여부 확인 (`GET queue:allowed:{token}`)
-
-**에러 케이스**:
-- `400 Bad Request`: 토큰 또는 콘서트 ID 없음
-- `404 Not Found`: 토큰 없음
-
-### 입장 허용 여부 확인
-```http
-GET /api/queue/allowed?token={token}
-Authorization: (세션 쿠키)
-```
-
-**쿼리 파라미터**:
-- `token`: 대기열 토큰 (필수)
-
-**응답** (200 OK):
-```json
-{
-  "success": true,
-  "data": {
-    "allowed": true,
-    "concertId": 1
-  },
-  "message": "OK",
-  "timestamp": "2026-01-25T10:00:00+09:00"
-}
-```
-
-**에러 케이스**:
-- `400 Bad Request`: 토큰 없음
-
-### 대기인원 수 조회
-```http
-GET /api/queue/count?concertId={concertId}
-Authorization: (세션 쿠키)
-```
-
-**쿼리 파라미터**:
-- `concertId`: 콘서트 ID (필수)
-
-**응답** (200 OK):
-```json
-{
-  "success": true,
-  "data": 654,
-  "message": "OK",
-  "timestamp": "2026-01-25T10:00:00+09:00"
-}
-```
-
-### 대기열 나가기
-```http
-DELETE /api/queue/exit?token={token}&concertId={concertId}
-Authorization: (세션 쿠키)
-```
-
-**쿼리 파라미터**:
-- `token`: 대기열 토큰 (필수)
-- `concertId`: 콘서트 ID (필수)
-
-**응답** (204 No Content)
-
-**동작**:
-1. Redis ZSet에서 토큰 제거
-2. 토큰 정보 삭제
-3. 입장 허용 상태 삭제
+| 메서드 | 엔드포인트 | 설명 | 인증 |
+|--------|-----------|------|------|
+| POST | `/api/queue/enter?concertId={id}` | 대기열 진입 (토큰 발급, 중복 방지) | 필요 |
+| GET | `/api/queue/status?token=&concertId=` | 순번·대기인원·입장허용 조회 (2초 폴링) | 필요 |
+| GET | `/api/queue/allowed?token=` | 입장 허용 여부 확인 | 필요 |
+| GET | `/api/queue/count?concertId=` | 대기인원 수 조회 | 필요 |
+| GET | `/api/queue/required?concertId=` | 대기열 필요 여부 (유동 활성화) | 필요 |
+| DELETE | `/api/queue/exit?token=&concertId=` | 대기열 나가기 | 필요 |
 
 ## 홀드 API
 
-### 홀드 생성
-```http
-POST /api/holds
-Content-Type: application/json
-Authorization: (세션 쿠키)
-```
+| 메서드 | 엔드포인트 | 설명 | 인증 |
+|--------|-----------|------|------|
+| POST | `/api/holds` | 좌석 홀드 생성 (분산 락 → Lua 원자적 생성 → Kafka 이벤트) | 필요 |
+| DELETE | `/api/holds/{holdToken}` | 홀드 취소 | 필요 |
 
-**요청 본문**:
-```json
-{
-  "concertId": 1,
-  "seatId": 1
-}
-```
-
-**응답** (201 Created):
-```json
-{
-  "success": true,
-  "data": {
-    "holdToken": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-    "expiresAt": "2026-01-25T10:05:00+09:00"
-  },
-  "message": "OK",
-  "timestamp": "2026-01-25T10:00:00+09:00"
-}
-```
-
-**동작**:
-1. 좌석 조회 및 검증
-2. 분산 락 획득 (`lock:seat:{seatId}`)
-3. 좌석 상태 확인 (RESERVED 체크)
-4. Lua 스크립트로 원자적 홀드 생성
-5. Kafka로 `HOLD_CREATED` 이벤트 발행
-6. 락 해제
-
-**에러 케이스**:
-- `400 Bad Request`: 요청 본문 오류
-- `404 Not Found`: 좌석 없음
-- `409 Conflict`: 좌석이 이미 예약됨 또는 홀드됨
-- `429 Too Many Requests`: 락 획득 실패 (좌석이 사용 중)
-
-### 홀드 취소
-```http
-DELETE /api/holds/{holdToken}
-Authorization: (세션 쿠키)
-```
-
-**경로 변수**:
-- `holdToken`: 홀드 토큰
-
-**응답** (204 No Content)
-
-**동작**:
-1. 홀드 조회 및 검증
-2. 사용자 일치 확인
-3. Lua 스크립트로 원자적 홀드 해제
-4. Kafka로 `HOLD_CANCELED` 이벤트 발행
-
-**에러 케이스**:
-- `404 Not Found`: 홀드 없음
-- `409 Conflict`: 홀드 소유자 불일치
+- 409: 이미 예약/홀드된 좌석
+- 429: 락 획득 실패 (좌석 사용 중)
 
 ## 예약 API
 
-예약 확정은 **별도 엔드포인트 없이**, 결제 완료 시에만 이루어진다.  
-`POST /api/payments/{paymentKey}/complete` 호출 시 내부에서 `ReservationService.confirm()`이 호출되어 예약이 생성되며, DB 커밋 후 `ReservationConfirmedEventListener`에서 Redis 홀드 해제 및 Kafka `RESERVATION_CONFIRMED` 이벤트가 발행된다.
+| 메서드 | 엔드포인트 | 설명 | 인증 |
+|--------|-----------|------|------|
+| GET | `/api/reservations/me` | 내 예약 내역 조회 | 필요 |
 
-### 예약 내역 조회
-```http
-GET /api/reservations/me
-Authorization: (세션 쿠키)
-```
+예약 생성은 별도 API 없이 `POST /api/payments/{paymentKey}/complete` 내부에서 자동 수행된다.
 
-**응답** (200 OK):
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": 1,
-      "concertTitle": "Winter Beats 2026",
-      "venue": "올림픽공원 KSPO DOME",
-      "startAt": "2026-02-02T04:00:00+09:00",
-      "endAt": "2026-02-02T07:00:00+09:00",
-      "section": "A",
-      "seatNo": "A-1",
-      "price": 150000,
-      "status": "CONFIRMED",
-      "reservedAt": "2026-01-25T10:00:00+09:00"
-    }
-  ],
-  "message": "OK",
-  "timestamp": "2026-01-25T10:00:00+09:00"
-}
-```
+## 결제 API
 
-## 결제 API (Mock Payment)
+포인트 기반 Mock 결제. 흐름: READY → APPROVED → COMPLETED. 카드 결제 시 토스페이먼츠 샌드박스 연동.
 
-결제는 실제 PG 연동이 아닌 **포인트 기반 Mock 결제**로 동작합니다.  
-흐름은 `READY → APPROVED → COMPLETED`이며, 필요 시 `CANCELED`로 전환됩니다.
+| 메서드 | 엔드포인트 | 설명 | 인증 |
+|--------|-----------|------|------|
+| POST | `/api/payments/request` | 결제 요청 생성 (holdToken, paymentMethod) → READY | 필요 |
+| POST | `/api/payments/{paymentKey}/approve` | 결제 승인 (포인트 차감 또는 토스 승인) → APPROVED | 필요 |
+| POST | `/api/payments/{paymentKey}/complete` | 결제 완료 + 예약 확정 → COMPLETED | 필요 |
+| POST | `/api/payments/{paymentKey}/cancel` | 결제 취소 → CANCELED | 필요 |
+| GET | `/api/payments/{paymentKey}` | 결제 조회 | 필요 |
+| GET | `/api/payments/toss-client-key` | 토스 클라이언트 키 조회 (프론트용) | 필요 |
 
-**배치 환불**: 공연이 `CANCELLED`로 변경된 경우, 스케줄러가 주기적으로 해당 공연의 `COMPLETED` 결제를 청크 단위로 환불합니다. 순서는 예약 취소·좌석 해제 → 포인트 환불(POINT만) → 결제 CANCELED 저장이며, 실패 시 불일치를 막기 위해 예약 취소를 먼저 수행합니다. 사용자 API가 아닌 백그라운드 배치로만 동작합니다.
-
-### 결제 요청 생성 (READY)
-```http
-POST /api/payments/request
-Content-Type: application/json
-Authorization: (세션 쿠키)
-```
-
-**요청 본문**:
-```json
-{
-  "holdToken": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-}
-```
-
-**응답** (201 Created):
-```json
-{
-  "success": true,
-  "data": {
-    "paymentKey": "e8f1b1a4-1a0e-4b1c-9f59-1d4ccfab1f4b",
-    "status": "READY",
-    "amount": 150000,
-    "reservationId": null,
-    "approvedAt": null,
-    "completedAt": null,
-    "canceledAt": null
-  },
-  "message": "OK",
-  "timestamp": "2026-01-25T10:00:00+09:00"
-}
-```
-
-### 결제 승인 (APPROVED)
-```http
-POST /api/payments/{paymentKey}/approve
-Authorization: (세션 쿠키)
-```
-
-**응답** (200 OK):
-```json
-{
-  "success": true,
-  "data": {
-    "paymentKey": "e8f1b1a4-1a0e-4b1c-9f59-1d4ccfab1f4b",
-    "status": "APPROVED",
-    "amount": 150000,
-    "approvedAt": "2026-01-25T10:01:00+09:00"
-  },
-  "message": "OK",
-  "timestamp": "2026-01-25T10:01:00+09:00"
-}
-```
-
-**에러 케이스**:
-- `409 Conflict`: 포인트 부족, 이미 취소됨
-
-### 결제 완료 (COMPLETED)
-```http
-POST /api/payments/{paymentKey}/complete
-Authorization: (세션 쿠키)
-```
-
-**응답** (200 OK):
-```json
-{
-  "success": true,
-  "data": {
-    "paymentKey": "e8f1b1a4-1a0e-4b1c-9f59-1d4ccfab1f4b",
-    "status": "COMPLETED",
-    "amount": 150000,
-    "reservationId": 123,
-    "completedAt": "2026-01-25T10:02:00+09:00"
-  },
-  "message": "OK",
-  "timestamp": "2026-01-25T10:02:00+09:00"
-}
-```
-
-**동작**:
-1. 결제 상태가 APPROVED인지 검증
-2. 예약 확정 처리 (`ReservationService.confirm()` 호출; DB 커밋 후 리스너에서 홀드 해제·이벤트 발행)
-3. 결제 상태 COMPLETED로 변경
-
-### 결제 취소 (CANCELED)
-```http
-POST /api/payments/{paymentKey}/cancel
-Authorization: (세션 쿠키)
-```
-
-**응답** (200 OK):
-```json
-{
-  "success": true,
-  "data": {
-    "paymentKey": "e8f1b1a4-1a0e-4b1c-9f59-1d4ccfab1f4b",
-    "status": "CANCELED",
-    "canceledAt": "2026-01-25T10:03:00+09:00"
-  },
-  "message": "OK",
-  "timestamp": "2026-01-25T10:03:00+09:00"
-}
-```
-
-### 결제 조회
-```http
-GET /api/payments/{paymentKey}
-Authorization: (세션 쿠키)
-```
+취소 공연 환불은 백그라운드 배치로만 동작한다 (사용자 API 없음).
 
 ## 알림 API
 
-### 알림 목록 조회 (폴링용)
-```http
-GET /api/notifications
-Authorization: (세션 쿠키)
-```
-
-**응답** (200 OK):
-```json
-{
-  "success": true,
-  "data": {
-    "items": [
-      {
-        "type": "HOLD_EXPIRED",
-        "message": "예약이 만료되었습니다. A구역 A-1",
-        "createdAt": "2026-01-25T10:00:00+09:00"
-      }
-    ],
-    "unreadCount": 1
-  },
-  "message": "OK",
-  "timestamp": "2026-01-25T10:00:00+09:00"
-}
-```
-
-**동작**:
-1. Redis List에서 알림 조회 (`notify:user:{userId}`)
-2. 최대 50개 반환
-3. 읽지 않은 알림 수 계산
-
-### SSE 실시간 알림 스트림
-```http
-GET /api/notifications/stream
-Authorization: (세션 쿠키)
-Accept: text/event-stream
-```
-
-**응답** (200 OK, `text/event-stream`):
-```
-event: notification
-data: {"type":"HOLD_EXPIRED","message":"예약이 만료되었습니다. A구역 A-1","createdAt":"2026-01-25T10:00:00+09:00"}
-
-event: notification
-data: {"type":"RESERVATION_CONFIRMED","message":"결제가 완료되었습니다. A구역 A-1","createdAt":"2026-01-25T10:00:00+09:00"}
-```
-
-**동작**:
-1. 사용자별 SSE 연결 생성 (`SseEmitter`)
-2. 연결 유지 (30분 타임아웃)
-3. Kafka 이벤트 수신 시 해당 사용자에게 즉시 전송
-4. 연결 종료 시 자동 정리
-
-**이벤트 타입**:
-- `notification`: 알림 이벤트
-
-**에러 케이스**:
-- `401 Unauthorized`: 인증되지 않음
-
-### 알림 전체 삭제
-```http
-DELETE /api/notifications
-Authorization: (세션 쿠키)
-```
-
-**응답** (204 No Content)
-
-**동작**:
-1. Redis List에서 모든 알림 삭제 (`notify:user:{userId}`)
+| 메서드 | 엔드포인트 | 설명 | 인증 |
+|--------|-----------|------|------|
+| GET | `/api/notifications` | 알림 목록 조회 (최대 50개, 폴링용) | 필요 |
+| GET | `/api/notifications/stream` | SSE 실시간 알림 스트림 (30분 타임아웃) | 필요 |
+| DELETE | `/api/notifications` | 알림 전체 삭제 | 필요 |
 
 ## 지표 API
 
-### 지표 조회
-```http
-GET /api/metrics
-Authorization: (세션 쿠키)
-```
+| 메서드 | 엔드포인트 | 설명 | 인증 |
+|--------|-----------|------|------|
+| GET | `/api/metrics` | 접속자 수, 콘서트 수, 예약 수 | 필요 |
 
-**응답** (200 OK):
-```json
-{
-  "success": true,
-  "data": {
-    "activeUsers": 42,
-    "totalConcerts": 10,
-    "openConcerts": 5,
-    "totalReservations": 1234
-  },
-  "message": "OK",
-  "timestamp": "2026-01-25T10:00:00+09:00"
-}
-```
+## 관리자 API (ADMIN)
 
-**동작**:
-1. Redis ZSet에서 활성 사용자 수 조회 (`active:users`, 5분 윈도우)
-2. MySQL에서 콘서트 수 조회
-3. MySQL에서 예약 수 조회
+모든 엔드포인트 `@PreAuthorize("hasRole('ADMIN')")`. 상세는 [admin-setup.md](admin-setup.md) 참고.
 
-## 인증 방식
-
-### 세션 기반 인증
-- Spring Security의 세션 기반 인증 사용
-- 로그인 성공 시 세션 쿠키 발급
-- 세션은 Redis에 저장 (TTL 30분)
-- 모든 API 요청 시 세션 쿠키 필요 (일부 제외)
-
-### 인증 불필요한 엔드포인트
-- `GET /`, `/index.html`
-- `GET /login.html`, `/signup.html`
-- `POST /login`, `/logout`
-- `POST /api/auth/signup`
-- `POST /api/queue/**` (부하 테스트용)
-
-## 요청/응답 예시
-
-### cURL 예시
-
-**콘서트 목록 조회**:
-```bash
-curl -X GET "http://localhost:8080/api/concerts?category=IDOL" \
-  -H "Cookie: JSESSIONID=..."
-```
-
-**대기열 진입**:
-```bash
-curl -X POST "http://localhost:8080/api/queue/enter?concertId=1" \
-  -H "Cookie: JSESSIONID=..."
-```
-
-**홀드 생성**:
-```bash
-curl -X POST "http://localhost:8080/api/holds" \
-  -H "Content-Type: application/json" \
-  -H "Cookie: JSESSIONID=..." \
-  -d '{"concertId":1,"seatId":1}'
-```
-
-**SSE 연결**:
-```bash
-curl -N "http://localhost:8080/api/notifications/stream" \
-  -H "Cookie: JSESSIONID=..."
-```
-
-## 성능 고려사항
-
-### 캐싱
-- 콘서트 목록: Redis 캐시 (5분 TTL)
-- 대기열 순번: Redis ZSet (O(log N))
-
-### 배치 처리
-- 대기열 처리: 2초마다 상위 N명 일괄 입장 허용 (ticketing.queue.batch-size)
-- 홀드 만료: 60초마다 ticketing.hold.cleanup-batch-size 건 일괄 처리
-
-### 연결 풀링
-- Redis: Lettuce 연결 풀 (최대 20개)
-- MySQL: HikariCP 연결 풀
-
-### 폴링 최적화
-- 대기열 상태: 2초마다 폴링
-- 알림 목록: 30초마다 폴링 (SSE 백업용)
-
-## 관리자 API (ADMIN 전용)
-
-ADMIN 역할 사용자만 접근 가능합니다. 엔드포인트 목록 및 사용법은 [관리자 설정 가이드](admin-setup.md#api-엔드포인트-admin-전용)를 참고하세요.
-
-- `GET /api/admin/statistics/users` — 전체 사용자 수
-- `GET /api/admin/statistics/reservations` — 전체 예약 수
-- `GET /api/admin/statistics/payments` — 결제 통계 (오늘, 총액)
-- `GET /api/admin/payments?search=&page=&size=` — 결제 내역 조회
-- `GET /api/admin/users?search=&page=&size=` — 사용자 목록 조회
+| 메서드 | 엔드포인트 | 설명 |
+|--------|-----------|------|
+| GET | `/api/admin/statistics/users` | 전체 사용자 수 |
+| GET | `/api/admin/statistics/reservations` | 전체 예약 수 |
+| GET | `/api/admin/statistics/payments` | 결제 통계 (오늘 완료, 수단별 누적) |
+| GET | `/api/admin/statistics/unsold-seats` | 마감 공연별 미판매 좌석 |
+| GET | `/api/admin/payments?search=&page=&size=` | 결제 내역 조회 |
+| GET | `/api/admin/users?search=&page=&size=` | 사용자 목록 조회 |

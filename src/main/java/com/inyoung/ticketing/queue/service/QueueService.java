@@ -18,7 +18,9 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.stereotype.Service;
 
-// Redis 기반 콘서트별 대기열 서비스
+// Redis 기반 콘서트별 대기열 서비스.
+// 콘서트별로 ZSET(순번) + String(토큰 메타데이터) 조합을 사용해
+// "대기 순번/대기인원 조회"와 "사용자/콘서트별 토큰 조회"를 분리한다.
 @Service
 public class QueueService {
 	private static final String QUEUE_CONCERT_KEY_PREFIX = "queue:concert:";
@@ -29,7 +31,6 @@ public class QueueService {
 	private final ObjectMapper objectMapper;
 	private final TicketingProperties properties;
 
-	// Redis 템플릿 및 설정 주입
 	public QueueService(StringRedisTemplate redisTemplate, TicketingProperties properties) {
 		this.redisTemplate = redisTemplate;
 		this.properties = properties;
@@ -38,7 +39,10 @@ public class QueueService {
 			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 	}
 
-	// 콘서트 대기열 진입 (토큰 발급)
+	// 콘서트 대기열 진입 (토큰 발급).
+	// 동일 콘서트에 이미 존재하는 사용자의 토큰은 먼저 제거한 뒤,
+	// 새 UUID 토큰을 발급해 "사용자당 한 콘서트에 하나의 대기열 항목"만 유지한다.
+	// 토큰 상세 정보는 String, 순번/대기열은 ZSET으로 분리 저장한다.
 	public QueueTokenInfo enterQueue(Long concertId, String userId) {
 		String queueKey = queueKey(concertId);
 		// 공정성을 위해 기존 토큰은 제거하고 새로 발급한다.
@@ -62,21 +66,18 @@ public class QueueService {
 		return new QueueTokenInfo(token, rank, totalWaiting);
 	}
 
-	// 대기 순번 조회
 	public Long getRank(Long concertId, String token) {
 		String queueKey = queueKey(concertId);
 		Long rank = redisTemplate.opsForZSet().rank(queueKey, token);
 		return rank != null ? rank + 1 : null;
 	}
 
-	// 콘서트별 대기인원 수 조회
 	public Long countWaiting(Long concertId) {
 		String queueKey = queueKey(concertId);
 		Long size = redisTemplate.opsForZSet().size(queueKey);
 		return size == null ? 0L : size;
 	}
 
-	// 입장 허용 여부 확인
 	public Optional<Long> isAllowed(String token) {
 		String allowedKey = allowedKey(token);
 		String allowedDataJson = redisTemplate.opsForValue().get(allowedKey);
@@ -87,7 +88,6 @@ public class QueueService {
 		return Optional.of(allowedData.getConcertId());
 	}
 
-	// 입장 허용 상태 설정
 	public void allowEntry(String token, Long concertId) {
 		String allowedKey = allowedKey(token);
 		QueueAllowedData allowedData = new QueueAllowedData(concertId, Instant.now());
@@ -96,7 +96,6 @@ public class QueueService {
 		redisTemplate.opsForValue().set(allowedKey, allowedDataJson, Duration.ofSeconds(tokenTtlSeconds));
 	}
 
-	// 대기열에서 상위 N명 조회 (스케줄러용)
 	public List<String> getTopTokens(Long concertId, int limit) {
 		String queueKey = queueKey(concertId);
 		Set<String> tokens = redisTemplate.opsForZSet().range(queueKey, 0, limit - 1);
@@ -106,7 +105,7 @@ public class QueueService {
 		return tokens.stream().toList();
 	}
 
-	// 만료된 토큰 정리 (토큰 키가 없는 항목 제거)
+	// ZSet을 ZSCAN 해 토큰 String 키가 TTL 만료로 사라진 항목을 제거한다.
 	public int pruneExpiredTokens(Long concertId, int maxScan) {
 		String queueKey = queueKey(concertId);
 		ScanOptions options = ScanOptions.scanOptions().count(maxScan).build();
@@ -135,7 +134,6 @@ public class QueueService {
 		return expiredTokens.size();
 	}
 
-	// 토큰 정보 조회
 	public Optional<QueueTokenData> getTokenData(String token) {
 		String tokenKey = tokenKey(token);
 		String tokenDataJson = redisTemplate.opsForValue().get(tokenKey);
@@ -145,7 +143,6 @@ public class QueueService {
 		return Optional.of(fromJson(tokenDataJson, QueueTokenData.class));
 	}
 
-	// 대기열에서 나가기
 	public void exitQueue(Long concertId, String token) {
 		String queueKey = queueKey(concertId);
 		redisTemplate.opsForZSet().remove(queueKey, token);
@@ -155,7 +152,6 @@ public class QueueService {
 		redisTemplate.delete(allowedKey);
 	}
 
-	// 기존 토큰 제거 (동일 사용자, 동일 콘서트)
 	private void removeExistingTokens(Long concertId, String userId) {
 		String queueKey = queueKey(concertId);
 		Set<String> tokens = redisTemplate.opsForZSet().range(queueKey, 0, -1);
@@ -200,7 +196,6 @@ public class QueueService {
 		}
 	}
 
-	// 대기열 토큰 정보 (내부 클래스)
 	public static class QueueTokenInfo {
 		private final String token;
 		private final Long rank;
@@ -225,7 +220,6 @@ public class QueueService {
 		}
 	}
 
-	// 대기열 토큰 데이터 (Redis 저장용)
 	public static class QueueTokenData {
 		private String userId;
 		private Long concertId;
@@ -265,7 +259,6 @@ public class QueueService {
 		}
 	}
 
-	// 입장 허용 데이터 (Redis 저장용)
 	public static class QueueAllowedData {
 		private Long concertId;
 		private Instant allowedAt;

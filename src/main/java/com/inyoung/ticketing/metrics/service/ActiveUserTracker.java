@@ -16,7 +16,6 @@ public class ActiveUserTracker {
 		this.redisTemplate = redisTemplate;
 	}
 
-	// 로그인/활동 시점 기록
 	public void recordActive(String userId) {
 		if (userId == null || userId.isBlank()) {
 			return;
@@ -27,7 +26,6 @@ public class ActiveUserTracker {
 		redisTemplate.expire(ACTIVE_USERS_KEY, Duration.ofHours(1));
 	}
 
-	// 로그아웃 시 제거
 	public void removeActive(String userId) {
 		if (userId == null || userId.isBlank()) {
 			return;
@@ -35,7 +33,6 @@ public class ActiveUserTracker {
 		redisTemplate.opsForZSet().remove(ACTIVE_USERS_KEY, userId);
 	}
 
-	// 최근 WINDOW 내 접속자 수
 	public long countActive() {
 		long now = System.currentTimeMillis();
 		cleanupOld(now);

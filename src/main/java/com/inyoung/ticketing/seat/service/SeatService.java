@@ -9,19 +9,20 @@ import com.inyoung.ticketing.seat.dto.SeatResponse;
 import com.inyoung.ticketing.seat.repository.SeatRepository;
 import org.springframework.stereotype.Service;
 
-// 좌석 조회 서비스
+// 좌석 조회 서비스.
+// DB의 좌석 상태(AVAILABLE/RESERVED)와 Redis의 홀드 상태를 결합해
+// 프론트에 AVAILABLE / HELD / RESERVED 3가지 상태로 반환한다.
 @Service
 public class SeatService {
 	private final SeatRepository seatRepository;
 	private final HoldStore holdStore;
 
-	// 리포지토리 주입
 	public SeatService(SeatRepository seatRepository, HoldStore holdStore) {
 		this.seatRepository = seatRepository;
 		this.holdStore = holdStore;
 	}
 
-	// 콘서트별 좌석 목록과 Redis 홀드 상태를 결합
+	// DB 좌석 목록을 조회한 뒤, Redis에서 현재 홀드 중인 좌석 ID를 가져와 상태를 오버레이한다.
 	public List<SeatResponse> listSeats(Long concertId) {
 		List<Seat> seats = seatRepository.findByConcertId(concertId);
 		List<Long> seatIds = seats.stream().map(Seat::getId).toList();

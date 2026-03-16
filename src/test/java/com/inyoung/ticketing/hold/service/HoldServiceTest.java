@@ -16,6 +16,7 @@ import com.inyoung.ticketing.hold.dto.HoldRequest;
 import com.inyoung.ticketing.hold.event.SeatHoldEventPublisher;
 import com.inyoung.ticketing.hold.store.HoldStore;
 import com.inyoung.ticketing.lock.LockService;
+import com.inyoung.ticketing.metrics.HoldReleaseMetrics;
 import com.inyoung.ticketing.seat.domain.Seat;
 import com.inyoung.ticketing.seat.domain.SeatStatus;
 import com.inyoung.ticketing.seat.repository.SeatRepository;
@@ -45,6 +46,8 @@ class HoldServiceTest {
 	private HoldStore holdStore;
 	@Mock
 	private SeatHoldEventPublisher eventPublisher;
+	@Mock
+	private HoldReleaseMetrics holdReleaseMetrics;
 
 	private TicketingProperties properties;
 	private HoldService holdService;
@@ -65,6 +68,7 @@ class HoldServiceTest {
 			properties,
 			holdStore,
 			eventPublisher,
+			holdReleaseMetrics,
 			new SimpleMeterRegistry()
 		);
 	}

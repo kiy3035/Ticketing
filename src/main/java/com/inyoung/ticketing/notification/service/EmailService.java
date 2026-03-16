@@ -6,7 +6,7 @@ import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 
-// 이메일 전송 서비스
+// Google SMTP(JavaMailSender) 기반 이메일 전송 서비스.
 @Service
 public class EmailService {
 	private static final Logger logger = LoggerFactory.getLogger(EmailService.class);
@@ -16,7 +16,6 @@ public class EmailService {
 		this.mailSender = mailSender;
 	}
 
-	// 결제 완료 이메일 전송
 	public void sendPaymentCompleteEmail(String email, String username, String concertName, long amount) {
 		try {
 			SimpleMailMessage message = new SimpleMailMessage();
@@ -33,7 +32,6 @@ public class EmailService {
 		}
 	}
 
-	// 결제 완료 이메일 본문 작성
 	private String buildPaymentCompleteEmailBody(String username, String concertName, long amount) {
 		return String.format(
 			"안녕하세요, %s님!\n\n" +

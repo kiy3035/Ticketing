@@ -6,7 +6,8 @@ import com.inyoung.ticketing.hold.store.HoldInfo;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
-// 홀드/예약 이벤트 발행
+// 홀드/예약 관련 이벤트를 Kafka 토픽(ticketing.seat-hold-events)에 발행한다.
+// Kafka 파티션 키로 seatId를 사용해 동일 좌석 이벤트가 순서대로 처리되도록 한다.
 @Service
 public class SeatHoldEventPublisher {
 	private final KafkaTemplate<String, SeatHoldEvent> kafkaTemplate;

@@ -13,12 +13,10 @@ public class TicketingProperties {
 	private Refund refund = new Refund();
 	private Toss toss = new Toss();
 
-	// 홀드 관련 설정 접근자
 	public Hold getHold() {
 		return hold;
 	}
 
-	// 좌석 락 관련 설정 접근자
 	public Lock getLock() {
 		return lock;
 	}
@@ -31,17 +29,14 @@ public class TicketingProperties {
 		return kafka;
 	}
 
-	// 대기열 관련 설정 접근자
 	public Queue getQueue() {
 		return queue;
 	}
 
-	// 결제 관련 설정 접근자 (결제 진행 중 홀드 연장 등)
 	public Payment getPayment() {
 		return payment;
 	}
 
-	// 토스페이먼츠 PG 설정 접근자
 	public Toss getToss() {
 		return toss;
 	}
@@ -58,22 +53,18 @@ public class TicketingProperties {
 		/** 홀드 정리 배치 한 번에 처리할 만료 홀드 수. 기본 200. */
 		private int cleanupBatchSize = 200;
 
-		// 홀드 TTL(초)
 		public long getTtlSeconds() {
 			return ttlSeconds;
 		}
 
-		// 홀드 TTL 설정
 		public void setTtlSeconds(long ttlSeconds) {
 			this.ttlSeconds = ttlSeconds;
 		}
 
-		// 홀드 정리 스케줄러 주기(밀리초)
 		public long getCleanupIntervalMs() {
 			return cleanupIntervalMs;
 		}
 
-		// 홀드 정리 스케줄러 주기 설정
 		public void setCleanupIntervalMs(long cleanupIntervalMs) {
 			this.cleanupIntervalMs = cleanupIntervalMs;
 		}
@@ -146,47 +137,38 @@ public class TicketingProperties {
 		/** 대기 인원이 이 값 초과일 때만 대기열 필요(패턴 B). 이하면 바로 좌석 페이지 진입 가능. 0이면 항상 대기열 없음. */
 		private int activationThreshold = 50;
 
-		// 배치 크기 (한 번에 처리할 사용자 수)
 		public int getBatchSize() {
 			return batchSize;
 		}
 
-		// 배치 크기 설정
 		public void setBatchSize(int batchSize) {
 			this.batchSize = batchSize;
 		}
 
-		// 처리 주기(밀리초)
 		public long getProcessingIntervalMs() {
 			return processingIntervalMs;
 		}
 
-		// 처리 주기 설정
 		public void setProcessingIntervalMs(long processingIntervalMs) {
 			this.processingIntervalMs = processingIntervalMs;
 		}
 
-		// 토큰 TTL(초)
 		public long getTokenTtlSeconds() {
 			return tokenTtlSeconds;
 		}
 
-		// 토큰 TTL 설정
 		public void setTokenTtlSeconds(long tokenTtlSeconds) {
 			this.tokenTtlSeconds = tokenTtlSeconds;
 		}
 
-		// 만료 토큰 정리 주기(밀리초)
 		public long getCleanupIntervalMs() {
 			return cleanupIntervalMs;
 		}
 
-		// 만료 토큰 정리 주기 설정
 		public void setCleanupIntervalMs(long cleanupIntervalMs) {
 			this.cleanupIntervalMs = cleanupIntervalMs;
 		}
 
-		// 한 번에 정리할 토큰 수
 		public int getCleanupBatchSize() {
 			return cleanupBatchSize;
 		}
@@ -207,7 +189,6 @@ public class TicketingProperties {
 			this.activationThreshold = activationThreshold;
 		}
 
-		// 정리 배치 크기 설정
 		public void setCleanupBatchSize(int cleanupBatchSize) {
 			this.cleanupBatchSize = cleanupBatchSize;
 		}

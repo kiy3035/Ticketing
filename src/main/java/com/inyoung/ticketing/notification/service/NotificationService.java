@@ -10,7 +10,9 @@ import com.inyoung.ticketing.notification.dto.NotificationItemResponse;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
-// 알림 저장/조회 서비스
+// 알림 저장/조회 서비스.
+// 사용자별로 최근 MAX_ITEMS 개의 알림만 Redis List 에 보관하고,
+// 7일 TTL 을 적용해 오래된 알림 데이터는 자동으로 정리한다.
 @Service
 public class NotificationService {
 	private static final String KEY_PREFIX = "notify:user:";

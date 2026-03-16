@@ -38,9 +38,11 @@ import org.springframework.web.server.ResponseStatusException;
  * 결제 서비스: 포인트 결제(회원 포인트 차감) / 카드 결제(토스페이먼츠 주문서형 위젯 후 승인 API) 분기 처리.
  *
  * [흐름] request → approve → complete.
- * - request: READY Payment 생성. CARD 시 orderId 부여(위젯 requestPayment 에 사용).
+ * - request: READY Payment 생성. CARD 시 orderId 부여(위젯 requestPayment 에 사용), 동일 holdToken 재요청 시 기존 Payment 재사용.
  * - approve: POINT → users.point 차감 후 APPROVED. CARD → body(paymentKey, orderId, amount) 검증 후 토스 confirm 호출, tossPaymentKey 저장 후 APPROVED.
- * - complete: 예약 확정(ReservationService.confirm), COMPLETED, reservationId 저장, 결제 완료 이벤트 발행.
+ * - complete: ReservationService.confirm 를 통해 예약을 확정하고, COMPLETED + reservationId 저장 후 Kafka 로 결제 완료 이벤트 발행.
+ *
+ * 강한 일관성이 필요한 "금전/좌석" 상태는 DB 트랜잭션으로, 이메일/SMS 알림은 Kafka 기반 비동기 처리로 분리한다.
  */
 @Service
 public class PaymentService {

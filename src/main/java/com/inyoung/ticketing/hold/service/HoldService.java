@@ -29,7 +29,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-// 좌석 홀드 생성/취소 서비스
+// 좌석 홀드 생성/취소 서비스.
+// DB의 좌석 상태(RESERVED)와 Redis 홀드/락을 함께 고려해
+// "이미 예약된 좌석은 절대 홀드되지 않고, 홀드된 좌석만 결제로 넘어가도록" 보장한다.
 @Service
 public class HoldService {
 	private final SeatRepository seatRepository;
@@ -70,7 +72,11 @@ public class HoldService {
 	}
 
 	@Transactional
-	// 좌석을 홀드 상태로 전환하고 홀드 토큰을 발급
+	// 좌석을 홀드 상태로 전환하고 홀드 토큰을 발급한다.
+	// - 좌석/공연 상태를 검증한 뒤,
+	// - 좌석 단위 Redis 락을 먼저 획득하고,
+	// - Redis Lua 스크립트(HoldStore)를 통해 좌석→토큰, 토큰→홀드 정보, 만료 ZSET을 한 번에 갱신한다.
+	// 이렇게 해서 "이미 RESERVED인 좌석"과 "동시에 들어온 다른 홀드 요청"을 모두 차단한다.
 	public HoldResponse createHold(HoldRequest request, String userId) {
 		Seat seat = seatRepository.findById(request.getSeatId())
 			.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Seat not found"));
@@ -128,13 +134,14 @@ public class HoldService {
 			holdCreatedCounter.increment();
 			return new HoldResponse(holdToken, expiresAt);
 		} finally {
-			// 락 해제
 			lockService.unlock(lockKey, lockToken.get());
 		}
 	}
 
 	@Transactional
-	// 홀드 취소 및 좌석 상태 복원
+	// 홀드 취소 및 좌석 상태 복원.
+	// Redis에서 홀드 정보를 조회해 소유자 검증 후, Lua 스크립트 기반 release로
+	// 좌석→토큰, 토큰→홀드, 만료 ZSET, 사용자별 Set까지 한 번에 정리한다.
 	public void cancelHold(String holdToken, String userId) {
 		HoldInfo info = holdStore.getHold(holdToken)
 			.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hold not found"));

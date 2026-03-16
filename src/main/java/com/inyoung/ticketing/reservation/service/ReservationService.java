@@ -28,7 +28,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-// 좌석 예약 확정 서비스
+// 좌석 예약 확정 서비스.
+// 결제 완료 단계에서 전달된 홀드 토큰을 검증하고,
+// 좌석 단위 Redis 락 + DB 트랜잭션을 조합해 좌석 상태를 RESERVED 로 확정한다.
 @Service
 public class ReservationService {
 	private final SeatRepository seatRepository;
@@ -97,7 +99,11 @@ public class ReservationService {
 	}
 
 	@Transactional
-	// 홀드를 검증하고 예약 확정 처리
+	// 홀드를 검증하고 예약 확정 처리.
+	// 1) Redis 에서 홀드 정보를 조회·만료/소유자 검증
+	// 2) 좌석 단위 락을 획득해 동시 예약 경쟁 차단
+	// 3) 좌석/공연 상태(취소/시각/기예약 여부) 검증 후 Reservation 생성, 좌석 RESERVED 로 변경
+	// 4) DB 커밋 이후 ReservationConfirmedEvent 리스너가 Redis 홀드 해제·Kafka 이벤트 발행을 수행
 	public ReservationResponse confirm(ReservationRequest request, String userId) {
 		HoldInfo hold = holdStore.getHold(request.getHoldToken())
 			.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hold not found"));
@@ -152,7 +158,6 @@ public class ReservationService {
 
 			return new ReservationResponse(saved);
 		} finally {
-			// 락 해제
 			lockService.unlock(lockKey, lockToken.get());
 		}
 	}

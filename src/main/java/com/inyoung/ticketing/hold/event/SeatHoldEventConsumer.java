@@ -11,7 +11,8 @@ import com.inyoung.ticketing.seat.repository.SeatRepository;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
-// 홀드 만료 알림을 처리하는 Kafka 소비자
+// 홀드 만료(HOLD_EXPIRED)·예약 확정(RESERVATION_CONFIRMED) 이벤트를 수신해
+// Redis 알림 저장(폴링 백업) + SSE 실시간 전송을 수행하는 Kafka 소비자.
 @Component
 public class SeatHoldEventConsumer {
 	private final NotificationService notificationService;

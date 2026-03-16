@@ -10,12 +10,13 @@ import com.inyoung.ticketing.concert.repository.ConcertRepository;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
-// 콘서트 조회 서비스
+// 콘서트 조회 서비스.
+// Redis 캐시(@Cacheable)를 활용해 동일 조건의 반복 조회를 줄이고,
+// 예매 가능(UPCOMING) / 지난 공연(COMPLETED) 두 가지 뷰를 제공한다.
 @Service
 public class ConcertService {
 	private final ConcertRepository concertRepository;
 
-	// 리포지토리 주입
 	public ConcertService(ConcertRepository concertRepository) {
 		this.concertRepository = concertRepository;
 	}

@@ -20,7 +20,9 @@ import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.support.serializer.JsonSerializer;
 import org.apache.kafka.common.serialization.StringDeserializer;
 
-// Kafka 프로듀서 설정
+// Kafka Producer/Consumer Factory 및 ListenerContainerFactory 설정.
+// 홀드 이벤트(SeatHoldEvent)와 결제 완료 이벤트(PaymentCompleteEvent) 두 종류를
+// 별도의 직렬화/역직렬화 체인으로 분리 구성한다.
 @Configuration
 @EnableKafka
 public class KafkaConfig {
@@ -70,7 +72,6 @@ public class KafkaConfig {
 		return factory;
 	}
 
-	// ===== 결제 알림 이벤트 설정 =====
 	@Bean
 	public ProducerFactory<String, PaymentCompleteEvent> paymentCompleteProducerFactory(
 		KafkaProperties kafkaProperties,

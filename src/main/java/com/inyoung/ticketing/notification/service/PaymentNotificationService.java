@@ -10,7 +10,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
-// 결제 완료 알림 서비스
+// 결제 완료 알림 라우터.
+// 사용자의 notiType(email/sms)에 따라 EmailService 또는 SmsService 로 분기한다.
+// 알림 실패가 결제 프로세스를 중단시키지 않도록 예외를 catch 해 로깅만 수행한다.
 @Service
 public class PaymentNotificationService {
 	private static final Logger logger = LoggerFactory.getLogger(PaymentNotificationService.class);
@@ -31,7 +33,6 @@ public class PaymentNotificationService {
 		this.concertRepository = concertRepository;
 	}
 
-	// 결제 완료 알림 전송
 	public void notifyPaymentComplete(String userId, Long concertId, long amount) {
 		try {
 			Users user = usersRepository.findByUsername(userId)

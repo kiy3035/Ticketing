@@ -19,7 +19,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-// 사용자 계정 서비스 및 인증 사용자 조회
+// 사용자 계정 서비스 및 인증 사용자 조회.
+// - 회원 가입 시 초기 포인트/역할/알림 수단을 설정하고 환영 이메일을 비동기적으로 전송한다.
+// - 스프링 시큐리티의 UserDetailsService 를 구현해 세션 기반 인증에 필요한 사용자 정보를 제공한다.
 @Service
 public class UsersService implements UserDetailsService {
 	private static final Logger logger = LoggerFactory.getLogger(UsersService.class);
@@ -38,7 +40,9 @@ public class UsersService implements UserDetailsService {
 		this.emailService = emailService;
 	}
 
-	// 회원가입 처리
+	// 회원가입 처리.
+	// username 중복 여부를 검사하고, 패스워드는 해시 저장하며,
+	// 가입 축하 포인트(SIGNUP_POINT_BONUS)를 지급한다.
 	@Transactional
 	public void signup(SignupRequest request) {
 		if (usersRepository.existsByUsername(request.getUsername())) {
@@ -68,7 +72,6 @@ public class UsersService implements UserDetailsService {
 		}
 	}
 
-	// 마이페이지 정보 조회
 	@Transactional(readOnly = true)
 	public MyPageResponse loadMyPage(String username) {
 		Users account = usersRepository.findByUsername(username)
@@ -84,7 +87,6 @@ public class UsersService implements UserDetailsService {
 		);
 	}
 
-	// 로그인 사용자의 역할 조회
 	@Transactional(readOnly = true)
 	public String loadUserRole(String username) {
 		Users account = usersRepository.findByUsername(username)
@@ -92,7 +94,6 @@ public class UsersService implements UserDetailsService {
 		return account.getRole();
 	}
 
-	// 스프링 시큐리티 사용자 로딩
 	@Override
 	public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
 		Users account = usersRepository.findByUsername(username)
