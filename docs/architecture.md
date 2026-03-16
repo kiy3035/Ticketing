@@ -19,12 +19,12 @@ flowchart LR
     subgraph aws [AWS]
         ALB[ALB<br/>Application Load Balancer]
 
-        subgraph appCluster [App Servers (t3.small x2)]
+        subgraph appCluster [App Servers t3-small x2]
             App1[App Server 1<br/>Docker + Spring Boot]
             App2[App Server 2<br/>Docker + Spring Boot]
         end
 
-        subgraph infra [Infra Server (t3a.medium)]
+        subgraph infra [Infra Server t3a-medium]
             DC[Docker Compose]
             Redis[(Redis)]
             Kafka[(Kafka + Zookeeper)]
