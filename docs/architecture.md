@@ -4,29 +4,32 @@
 
 ```mermaid
 flowchart LR
+    %% 사용자
     subgraph user [사용자]
-        Client[Browser]
+        Browser[Browser]
     end
 
+    %% CI/CD
+    subgraph cicd [CI/CD]
+        GH[GitHub]
+        GHA[GitHub Actions]
+    end
+
+    %% AWS
     subgraph aws [AWS]
         ALB[ALB<br/>Application Load Balancer]
 
-        subgraph app1 [App Server 1 — t3.small]
-            Docker1[Docker]
-            Boot1[Spring Boot<br/>Java 21]
+        subgraph appCluster [App Servers (t3.small x2)]
+            App1[App Server 1<br/>Docker + Spring Boot]
+            App2[App Server 2<br/>Docker + Spring Boot]
         end
 
-        subgraph app2 [App Server 2 — t3.small]
-            Docker2[Docker]
-            Boot2[Spring Boot<br/>Java 21]
-        end
-
-        subgraph infra [Infra Server — t3a.medium]
-            DockerInfra[Docker Compose]
+        subgraph infra [Infra Server (t3a.medium)]
+            DC[Docker Compose]
             Redis[(Redis)]
-            Kafka[Kafka + Zookeeper]
-            Prometheus[Prometheus]
-            Grafana[Grafana]
+            Kafka[(Kafka + Zookeeper)]
+            Prom[Prometheus]
+            Graf[Grafana]
         end
 
         RDS[(Amazon RDS<br/>MySQL)]
@@ -36,28 +39,28 @@ flowchart LR
         end
     end
 
-    subgraph cicd [CI/CD]
-        GH[GitHub]
-        GHA[GitHub Actions]
-    end
+    %% 흐름
+    Browser --> ALB
+    ALB --> App1
+    ALB --> App2
 
-    Client --> ALB
-    ALB --> Boot1
-    ALB --> Boot2
-    Boot1 --> RDS
-    Boot2 --> RDS
-    Boot1 --> Redis
-    Boot2 --> Redis
-    Boot1 --> Kafka
-    Boot2 --> Kafka
-    Prometheus --> Boot1
-    Prometheus --> Boot2
-    Grafana --> Prometheus
+    App1 --> RDS
+    App2 --> RDS
+
+    App1 --> Redis
+    App2 --> Redis
+    App1 --> Kafka
+    App2 --> Kafka
+
+    Prom --> App1
+    Prom --> App2
+    Graf --> Prom
+
     K6 --> ALB
 
     GH --> GHA
-    GHA -->|deploy| Boot1
-    GHA -->|deploy| Boot2
+    GHA --> App1
+    GHA --> App2
 ```
 
 | 구성 요소 | 스펙 | 용도 |
