@@ -1,103 +1,108 @@
 # 아키텍처
 
-## 시스템 구성도
+## 인프라 구성도
+
+```mermaid
+flowchart LR
+    subgraph user [사용자]
+        Client[Browser]
+    end
+
+    subgraph aws [AWS]
+        ALB[ALB<br/>Application Load Balancer]
+
+        subgraph app1 [App Server 1 — t3.small]
+            Docker1[Docker]
+            Boot1[Spring Boot<br/>Java 21]
+        end
+
+        subgraph app2 [App Server 2 — t3.small]
+            Docker2[Docker]
+            Boot2[Spring Boot<br/>Java 21]
+        end
+
+        subgraph infra [Infra Server — t3a.medium]
+            DockerInfra[Docker Compose]
+            Redis[(Redis)]
+            Kafka[Kafka + Zookeeper]
+            Prometheus[Prometheus]
+            Grafana[Grafana]
+        end
+
+        RDS[(Amazon RDS<br/>MySQL)]
+
+        subgraph k6srv [k6 Server]
+            K6[k6 부하 테스트]
+        end
+    end
+
+    subgraph cicd [CI/CD]
+        GH[GitHub]
+        GHA[GitHub Actions]
+    end
+
+    Client --> ALB
+    ALB --> Boot1
+    ALB --> Boot2
+    Boot1 --> RDS
+    Boot2 --> RDS
+    Boot1 --> Redis
+    Boot2 --> Redis
+    Boot1 --> Kafka
+    Boot2 --> Kafka
+    Prometheus --> Boot1
+    Prometheus --> Boot2
+    Grafana --> Prometheus
+    K6 --> ALB
+
+    GH --> GHA
+    GHA -->|deploy| Boot1
+    GHA -->|deploy| Boot2
+```
+
+| 구성 요소 | 스펙 | 용도 |
+|-----------|------|------|
+| **App Server x2** | t3.small | Spring Boot 애플리케이션 (Docker) |
+| **Infra Server** | t3a.medium | Redis, Kafka, Prometheus, Grafana (Docker Compose) |
+| **RDS** | MySQL | 영구 데이터 (공연, 좌석, 예약, 결제, 사용자) |
+| **ALB** | — | 트래픽 분산, 헬스체크 (`/actuator/health`) |
+| **k6 Server** | — | 부하 테스트 실행 |
+| **GitHub Actions** | — | main push → 빌드 → EC2 배포 |
+
+## 애플리케이션 레이어 구조
 
 ```mermaid
 flowchart TB
-    subgraph client [Client Layer]
-        Web[Static Web Pages<br/>HTML/CSS/JS]
-        SSE[EventSource<br/>SSE Client]
-    end
+    Controller["Controller Layer<br/>(REST API + SSE)"]
+    Security["Spring Security<br/>(Redis Session 인증)"]
+    Service["Service Layer<br/>(비즈니스 로직, @Transactional)"]
+    Store["Store Layer<br/>(HoldStore · RedisLockService)"]
+    Scheduler["Scheduler Layer<br/>(대기열 처리 · 홀드 정리 · 환불 배치)"]
+    Event["Event Layer<br/>(Kafka Producer/Consumer)"]
+    MySQL[(MySQL)]
+    Redis[(Redis)]
+    Kafka[Kafka]
 
-    subgraph api [Spring Boot Application]
-        subgraph security [Security Layer]
-            Sec[Spring Security<br/>인증/인가]
-        end
-        
-        subgraph controllers [Controller Layer]
-            AuthCtrl[AuthApiController]
-            ConcertCtrl[ConcertController]
-            QueueCtrl[QueueController]
-            SeatCtrl[SeatController]
-            HoldCtrl[HoldController]
-            ResvCtrl[ReservationController]
-            NotifCtrl[NotificationController]
-            NotifSSE[NotificationSseController]
-            MetricsCtrl[MetricsController]
-        end
-        
-        subgraph services [Service Layer]
-            AuthSvc[UsersService]
-            ConcertSvc[ConcertService]
-            QueueSvc[QueueService]
-            SeatSvc[SeatService]
-            HoldSvc[HoldService]
-            ResvSvc[ReservationService]
-            NotifSvc[NotificationService]
-            SSENotifSvc[SseNotificationService]
-            MetricsSvc[MetricsService]
-            ActiveUser[ActiveUserTracker]
-        end
-        
-        subgraph stores [Store Layer]
-            HoldStore[HoldStore<br/>Redis 기반]
-            LockSvc[RedisLockService<br/>분산 락]
-        end
-        
-        subgraph schedulers [Scheduler Layer]
-            QueueScheduler[QueueProcessingScheduler<br/>대기열 입장 허용 2초]
-            QueueCleanup[QueueCleanupScheduler<br/>대기열 만료 토큰 정리 60초]
-            HoldCleanup[HoldCleanupScheduler<br/>홀드 만료 정리 60초]
-            RefundBatch[RefundForCancelledConcertScheduler<br/>취소 공연 환불 5분]
-        end
-        
-        subgraph events [Event Layer]
-            EventPub[SeatHoldEventPublisher<br/>Kafka Producer]
-            EventCon[SeatHoldEventConsumer<br/>Kafka Consumer]
-        end
-    end
-
-    subgraph data [Data Layer]
-        MySQL[(MySQL<br/>영구 데이터)]
-        Redis[(Redis<br/>세션/홀드/락/캐시/대기열)]
-    end
-
-    subgraph stream [Streaming Layer]
-        Kafka[Apache Kafka<br/>이벤트 스트리밍]
-    end
-
-    Web --> Sec
-    SSE --> Sec
-    Sec --> controllers
-    controllers --> services
-    services --> MySQL
-    services --> Redis
-    services --> stores
-    stores --> Redis
-    services --> EventPub
-    EventPub --> Kafka
-    Kafka --> EventCon
-    EventCon --> NotifSvc
-    EventCon --> SSENotifSvc
-    SSENotifSvc --> SSE
-    schedulers --> services
-    schedulers --> EventPub
+    Controller --> Security --> Service
+    Service --> Store
+    Service --> MySQL
+    Store --> Redis
+    Scheduler --> Service
+    Scheduler --> Store
+    Event --> Kafka
+    Service --> Event
 ```
 
-## 레이어 요약
-
-| 레이어 | 핵심 역할 | 비고 |
-|--------|-----------|------|
-| **Security** | Spring Security 세션 기반 인증/인가 | Redis 세션 저장 |
+| 레이어 | 역할 | 비고 |
+|--------|------|------|
+| **Security** | 세션 기반 인증/인가 | Redis 세션 저장 |
 | **Controller** | REST API + SSE 엔드포인트 | `ApiResponse` 공통 래핑 |
-| **Service** | 도메인별 비즈니스 로직, `@Transactional`, `@Cacheable` | 트랜잭션 경계 관리 |
-| **Store** | Redis 기반 홀드 저장소 + 분산 락 | Lua 스크립트 원자성 보장 |
-| **Scheduler** | 대기열 처리, 홀드/토큰 정리, 환불 배치 | 4종, 주기 설정 가능 |
+| **Service** | 도메인 비즈니스 로직 | `@Transactional`, `@Cacheable` |
+| **Store** | Redis 기반 홀드 저장소 + 분산 락 | Lua 스크립트 원자성 |
+| **Scheduler** | 대기열·홀드·토큰 정리, 환불 배치 | 4종, 분산 락으로 중복 방지 |
 | **Event** | Kafka Producer/Consumer | 알림·SSE 비동기 전달 |
 
 ## 핵심 예매 플로우 (End-to-End)
-
-대기열 진입부터 예약 확정까지의 전체 흐름을 하나의 시퀀스로 표현한다.
 
 ```mermaid
 sequenceDiagram
@@ -157,22 +162,38 @@ sequenceDiagram
 
 ```mermaid
 erDiagram
+    USERS ||--o{ RESERVATION : makes
+    USERS ||--o{ PAYMENT : pays
     CONCERT ||--o{ SEAT : has
     CONCERT ||--o{ RESERVATION : reserves
-    SEAT ||--o{ RESERVATION : reserves
-    USERS ||--o{ RESERVATION : makes
+    CONCERT ||--o{ PAYMENT : "결제 대상"
+    SEAT ||--o| RESERVATION : reserves
+    SEAT ||--o| PAYMENT : "결제 좌석"
+    RESERVATION ||--o| PAYMENT : "결제 연결"
+
+    USERS {
+        BIGINT id PK
+        STRING username UK
+        STRING pw
+        STRING email
+        STRING phone
+        STRING noti_type
+        STRING role
+        BIGINT point
+        DATETIME created_at
+    }
 
     CONCERT {
         BIGINT id PK
         STRING title
         STRING venue
-        DATETIME concert_at
-        STRING status
+        INSTANT concert_at
+        ENUM status
         ENUM category
         BIGINT seller_id FK
         DATETIME created_at
     }
-    
+
     SEAT {
         BIGINT id PK
         BIGINT concert_id FK
@@ -181,7 +202,7 @@ erDiagram
         BIGINT price
         ENUM status
     }
-    
+
     RESERVATION {
         BIGINT id PK
         BIGINT concert_id FK
@@ -190,16 +211,26 @@ erDiagram
         ENUM status
         DATETIME reserved_at
     }
-    
-    USERS {
+
+    PAYMENT {
         BIGINT id PK
-        STRING username UK
-        STRING pw
+        STRING payment_key UK
+        STRING hold_token UK
+        STRING user_id
+        BIGINT concert_id FK
+        BIGINT seat_id FK
+        LONG amount
+        ENUM payment_method
+        STRING order_id
+        STRING toss_payment_key
+        ENUM status
+        BIGINT reservation_id FK
+        DATETIME approved_at
+        DATETIME completed_at
+        DATETIME canceled_at
         DATETIME created_at
     }
 ```
-
-`payment` 테이블: `payment_key`(UUID), `hold_token`, `user_id`, `concert_id`, `seat_id`, `amount`, `status`(READY/APPROVED/COMPLETED/CANCELED), `payment_method`(POINT/CARD), `reservation_id`, 타임스탬프 컬럼들.
 
 ## 확장성
 
