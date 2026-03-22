@@ -10,5 +10,6 @@
 | [deployment-ec2.md](deployment-ec2.md) | AWS EC2 배포 구성 |
 | [load-test-results.md](load-test-results.md) | k6 부하 테스트 결과 |
 | [monitoring.md](monitoring.md) | Prometheus/Grafana 메트릭 |
+| [oauth2-login.md](oauth2-login.md) | Google OAuth2 로그인(서버 사이드, JIT 가입, 세션) |
 | [payment-method-and-toss.md](payment-method-and-toss.md) | 결제 수단(포인트/카드) |
 | [admin-setup.md](admin-setup.md) | 관리자/판매자 역할 |

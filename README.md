@@ -177,6 +177,7 @@
 ### Backend
 - **Spring Boot 3.4.1**: 애플리케이션 프레임워크
 - **Spring Security**: 인증 및 보안
+- **Spring OAuth2 Client**: Google 로그인(Authorization Code, 서버 콜백 후 Redis 세션)
 - **Spring Data JPA**: 데이터베이스 접근
 - **Spring Data Redis**: Redis 접근
 - **Spring Kafka**: Kafka 통합
@@ -229,7 +230,15 @@ KAFKA_CONSUMER_GROUP=ticketing-notification
 # SOLAPI_API_KEY=...
 # SOLAPI_API_SECRET=...
 # SOLAPI_FROM_NUMBER=01000000000
+
+# Google OAuth2 (선택, 로그인 화면의「Google로 로그인」)
+# GOOGLE_CLIENT_ID=....apps.googleusercontent.com
+# GOOGLE_CLIENT_SECRET=...
+# Google Cloud Console > OAuth 클라이언트 > 승인된 리디렉션 URI:
+#   http://localhost:8080/login/oauth2/code/google
 ```
+
+최초 Google 로그인 시 DB에 사용자가 자동 생성(JIT)되며, 내부 `username`은 `g{Google sub}` 형태(충돌 시 접미사)입니다. OAuth 계정은 알림 기본값이 이메일이며 전화번호가 없을 수 있습니다.
 
 ### 2. 인프라 실행
 ```bash
@@ -258,7 +267,7 @@ docker compose up -d
 
 1. **회원가입/로그인**
    - `/signup.html`에서 회원가입
-   - `/login.html`에서 로그인
+   - `/login.html`에서 ID/비밀번호 로그인 또는 Google OAuth(환경 변수 설정 시)
 
 2. **콘서트 탐색**
    - `/app.html`에서 카테고리/검색으로 콘서트 탐색

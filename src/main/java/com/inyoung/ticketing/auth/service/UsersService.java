@@ -1,6 +1,7 @@
 package com.inyoung.ticketing.auth.service;
 
 import java.util.Collections;
+import java.util.UUID;
 import com.inyoung.ticketing.auth.domain.Users;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import com.inyoung.ticketing.auth.dto.MyPageResponse;
@@ -105,5 +106,64 @@ public class UsersService implements UserDetailsService {
 			account.getPw(),
 			Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + role))
 		);
+	}
+
+	/**
+	 * OAuth2 콜백 시 IdP 계정과 매핑된 사용자를 반환. 최초면 JIT 가입(포인트·역할은 일반 가입과 동일 정책).
+	 */
+	@Transactional
+	public Users provisionOAuthUser(String registrationId, String oauthSubject, String email) {
+		return usersRepository.findByOauthProviderAndOauthSubject(registrationId, oauthSubject)
+			.orElseGet(() -> createOAuthUser(registrationId, oauthSubject, email));
+	}
+
+	private Users createOAuthUser(String registrationId, String oauthSubject, String email) {
+		String username = generateOauthUsername(registrationId, oauthSubject);
+		String safeEmail = (email != null && !email.isBlank())
+			? email
+			: "oauth+" + oauthSubject + "@placeholder.local";
+
+		Users account = new Users();
+		account.setUsername(username);
+		account.setPw(passwordEncoder.encode(UUID.randomUUID().toString()));
+		account.setEmail(safeEmail);
+		account.setPhone(null);
+		account.setNotiType("email");
+		account.setPoint(SIGNUP_POINT_BONUS);
+		account.setRole("USER");
+		account.setOauthProvider(registrationId);
+		account.setOauthSubject(oauthSubject);
+		usersRepository.save(account);
+
+		if (email != null && !email.isBlank()) {
+			try {
+				emailService.sendSignupSuccessEmail(email, username);
+			} catch (Exception e) {
+				logger.warn("OAuth signup success email failed for {}: {}", email, e.getMessage());
+			}
+		}
+		return account;
+	}
+
+	private String generateOauthUsername(String registrationId, String oauthSubject) {
+		String base = "google".equals(registrationId)
+			? "g" + oauthSubject
+			: registrationId + "_" + oauthSubject;
+		if (base.length() > 50) {
+			base = base.substring(0, 50);
+		}
+		if (!usersRepository.existsByUsername(base)) {
+			return base;
+		}
+		for (int i = 0; i < 20; i++) {
+			String suffix = "_" + UUID.randomUUID().toString().replace("-", "").substring(0, 6);
+			String candidate = base.length() + suffix.length() > 50
+				? base.substring(0, Math.max(1, 50 - suffix.length())) + suffix
+				: base + suffix;
+			if (!usersRepository.existsByUsername(candidate)) {
+				return candidate;
+			}
+		}
+		throw new IllegalStateException("Could not allocate unique username for OAuth user");
 	}
 }

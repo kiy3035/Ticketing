@@ -556,6 +556,44 @@ img { max-width: 100%; display: block; }
 	background: var(--panel);
 }
 .helper { color: var(--muted); font-size: 12px; }
+.oauth-divider {
+	text-align: center;
+	margin: 20px 0 12px;
+	position: relative;
+}
+.oauth-divider::before,
+.oauth-divider::after {
+	content: "";
+	position: absolute;
+	top: 50%;
+	width: 38%;
+	height: 1px;
+	background: var(--line);
+}
+.oauth-divider::before { left: 0; }
+.oauth-divider::after { right: 0; }
+.oauth-row { margin: 0 0 8px; text-align: center; }
+a.button {
+	display: inline-block;
+	text-decoration: none;
+	text-align: center;
+	box-sizing: border-box;
+}
+.button.secondary {
+	background: var(--panel);
+	border: 1px solid var(--line);
+	color: var(--text);
+	padding: 12px 18px;
+	border-radius: 12px;
+	cursor: pointer;
+	font-weight: 600;
+	width: 100%;
+	max-width: 100%;
+}
+.button.secondary:hover {
+	background: var(--panel-2);
+	border-color: var(--muted);
+}
 
 .notification-preference {
 	margin-bottom: 20px;

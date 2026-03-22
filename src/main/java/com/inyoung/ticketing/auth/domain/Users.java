@@ -15,7 +15,8 @@ import jakarta.persistence.UniqueConstraint;
 @Table(
 	name = "users",
 	uniqueConstraints = {
-		@UniqueConstraint(columnNames = { "username" })
+		@UniqueConstraint(columnNames = { "username" }),
+		@UniqueConstraint(name = "uk_users_oauth", columnNames = { "oauth_provider", "oauth_subject" })
 	}
 )
 public class Users {
@@ -32,8 +33,15 @@ public class Users {
 	@Column(nullable = false, length = 100)
 	private String email;
 
-	@Column(nullable = false, length = 20)
+	/** OAuth 가입 등 전화번호 없음 허용. SMS 알림 시 이메일로 대체 처리 */
+	@Column(length = 20)
 	private String phone;
+
+	@Column(name = "oauth_provider", length = 32)
+	private String oauthProvider;
+
+	@Column(name = "oauth_subject", length = 255)
+	private String oauthSubject;
 
 	@Column(nullable = false, length = 20)
 	private String notiType = "sms";
@@ -96,6 +104,22 @@ public class Users {
 	// 휴대폰번호 설정
 	public void setPhone(String phone) {
 		this.phone = phone;
+	}
+
+	public String getOauthProvider() {
+		return oauthProvider;
+	}
+
+	public void setOauthProvider(String oauthProvider) {
+		this.oauthProvider = oauthProvider;
+	}
+
+	public String getOauthSubject() {
+		return oauthSubject;
+	}
+
+	public void setOauthSubject(String oauthSubject) {
+		this.oauthSubject = oauthSubject;
 	}
 
 	// 알림 방식

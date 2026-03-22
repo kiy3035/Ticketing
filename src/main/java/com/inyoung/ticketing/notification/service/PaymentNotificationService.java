@@ -52,12 +52,22 @@ public class PaymentNotificationService {
 					amount
 				);
 			} else if ("sms".equals(notiType)) {
-				smsService.sendPaymentCompleteSms(
-					user.getPhone(),
-					user.getUsername(),
-					concert.getTitle(),
-					amount
-				);
+				if (user.getPhone() == null || user.getPhone().isBlank()) {
+					logger.warn("SMS requested but no phone for user {}, sending email instead", userId);
+					emailService.sendPaymentCompleteEmail(
+						user.getEmail(),
+						user.getUsername(),
+						concert.getTitle(),
+						amount
+					);
+				} else {
+					smsService.sendPaymentCompleteSms(
+						user.getPhone(),
+						user.getUsername(),
+						concert.getTitle(),
+						amount
+					);
+				}
 			} else {
 				logger.warn("Unknown notification type: {}", notiType);
 			}

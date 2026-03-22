@@ -17,6 +17,8 @@ public interface UsersRepository extends JpaRepository<Users, Long> {
 	// 사용자 아이디로 조회
 	Optional<Users> findByUsername(String username);
 
+	Optional<Users> findByOauthProviderAndOauthSubject(String oauthProvider, String oauthSubject);
+
 	// 사용자 아이디로 조회 (락 포함)
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	Optional<Users> findWithLockByUsername(String username);
