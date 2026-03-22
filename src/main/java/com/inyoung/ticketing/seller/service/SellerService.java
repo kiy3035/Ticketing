@@ -70,6 +70,14 @@ public class SellerService {
 		return now.isBefore(c.getConcertAt()) ? ConcertStatus.UPCOMING : ConcertStatus.COMPLETED;
 	}
 
+	/** DB에 직접 넣거나 mysqldump 복원 시에도 목록이 갱신되도록, 공연 변경 시마다 콘서트 목록 캐시를 비운다. */
+	private void evictConcertListCache() {
+		var cache = cacheManager.getCache(CacheNames.CONCERT_LIST);
+		if (cache != null) {
+			cache.clear();
+		}
+	}
+
 	@Transactional(readOnly = true)
 	public List<SellerConcertResponse> getMyConcerts(String username) {
 		Users seller = getSeller(username);
@@ -103,8 +111,7 @@ public class SellerService {
 		c.setStatus(ConcertStatus.UPCOMING);
 		c.setSeller(seller);
 		Concert saved = concertRepository.save(c);
-		var cache = cacheManager.getCache(CacheNames.CONCERT_LIST);
-		if (cache != null) cache.clear();
+		evictConcertListCache();
 		java.time.OffsetDateTime createdAtOffset = saved.getCreatedAt() == null ? null
 			: saved.getCreatedAt().atZone(java.time.ZoneId.of("Asia/Seoul")).toOffsetDateTime();
 		return new SellerConcertResponse(
@@ -138,6 +145,7 @@ public class SellerService {
 		if (request.getConcertAt() != null) c.setConcertAt(request.getConcertAt());
 		if (request.getCategory() != null) c.setCategory(request.getCategory());
 		concertRepository.save(c);
+		evictConcertListCache();
 		return getConcert(username, concertId);
 	}
 
@@ -146,6 +154,7 @@ public class SellerService {
 		Concert c = getConcertOwnedBy(concertId, getSeller(username).getId());
 		c.setStatus(ConcertStatus.CANCELLED);
 		concertRepository.save(c);
+		evictConcertListCache();
 	}
 
 	@Transactional(readOnly = true)
