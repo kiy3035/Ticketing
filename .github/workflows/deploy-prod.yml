@@ -17,36 +17,18 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
 
       - name: Build with Gradle
         run: |
           chmod +x ./gradlew
           ./gradlew clean build -x test
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ticketing-app
-          path: build/libs/*.jar
+      - name: Package JAR for Docker
+        run: cp build/libs/ticketing-*-SNAPSHOT.jar ticketing-app.jar
 
-      - name: Download artifact on runner
-        uses: actions/download-artifact@v4
-        with:
-          name: ticketing-app
-          path: build/libs
-
-      - name: Copy JAR to EC2
-        env:
-          EC2_HOST: ${{ secrets.EC2_HOST }} # e.g. ec2-1-2-3-4.ap-northeast-2.compute.amazonaws.com
-          EC2_USER: ${{ secrets.EC2_USER }} # e.g. ec2-user
-          EC2_KEY: ${{ secrets.EC2_SSH_KEY }} # private key (GitHub Secret)
-        run: |
-          echo "$EC2_KEY" > ec2_key.pem
-          chmod 600 ec2_key.pem
-          scp -o StrictHostKeyChecking=no -i ec2_key.pem build/libs/*.jar $EC2_USER@$EC2_HOST:/home/$EC2_USER/ticketing/ticketing-app.jar
-
-      - name: Restart app on EC2
+      # 앱 서버에는 JAR·Docker 정의만 전송 (소스·*.md·문서 디렉터리 없음)
+      - name: Copy bundle to EC2
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_USER: ${{ secrets.EC2_USER }}
@@ -54,20 +36,18 @@ jobs:
         run: |
           echo "$EC2_KEY" > ec2_key.pem
           chmod 600 ec2_key.pem
-          ssh -o StrictHostKeyChecking=no -i ec2_key.pem $EC2_USER@$EC2_HOST << 'EOF'
-          set -e
-          APP_DIR=/home/$EC2_USER/ticketing
-          JAR_NAME=ticketing-app.jar
+          ssh -o StrictHostKeyChecking=no -i ec2_key.pem "$EC2_USER@$EC2_HOST" "mkdir -p ~/ticketing"
+          scp -o StrictHostKeyChecking=no -i ec2_key.pem \
+            ticketing-app.jar Dockerfile.runtime docker-compose.app.yml \
+            "$EC2_USER@$EC2_HOST:~/ticketing/"
 
-          # 임시로 아주 단순한 systemd-like 실행 스크립트 예시
-          mkdir -p "$APP_DIR"
-          cd "$APP_DIR"
-
-          # 기존 프로세스 종료 (포트 기준 or pid 파일 기준 등은 실제 환경에 맞게 수정 필요)
-          pkill -f "$JAR_NAME" || true
-
-          nohup java -jar "$JAR_NAME" \
-            --spring.profiles.active=prod \
-            > app.log 2>&1 &
-          EOF
-
+      - name: Rebuild image and run on EC2
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          echo "$EC2_KEY" > ec2_key.pem
+          chmod 600 ec2_key.pem
+          ssh -o StrictHostKeyChecking=no -i ec2_key.pem "$EC2_USER@$EC2_HOST" \
+            "cd ~/ticketing && docker compose -f docker-compose.app.yml up -d --build"

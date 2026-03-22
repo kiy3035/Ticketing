@@ -1,0 +1,17 @@
+# 앱 서버 전용 (MySQL/Redis/Kafka 는 인프라 서버에 두고 .env 로 주소 지정)
+# 빌드: Dockerfile.runtime + 같은 디렉터리의 ticketing-app.jar (CI가 scp 하거나, 로컬에서 bootJar 후 cp)
+# 소스만으로 이미지 빌드: docker build -f Dockerfile .
+# 수평 확장: 동일 이미지·동일 .env 를 EC2 여러 대에 두고 ALB 앞에 두면 됨.
+services:
+  ticketing:
+    build:
+      context: .
+      dockerfile: Dockerfile.runtime
+    image: ticketing-app:local
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+    restart: unless-stopped

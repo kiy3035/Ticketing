@@ -1,0 +1,11 @@
+# 사전 빌드된 JAR만으로 이미지 생성 (CI/CD → EC2 배포용)
+# 로컬: ./gradlew bootJar -x test && cp build/libs/*-SNAPSHOT.jar ticketing-app.jar && docker compose -f docker-compose.app.yml build
+FROM eclipse-temurin:21-jre-jammy
+RUN groupadd -r app && useradd -r -g app -u 1000 app
+WORKDIR /app
+COPY ticketing-app.jar app.jar
+USER app
+EXPOSE 8080
+ENV SPRING_PROFILES_ACTIVE=prod
+ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
+ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar /app/app.jar"]

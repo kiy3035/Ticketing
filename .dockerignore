@@ -1,0 +1,15 @@
+.git
+.github
+.gradle
+build
+bin
+.idea
+.vscode
+*.md
+.env
+.env.*
+logs
+load-tests
+docs
+plan
+.cursor
