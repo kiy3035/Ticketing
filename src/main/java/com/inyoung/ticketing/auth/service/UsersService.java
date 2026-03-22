@@ -109,7 +109,17 @@ public class UsersService implements UserDetailsService {
 	}
 
 	/**
-	 * OAuth2 콜백 시 IdP 계정과 매핑된 사용자를 반환. 최초면 JIT 가입(포인트·역할은 일반 가입과 동일 정책).
+	 * <b>소셜 로그인 후</b> IdP(Identity Provider, 여기서는 Google) 계정과 우리 {@code users} 행을 1:1로 연결한다.
+	 * <p>
+	 * <b>용어</b>
+	 * <ul>
+	 *   <li>{@code registrationId} : {@code application.properties} 의 {@code spring.security.oauth2.client.registration.google} 에서
+	 *       마지막 이름. 예: {@code google}. (같은 DB에 카카오를 붙이면 {@code kakao} 같은 값이 또 생길 수 있음)</li>
+	 *   <li>{@code oauthSubject} : IdP 가 발급한 계정 불변 ID. OpenID 에서 흔히 {@code sub} 클레임. 이메일과 별개로 쓴다.</li>
+	 * </ul>
+	 * <p>
+	 * 이미 ({@code oauth_provider}, {@code oauth_subject}) 로 행이 있으면 그대로 반환하고,
+	 * 없으면 <b>JIT(Just-In-Time) 가입</b>으로 새 행을 만든다. 별도 "구글 회원가입" 화면은 없다.
 	 */
 	@Transactional
 	public Users provisionOAuthUser(String registrationId, String oauthSubject, String email) {
@@ -117,6 +127,13 @@ public class UsersService implements UserDetailsService {
 			.orElseGet(() -> createOAuthUser(registrationId, oauthSubject, email));
 	}
 
+	/**
+	 * OAuth 전용 계정 한 건을 DB에 넣는다.
+	 * <ul>
+	 *   <li>비밀번호: 우리가 알 수 없으므로 랜덤 문자열을 BCrypt — 폼 로그인으로는 사실상 로그인 불가.</li>
+	 *   <li>{@code username}: 서비스 전역에서 쓰는 로그인 ID. {@code g} + {@code sub} 형태로 만들어 {@code users.username} 유니크와 맞춘다.</li>
+	 * </ul>
+	 */
 	private Users createOAuthUser(String registrationId, String oauthSubject, String email) {
 		String username = generateOauthUsername(registrationId, oauthSubject);
 		String safeEmail = (email != null && !email.isBlank())
@@ -127,7 +144,8 @@ public class UsersService implements UserDetailsService {
 		account.setUsername(username);
 		account.setPw(passwordEncoder.encode(UUID.randomUUID().toString()));
 		account.setEmail(safeEmail);
-		account.setPhone(null);
+		// 기존 DB에 phone 이 NOT NULL인 스키마가 남아 있으면 null INSERT 가 실패한다. 빈 문자열은 "번호 없음"으로 취급(알림은 notiType/email 분기).
+		account.setPhone("");
 		account.setNotiType("email");
 		account.setPoint(SIGNUP_POINT_BONUS);
 		account.setRole("USER");
@@ -145,6 +163,10 @@ public class UsersService implements UserDetailsService {
 		return account;
 	}
 
+	/**
+	 * IdP 마다 {@code sub} 형식이 달라도, 우리 DB {@code username} 컬럼(길이 제한) 안에 들어가도록 문자열을 만든다.
+	 * 충돌 시 짧은 랜덤 접미사로 재시도한다.
+	 */
 	private String generateOauthUsername(String registrationId, String oauthSubject) {
 		String base = "google".equals(registrationId)
 			? "g" + oauthSubject

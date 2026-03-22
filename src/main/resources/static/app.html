@@ -19,6 +19,8 @@
 		}
 		.app-tab:hover { color: var(--text); }
 		.app-tab.active { color: var(--primary-2); border-bottom-color: var(--primary-2); }
+		.app-tab .tab-count { margin-left: 6px; font-weight: 600; color: var(--muted); font-size: 13px; }
+		.app-tab.active .tab-count { color: var(--primary-2); }
 	</style>
 </head>
 <body>
@@ -30,7 +32,6 @@
 		<nav class="nav">
 			<a href="/app.html" class="active">콘서트</a>
 			<a href="/reservations.html">예매내역</a>
-			<span>고객센터</span>
 		</nav>
 		<div class="user">
 			<div class="notifications">
@@ -80,8 +81,8 @@
 
 		<section class="filter-bar">
 			<div class="app-tabs">
-				<button type="button" class="app-tab active" data-past="false">예매 가능</button>
-				<button type="button" class="app-tab" data-past="true">지난 공연</button>
+				<button type="button" class="app-tab active" data-past="false">예매 가능<span id="tabCountUpcoming" class="tab-count">-</span></button>
+				<button type="button" class="app-tab" data-past="true">지난 공연<span id="tabCountPast" class="tab-count">-</span></button>
 			</div>
 			<div class="chip-group">
 				<button class="chip active" data-category="ALL">전체</button>

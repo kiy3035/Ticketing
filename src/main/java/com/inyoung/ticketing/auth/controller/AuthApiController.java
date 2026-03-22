@@ -70,6 +70,13 @@ public class AuthApiController {
 		return ResponseEntity.ok(usersService.loadMyPage(name));
 	}
 
+	/**
+	 * 세션에 올라온 인증 정보에서 "우리 서비스 로그인 ID" 문자열을 꺼낸다.
+	 * 폼 로그인은 {@link org.springframework.security.core.userdetails.UserDetails#getUsername()},
+	 * OAuth/OIDC 는 {@link org.springframework.security.oauth2.core.user.OAuth2User} 등이 {@link java.security.Principal} 로
+	 * 올 때 {@link Principal#getName()} 이 {@link com.inyoung.ticketing.auth.oauth.OAuth2UserAttributeNames#INTERNAL_USERNAME} 으로
+	 * 맞춰져 있어 DB 의 {@code username} 과 같다.
+	 */
 	private String extractName(Authentication authentication) {
 		Object principal = authentication.getPrincipal();
 		if (principal instanceof UserDetails userDetails) {

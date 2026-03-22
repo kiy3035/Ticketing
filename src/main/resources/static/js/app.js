@@ -29,6 +29,8 @@ let showPast = false; // false: 예매 가능, true: 지난 공연
 let searchTimer = null;
 const concertCache = new Map();
 const CACHE_TTL_MS = 30000;
+const tabCountUpcoming = document.getElementById('tabCountUpcoming');
+const tabCountPast = document.getElementById('tabCountPast');
 
 const formatDate = (value) => (window.formatDateKorea ? window.formatDateKorea(value) : new Date(value).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }));
 
@@ -130,6 +132,26 @@ const loadConcerts = async () => {
 	}
 };
 
+const loadTabCounts = async () => {
+	try {
+		const result = await window.fetchJson('/api/concerts/counts');
+		if (!result.ok || !result.data) {
+			return;
+		}
+		const u = result.data.upcoming;
+		const p = result.data.past;
+		if (tabCountUpcoming) {
+			tabCountUpcoming.textContent = typeof u === 'number' ? ` ${u}건` : ' -';
+		}
+		if (tabCountPast) {
+			tabCountPast.textContent = typeof p === 'number' ? ` ${p}건` : ' -';
+		}
+	} catch (error) {
+		if (tabCountUpcoming) tabCountUpcoming.textContent = ' -';
+		if (tabCountPast) tabCountPast.textContent = ' -';
+	}
+};
+
 const loadMetrics = async () => {
 	try {
 		const result = await window.fetchJson('/api/metrics');
@@ -193,9 +215,11 @@ listEl.addEventListener('click', async (e) => {
 });
 
 loadConcerts();
+loadTabCounts();
 loadMetrics();
 
 setInterval(loadMetrics, 5000);
+setInterval(loadTabCounts, 30000);
 
 // 예매 가이드 모달
 (function () {

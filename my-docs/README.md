@@ -13,6 +13,7 @@
 | [04-payment-and-refund.md](04-payment-and-refund.md) | **결제·환불**: request → approve → complete, 공연 취소 시 환불 배치 순서, POINT/CARD 차이 |
 | [05-schedulers.md](05-schedulers.md) | **스케줄러 4종**: 대기열 입장 허용, 대기열 정리, 홀드 만료 정리, 취소 공연 환불 — 언제 무엇을 하는지 |
 | [06-redis-kafka-reference.md](06-redis-kafka-reference.md) | **Redis·Kafka 참고**: 키 이름, ZSet/String 용도, Kafka 토픽·이벤트 타입 (docs/data.md 요약 + 코드 위치) |
+| [07-oauth2-login.md](07-oauth2-login.md) | **OAuth2(Google)**: 용어, Authorization Code 흐름, JIT 가입, `internal_username` 이유, 코드 위치, 삭제 시 주의 |
 
 ## 🔗 docs/ 와의 관계
 

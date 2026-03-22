@@ -66,6 +66,12 @@ public interface ConcertRepository extends JpaRepository<Concert, Long> {
 		@Param("now") java.time.Instant now
 	);
 
+	@Query("select count(c) from Concert c where c.concertAt >= :now")
+	long countUpcomingConcerts(@Param("now") Instant now);
+
+	@Query("select count(c) from Concert c where c.concertAt < :now")
+	long countPastConcerts(@Param("now") Instant now);
+
 	/** 마감된 공연(concertAt < now) 중 취소가 아닌 것. 미판매 좌석 통계용 */
 	@Query("select c from Concert c where c.concertAt < :now and c.status <> :excludeStatus order by c.concertAt desc")
 	Page<Concert> findEndedConcertsNotCancelled(

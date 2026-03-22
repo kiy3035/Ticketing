@@ -10,7 +10,12 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 
-// 사용자 계정 엔티티
+/**
+ * 로컬(폼) 가입과 소셜(OAuth/OIDC) 가입이 같은 테이블을 쓴다.
+ * <p>
+ * 소셜만 해당: {@code oauth_provider} + {@code oauth_subject} 가 있으면 IdP 계정과 매핑된 행이다.
+ * 폼 가입만 한 행은 둘 다 null 일 수 있다.
+ */
 @Entity
 @Table(
 	name = "users",
@@ -37,9 +42,11 @@ public class Users {
 	@Column(length = 20)
 	private String phone;
 
+	/** OAuth2 클라이언트 등록 ID (예: google). {@code oauth_subject} 와 함께 IdP 계정을 유일하게 식별한다. */
 	@Column(name = "oauth_provider", length = 32)
 	private String oauthProvider;
 
+	/** IdP 가 발급한 계정 불변 ID. OpenID 에서 흔히 {@code sub} 클레임과 동일한 값을 저장한다. */
 	@Column(name = "oauth_subject", length = 255)
 	private String oauthSubject;
 

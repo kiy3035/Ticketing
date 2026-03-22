@@ -1,6 +1,7 @@
 package com.inyoung.ticketing.concert.controller;
 
 import java.util.List;
+import com.inyoung.ticketing.concert.dto.ConcertListCounts;
 import com.inyoung.ticketing.concert.dto.ConcertResponse;
 import com.inyoung.ticketing.concert.service.ConcertService;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,6 +17,12 @@ public class ConcertController {
 
 	public ConcertController(ConcertService concertService) {
 		this.concertService = concertService;
+	}
+
+	// 예매 가능 / 지난 공연 전체 건수(카테고리·검색어 없음, 목록과 동일한 시간 기준)
+	@GetMapping("/counts")
+	public ConcertListCounts listConcertCounts() {
+		return concertService.listConcertCounts();
 	}
 
 	// 콘서트 목록 조회. past=false(기본): 예매 가능 공연, past=true: 지난 공연(오늘 날짜·현재 시간 기준)

@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 import com.inyoung.ticketing.cache.CacheNames;
 import com.inyoung.ticketing.concert.domain.ConcertCategory;
+import com.inyoung.ticketing.concert.dto.ConcertListCounts;
 import com.inyoung.ticketing.concert.dto.ConcertResponse;
 import com.inyoung.ticketing.concert.repository.ConcertRepository;
 import org.springframework.cache.annotation.Cacheable;
@@ -34,6 +35,15 @@ public class ConcertService {
 		return concerts.stream()
 			.map(ConcertResponse::new)
 			.collect(Collectors.toList());
+	}
+
+	/** 목록 API와 동일한 기준(공연 일시 vs 현재 시각)으로 전체 건수만 조회 */
+	public ConcertListCounts listConcertCounts() {
+		Instant now = Instant.now();
+		return new ConcertListCounts(
+			concertRepository.countUpcomingConcerts(now),
+			concertRepository.countPastConcerts(now)
+		);
 	}
 
 	private ConcertCategory parseCategory(String category) {
