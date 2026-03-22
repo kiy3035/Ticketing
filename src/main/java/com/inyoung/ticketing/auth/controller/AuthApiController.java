@@ -1,6 +1,7 @@
 package com.inyoung.ticketing.auth.controller;
 
 import java.security.Principal;
+import java.util.Map;
 import com.inyoung.ticketing.auth.dto.AuthMeResponse;
 import com.inyoung.ticketing.auth.dto.MyPageResponse;
 import com.inyoung.ticketing.auth.dto.SignupRequest;
@@ -30,11 +31,11 @@ public class AuthApiController {
 		this.activeUserTracker = activeUserTracker;
 	}
 
-	// 회원가입 처리
+	// 회원가입 처리 (빈 본문 201은 브라우저 fetch + JSON 파싱에서 깨질 수 있어 명시적 JSON 반환)
 	@PostMapping("/signup")
-	public ResponseEntity<Void> signup(@Valid @RequestBody SignupRequest request) {
+	public ResponseEntity<Map<String, Boolean>> signup(@Valid @RequestBody SignupRequest request) {
 		usersService.signup(request);
-		return ResponseEntity.status(HttpStatus.CREATED).build();
+		return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("success", true));
 	}
 
 	// 로그인 사용자 정보 조회 (이름 및 역할)

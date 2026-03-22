@@ -1,19 +1,31 @@
 const fetchJson = async (url, options = {}) => {
 	const res = await fetch(url, options);
 	const contentType = res.headers.get('content-type') || '';
+	const rawText = await res.text();
 	let payload = null;
-	if (contentType.includes('application/json')) {
-		payload = await res.json();
-	} else {
-		payload = await res.text();
+	const trimmed = rawText.trim();
+	if (trimmed.length > 0 && contentType.includes('application/json')) {
+		try {
+			payload = JSON.parse(rawText);
+		} catch {
+			payload = { message: rawText };
+		}
+	} else if (trimmed.length > 0) {
+		payload = rawText;
 	}
 	const unwrap = (data) =>
 		data && typeof data === 'object' && 'data' in data ? data.data : data;
+	const errorObj =
+		payload && typeof payload === 'object'
+			? payload
+			: trimmed.length > 0
+				? { message: typeof payload === 'string' ? payload : rawText }
+				: null;
 	const result = {
 		ok: res.ok,
 		status: res.status,
 		data: unwrap(payload),
-		error: payload
+		error: errorObj
 	};
 	return result;
 };
