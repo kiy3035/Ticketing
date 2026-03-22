@@ -31,23 +31,21 @@ jobs:
       - name: Copy bundle to EC2
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
-          EC2_USER: ${{ secrets.EC2_USER }}
           EC2_KEY: ${{ secrets.EC2_SSH_KEY }}
         run: |
           echo "$EC2_KEY" > ec2_key.pem
           chmod 600 ec2_key.pem
-          ssh -o StrictHostKeyChecking=no -i ec2_key.pem "$EC2_USER@$EC2_HOST" "mkdir -p ~/ticketing"
+          ssh -o StrictHostKeyChecking=no -i ec2_key.pem "ubuntu@$EC2_HOST" "mkdir -p ~/ticketing"
           scp -o StrictHostKeyChecking=no -i ec2_key.pem \
             ticketing-app.jar Dockerfile.runtime docker-compose.app.yml \
-            "$EC2_USER@$EC2_HOST:~/ticketing/"
+            "ubuntu@$EC2_HOST:~/ticketing/"
 
       - name: Rebuild image and run on EC2
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
-          EC2_USER: ${{ secrets.EC2_USER }}
           EC2_KEY: ${{ secrets.EC2_SSH_KEY }}
         run: |
           echo "$EC2_KEY" > ec2_key.pem
           chmod 600 ec2_key.pem
-          ssh -o StrictHostKeyChecking=no -i ec2_key.pem "$EC2_USER@$EC2_HOST" \
+          ssh -o StrictHostKeyChecking=no -i ec2_key.pem "ubuntu@$EC2_HOST" \
             "cd ~/ticketing && docker compose -f docker-compose.app.yml up -d --build"
