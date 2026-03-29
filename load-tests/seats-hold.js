@@ -10,6 +10,10 @@ import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { baseUrl, concertId, formLogin } from './lib/common.js';
 
+// VU 시작 시 한 번만 로그인. 매 이터레이션 로그인 시 30 VU가 같은 계정을 쓰면
+// Spring Session Fixation Protection 이 이전 세션을 무효화해 DELETE 등이 401로 실패함.
+let loggedIn = false;
+
 // [조정] 홀드 경합을 보려면 VU·플래토 시간을 올려 같은 공연·좌석 풀에 걸기
 export const options = {
   stages: [
@@ -30,8 +34,11 @@ const TEST_USER = __ENV.TEST_USER || '';
 const TEST_PASS = __ENV.TEST_PASS || '';
 
 export default function () {
-  if (!formLogin(BASE, TEST_USER, TEST_PASS)) {
-    return;
+  if (!loggedIn) {
+    if (!formLogin(BASE, TEST_USER, TEST_PASS)) {
+      return;
+    }
+    loggedIn = true;
   }
 
   const seatsRes = http.get(`${BASE}/api/concerts/${CID}/seats`);

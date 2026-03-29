@@ -29,9 +29,15 @@ const CID = concertId();
 // [조정] 한 루프 끝난 뒤 쉼: 짧을수록 RPS↑·DB 부담↑
 const LOOP_SLEEP_SEC = 0.2;
 
+// VU 시작 시 한 번만 로그인 (매 이터레이션 로그인 시 세션 충돌 방지)
+let loggedIn = false;
+
 export default function () {
-  if (!formLogin(BASE, __ENV.TEST_USER || '', __ENV.TEST_PASS || '')) {
-    return;
+  if (!loggedIn) {
+    if (!formLogin(BASE, __ENV.TEST_USER || '', __ENV.TEST_PASS || '')) {
+      return;
+    }
+    loggedIn = true;
   }
 
   const counts = http.get(`${BASE}/api/concerts/counts`);

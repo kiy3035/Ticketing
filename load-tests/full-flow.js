@@ -11,23 +11,27 @@
  *   → docs/monitoring.md 메트릭과 대조.
  *
  * 실행: k6 run -e BASE_URL=... -e CONCERT_ID=... -e TEST_USER=... -e TEST_PASS=... load-tests/full-flow.js
+ *
+ * --- 대시보드 6패널을 full-flow만으로 채우기 ---
+ * - 대기열 인원: 앱 설정상 queue required 가 false 이면 0이 정상. 쌓이게 하려면 queue-flow 병행 또는 activation-threshold 조정.
+ * - 캐시 RPS: 기본 full-flow 는 /api/queue/count 를 거의 안 둠. Grafana 맞추려면 -e K6_EXTRA_QUEUE_COUNT=15 처럼 이터레이션마다 count 호출 횟수 지정.
  */
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { baseUrl, concertId, formLogin } from './lib/common.js';
 
-// [조정] 동시 사용자(VU) 곡선: duration / target 을 단계마다 바꿔 knee point 탐색
+// [조정] t3a.small x2(k6·앱) 기준으로 이전보다 강하게. CPU 크레딧·포인트·좌석 고갈 시 단계·VU 낮추기.
 export const options = {
   stages: [
-    { duration: '30s', target: 10 }, // [조정] 워밍업 시간·초기 VU
-    { duration: '1m', target: 30 }, // [조정] 플래토1: 유지 시간·VU
-    { duration: '1m', target: 50 }, // [조정] 플래토2
-    { duration: '30s', target: 0 }, // [조정] 램프다운
+    { duration: '30s', target: 25 }, // [조정] 워밍업
+    { duration: '90s', target: 60 }, // [조정] 플래토1
+    { duration: '2m', target: 100 }, // [조정] 플래토2
+    { duration: '90s', target: 140 }, // [조정] 피크 (너무 세면 여기 target 만 줄이기)
+    { duration: '45s', target: 0 }, // [조정] 램프다운
   ],
-  // [조정] 임계치: 너무 빡세면 테스트가 실패로 끝나므로, 탐색 초기에는 완화 후 점점 타이트하게
   thresholds: {
-    http_req_duration: ['p(95)<5000'],
-    http_req_failed: ['rate<0.2'],
+    http_req_duration: ['p(95)<8000'],
+    http_req_failed: ['rate<0.35'],
   },
 };
 
@@ -35,13 +39,20 @@ const BASE = baseUrl();
 const CID = concertId();
 const TEST_USER = __ENV.TEST_USER || '';
 const TEST_PASS = __ENV.TEST_PASS || '';
+const K6_EXTRA_QUEUE_COUNT = Math.max(0, parseInt(__ENV.K6_EXTRA_QUEUE_COUNT || '0', 10) || 0);
 
 /** 부하 테스트에서 허용하는 결제 수단은 포인트뿐. CARD 등으로 바꾸지 말 것(k6·토스 위젯 불가). */
 const PAYMENT_METHOD_POINT = 'POINT';
 
+// VU 시작 시 한 번만 로그인 (매 이터레이션 로그인 시 세션 충돌 방지)
+let loggedIn = false;
+
 export default function () {
-  if (!formLogin(BASE, TEST_USER, TEST_PASS)) {
-    return;
+  if (!loggedIn) {
+    if (!formLogin(BASE, TEST_USER, TEST_PASS)) {
+      return;
+    }
+    loggedIn = true;
   }
 
   const requiredRes = http.get(`${BASE}/api/queue/required?concertId=${CID}`);
@@ -104,6 +115,11 @@ export default function () {
   const completeRes = http.post(`${BASE}/api/payments/${paymentKey}/complete`, null);
   check(completeRes, { '결제 완료': (r) => r.status === 200 });
 
+  // [조정] Grafana「캐시 핫리드」패널용: /api/queue/count 고빈도 (0 이면 호출 안 함)
+  for (let c = 0; c < K6_EXTRA_QUEUE_COUNT; c++) {
+    http.get(`${BASE}/api/queue/count?concertId=${CID}`);
+  }
+
   // [조정] 이터레이션 간 간격(너무 짧으면 동일 계정/포인트 고갈·좌석 부족 빨리 옴)
-  sleep(0.5);
+  sleep(0.35);
 }
