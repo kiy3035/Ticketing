@@ -23,6 +23,8 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
  * - 컨트롤러가 String을 반환하면 StringHttpMessageConverter 경로로 타며,
  *   객체를 그대로 반환하면 JSON 변환이 아닌 "문자열 그대로" 응답될 수 있다.
  *   그래서 String 반환은 ApiResponse를 JSON 문자열로 직렬화해서 내려준다.
+ * - 원시 타입(long/int 등) 반환 후 래핑하면, 일부 스프링 버전에서 변환기가 반환 타입과 본문(ApiResponse)이
+ *   어긋나 ClassCastException 이 날 수 있다. 스칼라는 컨트롤러에서 ApiResponse 로 감싸 반환한다.
  */
 @RestControllerAdvice
 public class ApiResponseAdvice implements ResponseBodyAdvice<Object> {

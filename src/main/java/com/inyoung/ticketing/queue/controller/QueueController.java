@@ -2,6 +2,7 @@ package com.inyoung.ticketing.queue.controller;
 
 import java.util.List;
 import java.util.Optional;
+import com.inyoung.ticketing.common.api.ApiResponse;
 import com.inyoung.ticketing.config.TicketingProperties;
 import com.inyoung.ticketing.hold.store.HoldStore;
 import com.inyoung.ticketing.queue.dto.QueueAllowedResponse;
@@ -118,10 +119,10 @@ public class QueueController {
 		return new QueueRequiredResponse(required);
 	}
 
-	// 콘서트별 대기인원 수 조회
+	// 콘서트별 대기인원 수 조회 (원시 long 반환 금지: ApiResponseAdvice 래핑 후 메시지 컨버터 타입 불일치로 ClassCastException 발생)
 	@GetMapping("/count")
-	public long count(@RequestParam @NotNull Long concertId) {
-		return queueService.countWaiting(concertId);
+	public ApiResponse<Long> count(@RequestParam @NotNull Long concertId) {
+		return ApiResponse.success(queueService.countWaiting(concertId));
 	}
 
 	// 대기열에서 나가기

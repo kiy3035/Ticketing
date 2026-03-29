@@ -9,6 +9,7 @@
 | `BASE_URL` | 앱 베이스 URL (기본 `http://localhost:8080`) |
 | `CONCERT_ID` | 대상 공연 ID (기본 `1`) |
 | `TEST_USER` / `TEST_PASS` | 세션이 필요한 시나리오용 폼 로그인 계정 |
+| `K6_CACHE_HOT_PEAK_VU` | `cache-hot-read.js` 최대 VU (기본 `150`; 소형기는 더 낮춰도 됨) |
 
 - **`lib/common.js`**: `baseUrl()`, `concertId()`, `formLogin()` — 인증 필요 스크립트에서 공통 사용.
 - **VU당 로그인 1회**: `db-read.js`, `seats-hold.js`, `full-flow.js`는 동일 계정을 여러 VU가 쓸 때 **매 요청마다 로그인하면 세션이 무효화**될 수 있어, VU 시작 시 한 번만 로그인한다.
@@ -55,6 +56,8 @@ k6 run -e BASE_URL=... -e CONCERT_ID=1 -e TEST_USER=u -e TEST_PASS=p load-tests/
 **모니터링과의 연결**: Prometheus `http_server_requests_*`에서 `/api/queue/count` URI의 **RPS·지연**을 올리기 위한 전용 시나리오. `queue-flow.js`와 겹쳐 보면 **“읽기만 폭주”** vs **“진입+폴링”**을 나눠 볼 수 있다.
 
 **특징**: 인증 불필요. 이터레이션당 `COUNTS_PER_ITERATION`번 연속 호출로 RPS를 키운다.
+
+**Grafana에 안 찍힐 때**: (1) **앱이 정상 기동·DB 연결**인지 먼저 본다(`actuator/health`, 컨테이너 로그). (2) **k6 → 앱 TCP**가 되는지 curl로 확인(SG 등). (3) 그다음 **과부하** 여부: 피크 VU·`COUNTS_PER_ITERATION`가 크면 `connection refused` 등으로 HTTP가 안 들어가 메트릭이 비어 보일 수 있다 → `-e K6_CACHE_HOT_PEAK_VU=80` 등으로 낮춘다. Prometheus에서 `count by (uri) (http_server_requests_seconds_count)` 로 `uri` 라벨도 확인한다.
 
 ---
 
