@@ -1,78 +1,68 @@
 /**
- * k6 풀 플로우 부하 테스트
+ * Full-flow (E2E): 대기열 필요 시 진입·폴링 → 좌석 조회 → 홀드 → 결제 → 예약 확정.
+ * 결제 수단은 코드상 POINT 로만 고정한다. 카드 등은 위젯/리다이렉트로 k6 자동화가 불가하므로 부하 스크립트에서 변경하지 말 것.
  *
- * 시나리오: 대기열 필요 시 진입 → 입장 허용 대기 → 좌석 조회 → 홀드 생성 → 결제(포인트) → 예약 확정
- * 결제는 포인트 결제만 사용 (요청 → 승인 → 완료). 카드는 위젯/리다이렉트 필요로 k6 자동화 불가.
- * /api/holds, /api/payments 는 인증 필요. TEST_USER, TEST_PASS 로 로그인 후 진행.
+ * --- Knee point / 병목 ---
+ * - Knee: 단계(stages)의 target(VU)를 올릴수록 k6 요약의 http_req_duration p95·http_req_failed 가
+ *   “갑자기” 나빠지기 시작하는 구간을 기록한다.
+ * - 병목 힌트(동시에 Grafana/Prometheus): 대기열·HTTP만 튀면 입장/폴링 구간,
+ *   ticketing_lock_acquire_failures_total 가 홀드와 함께 오르면 좌석 락/Redis 경합,
+ *   DB 커넥션/슬로우쿼리는 응답이 전반적으로 지연되면서 여러 URI에서 동반 상승하는 패턴이 많다.
+ *   → docs/monitoring.md 메트릭과 대조.
  *
- * 실행 예:
- *   k6 run -e BASE_URL=http://localhost:8080 -e CONCERT_ID=16 -e TEST_USER=아이디 -e TEST_PASS=비번 load-tests/full-flow.js
+ * 실행: k6 run -e BASE_URL=... -e CONCERT_ID=... -e TEST_USER=... -e TEST_PASS=... load-tests/full-flow.js
  */
 import http from 'k6/http';
 import { check, sleep } from 'k6';
+import { baseUrl, concertId, formLogin } from './lib/common.js';
 
-// 부하 단계: 10명(30초) → 30명(1분) → 50명(1분) → 0명(30초) = 최대 동시 50 VU
+// [조정] 동시 사용자(VU) 곡선: duration / target 을 단계마다 바꿔 knee point 탐색
 export const options = {
   stages: [
-    { duration: '30s', target: 10 },
-    { duration: '1m', target: 30 },
-    { duration: '1m', target: 50 },
-    { duration: '30s', target: 0 },
+    { duration: '30s', target: 10 }, // [조정] 워밍업 시간·초기 VU
+    { duration: '1m', target: 30 }, // [조정] 플래토1: 유지 시간·VU
+    { duration: '1m', target: 50 }, // [조정] 플래토2
+    { duration: '30s', target: 0 }, // [조정] 램프다운
   ],
+  // [조정] 임계치: 너무 빡세면 테스트가 실패로 끝나므로, 탐색 초기에는 완화 후 점점 타이트하게
   thresholds: {
-    http_req_duration: ['p(95)<5000'],  // 95% 응답 시간 5초 미만
-    http_req_failed: ['rate<0.2'],      // 실패율 20% 미만
+    http_req_duration: ['p(95)<5000'],
+    http_req_failed: ['rate<0.2'],
   },
 };
 
-// 환경 변수 (미지정 시 기본값)
-const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
-const CONCERT_ID = __ENV.CONCERT_ID || '1';
+const BASE = baseUrl();
+const CID = concertId();
 const TEST_USER = __ENV.TEST_USER || '';
 const TEST_PASS = __ENV.TEST_PASS || '';
 
-/**
- * Spring Security form 로그인.
- * - POST body: application/x-www-form-urlencoded (username, password)
- * - redirects: 0 으로 302만 받고 리다이렉트 미수행 → Set-Cookie 가 담긴 응답에서 세션 쿠키 저장
- * - 성공 시 302 반환 (로그인 처리 후 리다이렉트)
- */
-function login() {
-  if (!TEST_USER || !TEST_PASS) return false;
-  const body = `username=${encodeURIComponent(TEST_USER)}&password=${encodeURIComponent(TEST_PASS)}`;
-  const res = http.post(`${BASE_URL}/login`, body, {
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    redirects: 0,
-  });
-  return res.status === 302 || (res.status >= 200 && res.status < 400);
-}
+/** 부하 테스트에서 허용하는 결제 수단은 포인트뿐. CARD 등으로 바꾸지 말 것(k6·토스 위젯 불가). */
+const PAYMENT_METHOD_POINT = 'POINT';
 
 export default function () {
-  // 인증: 계정이 있으면 매 이터레이션마다 로그인 (같은 VU가 쿠키 유지)
-  if (TEST_USER && TEST_PASS && !login()) {
+  if (!formLogin(BASE, TEST_USER, TEST_PASS)) {
     return;
   }
 
-  // --- 1) 대기열 필요 여부 확인 (패턴 B: activation-threshold 초과 시에만 대기열 사용)
-  const requiredRes = http.get(`${BASE_URL}/api/queue/required?concertId=${CONCERT_ID}`);
+  const requiredRes = http.get(`${BASE}/api/queue/required?concertId=${CID}`);
   const required = requiredRes.json('data.required') === true;
-  let queueToken = null;
 
   if (required) {
-    const enterRes = http.post(`${BASE_URL}/api/queue/enter?concertId=${CONCERT_ID}`, null);
+    const enterRes = http.post(`${BASE}/api/queue/enter?concertId=${CID}`, null);
     check(enterRes, { '대기열 진입': (r) => r.status === 201 });
     if (enterRes.status !== 201) return;
-    queueToken = enterRes.json('data.token');
-    // 입장 허용될 때까지 최대 60초, 1초 간격 폴링
-    for (let i = 0; i < 60; i++) {
-      const statusRes = http.get(`${BASE_URL}/api/queue/status?token=${queueToken}&concertId=${CONCERT_ID}`);
+    const queueToken = enterRes.json('data.token');
+    // [조정] 최대 폴링 횟수·간격: 대기열 압력·타임아웃 민감도
+    const maxPoll = 60;
+    const pollSleepSec = 1;
+    for (let i = 0; i < maxPoll; i++) {
+      const statusRes = http.get(`${BASE}/api/queue/status?token=${queueToken}&concertId=${CID}`);
       if (statusRes.status === 200 && statusRes.json('data.isAllowed')) break;
-      sleep(1);
+      sleep(pollSleepSec);
     }
   }
 
-  // --- 2) 좌석 목록 조회 (AVAILABLE 만 사용)
-  const seatsRes = http.get(`${BASE_URL}/api/concerts/${CONCERT_ID}/seats`);
+  const seatsRes = http.get(`${BASE}/api/concerts/${CID}/seats`);
   check(seatsRes, { '좌석 조회': (r) => r.status === 200 });
   if (seatsRes.status !== 200) return;
   const seats = seatsRes.json('data') || [];
@@ -81,47 +71,39 @@ export default function () {
     sleep(1);
     return;
   }
-  // VU마다 서로 다른 좌석 선택 (available[0]만 쓰면 전원이 같은 좌석을 잡아 409/429 폭증)
   const idx = Math.floor(Math.random() * available.length);
   const seatId = available[idx].id;
 
-  // --- 3) 홀드 생성 (인증 필요; 서버는 200 또는 201 반환)
-  const holdRes = http.post(`${BASE_URL}/api/holds`, JSON.stringify({
-    concertId: Number(CONCERT_ID),
-    seatId: Number(seatId),
-  }), {
-    headers: { 'Content-Type': 'application/json' },
-  });
+  const holdRes = http.post(
+    `${BASE}/api/holds`,
+    JSON.stringify({ concertId: Number(CID), seatId: Number(seatId) }),
+    { headers: { 'Content-Type': 'application/json' } },
+  );
   const holdOk = holdRes.status === 200 || holdRes.status === 201;
-  if (!holdOk) {
-    const bodyPreview = (holdRes.body || '').slice(0, 200);
-    console.warn(`[VU ${__VU}] 홀드 실패 status=${holdRes.status} body=${bodyPreview}`);
-  }
   check(holdRes, { '홀드 생성': (r) => r.status === 200 || r.status === 201 });
   if (!holdOk) return;
   const holdToken = holdRes.json('data.holdToken');
   if (!holdToken) return;
 
-  // --- 4) 포인트 결제: 요청 → 승인(본문 없음) → 완료
-  const reqRes = http.post(`${BASE_URL}/api/payments/request`, JSON.stringify({
-    holdToken,
-    paymentMethod: 'POINT',
-  }), {
-    headers: { 'Content-Type': 'application/json' },
-  });
+  const reqRes = http.post(
+    `${BASE}/api/payments/request`,
+    JSON.stringify({ holdToken, paymentMethod: PAYMENT_METHOD_POINT }),
+    { headers: { 'Content-Type': 'application/json' } },
+  );
   check(reqRes, { '결제 요청': (r) => r.status === 201 });
   if (reqRes.status !== 201) return;
   const paymentKey = reqRes.json('data.paymentKey');
   if (!paymentKey) return;
 
-  const approveRes = http.post(`${BASE_URL}/api/payments/${paymentKey}/approve`, '{}', {
+  const approveRes = http.post(`${BASE}/api/payments/${paymentKey}/approve`, '{}', {
     headers: { 'Content-Type': 'application/json' },
   });
   check(approveRes, { '결제 승인(포인트)': (r) => r.status === 200 });
   if (approveRes.status !== 200) return;
 
-  const completeRes = http.post(`${BASE_URL}/api/payments/${paymentKey}/complete`, null);
+  const completeRes = http.post(`${BASE}/api/payments/${paymentKey}/complete`, null);
   check(completeRes, { '결제 완료': (r) => r.status === 200 });
 
+  // [조정] 이터레이션 간 간격(너무 짧으면 동일 계정/포인트 고갈·좌석 부족 빨리 옴)
   sleep(0.5);
 }

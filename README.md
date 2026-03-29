@@ -134,7 +134,7 @@
 - Kafka로 이벤트 기반 비동기 처리
 
 ### 7. 부하 테스트·수용 인원 (Knee point)
-- **k6 스크립트**: [load-tests/](load-tests/) 에 대기열 위주(`queue-load-test.js`)·풀 플로우(`full-flow.js`) 부하 테스트 제공
+- **k6 스크립트**: [load-tests/](load-tests/) 에 API 건강·대기열·좌석/홀드·DB 읽기·캐시 핫리드(5축) 및 E2E `full-flow.js` 제공 ([load-tests/README.md](load-tests/README.md))
 - **목표 인프라**: t3a.medium 1대(Redis/Kafka/Prometheus/Grafana) + t3.small 2대(앱) 구성 시 동시 사용자 수·RPS를 단계적으로 올려 **knee point** 측정. 결과는 “동시 N명(또는 RPS)까지 검증”으로 문서화 ([docs/deployment-ec2.md](docs/deployment-ec2.md), [docs/load-test-results.md](docs/load-test-results.md)). 동시성·대기열·홀드 단위/통합 테스트, Redis·Kafka·DB 헬스, 비즈니스 메트릭·락 재시도 설정으로 검증·운영 보강.
 
 ## 📋 핵심 기능
