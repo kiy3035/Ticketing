@@ -4,21 +4,39 @@
 
 ## 공통
 
+**부하 곡선은 모든 `*.js`가 동일 패턴**이다: 단계적으로 VU를 올린 뒤 **`K6_PEAK_HOLD` 동안 최대 VU(피크)를 유지**하고 램프다운한다. 숫자를 파일에서 바꾸지 않고 **환경 변수만** 조절하면 된다. 정의는 **`lib/stages.js`** 참고.
+
 | 환경 변수 | 설명 |
 |-----------|------|
 | `BASE_URL` | 앱 베이스 URL (기본 `http://localhost:8080`) |
 | `CONCERT_ID` | 대상 공연 ID (기본 `1`) |
 | `TEST_USER` / `TEST_PASS` | 세션이 필요한 시나리오용 폼 로그인 계정 |
-| `K6_CACHE_HOT_PEAK_VU` | `cache-hot-read.js` 최대 VU (기본 `150`; 소형기는 더 낮춰도 됨) |
+| `K6_PEAK_VU` | **최대 동시 VU**(피크). 미설정 시 스크립트마다 다른 기본값(아래 각 절). |
+| `K6_PROFILE=stress` | **한계(knee) 관측**: threshold를 거의 막지 않아 에러가 나도 시나리오가 끝까지 진행된다. |
+| `K6_WARM_DURATION` / `K6_MID_DURATION` / `K6_CLIMB_DURATION` / `K6_PEAK_HOLD` / `K6_RAMP_DOWN` | 각 단계 지속 시간(예: `30s`, `2m`, `90s`). 미설정 시 스크립트별 기본. |
+| `K6_WARM_VU` / `K6_MID_VU` / `K6_PREPEAK_VU` | 중간 단계 타깃 VU를 직접 지정(선택). 미설정 시 `K6_PEAK_VU` 비율로 자동 계산. |
 
-- **`lib/common.js`**: `baseUrl()`, `concertId()`, `formLogin()` — 인증 필요 스크립트에서 공통 사용.
-- **VU당 로그인 1회**: `db-read.js`, `seats-hold.js`, `full-flow.js`는 동일 계정을 여러 VU가 쓸 때 **매 요청마다 로그인하면 세션이 무효화**될 수 있어, VU 시작 시 한 번만 로그인한다.
+**시나리오별 선택 변수** (해당 스크립트에서만 읽음):
+
+| 변수 | 스크립트 | 설명 |
+|------|-----------|------|
+| `K6_COUNTS_PER_ITER` | `cache-hot-read.js` | 이터당 `/api/queue/count` 호출 횟수 (기본 `15`) |
+| `K6_LOOP_SLEEP_SEC` | `db-read.js` | 이터레이션 끝 sleep 초 (기본 `0.2`) |
+| `K6_ITER_SLEEP_SEC` | `seats-hold.js` | 이터레이션 간 sleep 초 (기본 `0.3`) |
+| `K6_FLOW_SLEEP_SEC` | `full-flow.js` | 이터레이션 간 sleep 초 (기본 `0.35`) |
+| `K6_EXTRA_QUEUE_COUNT` | `full-flow.js` | 결제 후 `queue/count` 추가 호출 횟수 (기본 `0`) |
+| `K6_QUEUE_MAX_POLL` / `K6_QUEUE_POLL_SLEEP_SEC` | `queue-flow.js`, `full-flow.js` | 큐 폴링 최대 횟수·간격(초) |
+
+- **`lib/common.js`**: `baseUrl()`, `concertId()`, `formLogin()`.
+- **VU당 로그인 1회**: `db-read`·`seats-hold`·`full-flow`는 동일 계정 다중 VU 시 매 요청 로그인하면 세션 충돌 가능.
 
 실행 예:
 
 ```bash
 k6 run -e BASE_URL=https://app.example.com:8080 -e CONCERT_ID=1 load-tests/api-health.js
 k6 run -e BASE_URL=... -e CONCERT_ID=1 -e TEST_USER=u -e TEST_PASS=p load-tests/full-flow.js
+# 피크만 키워 한계 보기 (모든 스크립트 동일)
+k6 run -e BASE_URL=... -e CONCERT_ID=1 -e K6_PEAK_VU=2000 -e K6_PROFILE=stress load-tests/cache-hot-read.js
 ```
 
 ---
@@ -32,7 +50,7 @@ k6 run -e BASE_URL=... -e CONCERT_ID=1 -e TEST_USER=u -e TEST_PASS=p load-tests/
 
 **모니터링과의 연결**: 여기서만 p95·에러가 먼저 깨지면 스레드 풀·공통 다운스트림·기본 가용성 쪽을 의심한다. `queue/required`만 이상하면 해당 경로나 Redis를 본다.
 
-**특징**: 인증 불필요. VU는 상대적으로 낮게 잡혀 있다.
+**특징**: 인증 불필요. 기본 `K6_PEAK_VU` 미설정 시 피크 **50**.
 
 ---
 
@@ -41,11 +59,11 @@ k6 run -e BASE_URL=... -e CONCERT_ID=1 -e TEST_USER=u -e TEST_PASS=p load-tests/
 **역할**: **대기열만** 집중 부하 — 진입 후 `status` 폴링까지(입장 허용 시 종료). 좌석·홀드·결제는 포함하지 않는다.
 
 - **`POST /api/queue/enter`**
-- **`GET /api/queue/status`** (반복, `MAX_STATUS_POLLS` / `POLL_SLEEP_SEC` 조정 가능)
+- **`GET /api/queue/status`** (반복, `K6_QUEUE_MAX_POLL` / `K6_QUEUE_POLL_SLEEP_SEC`)
 
 **모니터링과의 연결**: `ticketing_queue_waiting_count`, 큐 관련 HTTP RPS·지연이 오르는 패턴을 만들기 좋다. `full-flow`만 돌리면 큐가 활성화되지 않으면 이 구간 트래픽이 거의 없을 수 있다.
 
-**특징**: 인증 없이 큐 API만 사용. VU·플래토가 크게 설정되어 있다.
+**특징**: 인증 없이 큐 API만 사용. 기본 피크 **600** VU, 피크 유지 기본 **3m**.
 
 ---
 
@@ -55,9 +73,11 @@ k6 run -e BASE_URL=... -e CONCERT_ID=1 -e TEST_USER=u -e TEST_PASS=p load-tests/
 
 **모니터링과의 연결**: Prometheus `http_server_requests_*`에서 `/api/queue/count` URI의 **RPS·지연**을 올리기 위한 전용 시나리오. `queue-flow.js`와 겹쳐 보면 **“읽기만 폭주”** vs **“진입+폴링”**을 나눠 볼 수 있다.
 
-**특징**: 인증 불필요. 이터레이션당 `COUNTS_PER_ITERATION`번 연속 호출로 RPS를 키운다.
+**특징**: 인증 불필요. 기본 피크 **200** VU, 이터당 호출 **`K6_COUNTS_PER_ITER`**(기본 15). RPS는 `K6_PEAK_VU` × `K6_COUNTS_PER_ITER` / 이터 길이에 비례.
 
-**Grafana에 안 찍힐 때**: (1) **앱이 정상 기동·DB 연결**인지 먼저 본다(`actuator/health`, 컨테이너 로그). (2) **k6 → 앱 TCP**가 되는지 curl로 확인(SG 등). (3) 그다음 **과부하** 여부: 피크 VU·`COUNTS_PER_ITERATION`가 크면 `connection refused` 등으로 HTTP가 안 들어가 메트릭이 비어 보일 수 있다 → `-e K6_CACHE_HOT_PEAK_VU=80` 등으로 낮춘다. Prometheus에서 `count by (uri) (http_server_requests_seconds_count)` 로 `uri` 라벨도 확인한다.
+**한계(knee)**: `K6_PROFILE=stress` + `K6_PEAK_VU`만 올려서 본다. OOM·연결 거절 나면 피크·`K6_COUNTS_PER_ITER`를 내린다.
+
+**Grafana에 안 찍힐 때**: 앱·DB·Redis·TCP(SG) 확인 후, 과부하면 `K6_PEAK_VU` / `K6_COUNTS_PER_ITER` 낮춘다. Prometheus `count by (uri) (http_server_requests_seconds_count)` 로 `uri` 확인.
 
 ---
 
@@ -69,7 +89,7 @@ k6 run -e BASE_URL=... -e CONCERT_ID=1 -e TEST_USER=u -e TEST_PASS=p load-tests/
 
 **모니터링과의 연결**: 이 스크립트만 돌릴 때 p95가 먼저 나빠지면 커넥션 풀·슬로우 쿼리·DB CPU/IO를 의심한다. 다른 시나리오는 괜찮은데 이것만 나쁘면 읽기 쿼리·인덱스를 우선 본다.
 
-**특징**: 쓰기 락 경합은 상대적으로 적고 읽기 한계를 밀어보기에 유리하다.
+**특징**: 쓰기 락 경합은 상대적으로 적음. 기본 피크 **120** VU.
 
 ---
 
@@ -79,7 +99,7 @@ k6 run -e BASE_URL=... -e CONCERT_ID=1 -e TEST_USER=u -e TEST_PASS=p load-tests/
 
 **모니터링과의 연결**: `ticketing_lock_acquire_failures_total`과 홀드 API 지연이 함께 오르면 좌석 락·Redis 경합 힌트. 좌석 조회만 느리면 DB/풀 쪽을 본다.
 
-**특징**: 동일 공연·좌석 풀에 VU를 올리면 홀드 경합을 보기 좋다. 좌석이 없으면 잠시 sleep 후 스킵한다.
+**특징**: 동일 공연·좌석 풀에 VU를 올리면 홀드 경합을 보기 좋다. 기본 피크 **60** VU. 좌석이 없으면 sleep 후 스킵.
 
 ---
 
@@ -92,4 +112,4 @@ k6 run -e BASE_URL=... -e CONCERT_ID=1 -e TEST_USER=u -e TEST_PASS=p load-tests/
 - **대기열 인원**: 설정상 `required`가 거의 false면 0에 가깝게 보이는 것이 정상. 큐 패널을 채우려면 `queue-flow.js` 병행 또는 activation threshold 조정이 필요할 수 있다.
 - **캐시( count ) RPS**: 기본은 `queue/count`를 거의 호출하지 않는다. 같은 스크립트로 보강하려면 `-e K6_EXTRA_QUEUE_COUNT=15`처럼 지정한다.
 
-**특징**: 카드 등 외부 위젯 결제는 k6로 자동화하지 않는다. 스테이지·threshold는 환경에 맞게 `full-flow.js` 상단에서 조정한다.
+**특징**: 카드 등 외부 위젯 결제는 k6로 자동화하지 않는다. 기본 피크 **140** VU. 곡선·피크는 `K6_PEAK_VU` 등 공통 env로 조절.

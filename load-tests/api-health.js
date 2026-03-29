@@ -1,34 +1,35 @@
 /**
  * API 건강: Actuator 헬스 + 가벼운 공개 API(대기열 필요 여부).
  *
- * --- Knee point / 병목 ---
- * - 여기서 p95·에러가 먼저 깨지면 앱 전체 가용성·스레드·다운스트림 공통 병목 가능성.
- * - 대기열만 이상하면 queue/required 경로 또는 그 뒤 Redis를 의심.
+ * 부하 곡선·VU·시간: lib/stages.js (K6_PEAK_VU, K6_PEAK_HOLD, K6_PROFILE=stress 등)
  */
 import http from 'k6/http';
 import { check } from 'k6';
+import { baseUrl, concertId } from './lib/common.js';
+import { buildRampPeakStages, pickThresholds } from './lib/stages.js';
 
-// [조정] VU 램프: 합성 헬스는 보통 낮은 VU부터 올려도 됨
+const DEFAULT_PEAK = 50;
+
 export const options = {
-  stages: [
-    { duration: '30s', target: 20 }, // [조정]
-    { duration: '1m', target: 50 }, // [조정]
-    { duration: '30s', target: 0 }, // [조정] 램프다운
-  ],
-  // [조정] 헬스는 빨라야 하므로 ms·에러율 기준은 환경에 맞게
-  thresholds: {
+  stages: buildRampPeakStages(DEFAULT_PEAK, {
+    warmDur: '25s',
+    midDur: '60s',
+    peakHold: '90s',
+    rampDown: '30s',
+  }),
+  thresholds: pickThresholds({
     http_req_duration: ['p(95)<3000'],
     http_req_failed: ['rate<0.05'],
-  },
+  }),
 };
 
-const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
-const CONCERT_ID = __ENV.CONCERT_ID || '1';
+const BASE = baseUrl();
+const CID = concertId();
 
 export default function () {
-  const h = http.get(`${BASE_URL}/actuator/health`);
+  const h = http.get(`${BASE}/actuator/health`);
   check(h, { 'health 200': (r) => r.status === 200 });
 
-  const q = http.get(`${BASE_URL}/api/queue/required?concertId=${CONCERT_ID}`);
+  const q = http.get(`${BASE}/api/queue/required?concertId=${CID}`);
   check(q, { 'queue/required 200': (r) => r.status === 200 });
 }

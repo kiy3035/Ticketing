@@ -1,37 +1,34 @@
 /**
  * 좌석 & 홀드: 로그인 → 좌석 목록 → 홀드 생성 → DELETE 로 홀드 취소(반복 부하용).
- * 예약·결제 확정까지 보려면 full-flow.js 사용.
  *
- * --- Knee point / 병목 ---
- * - ticketing_lock_acquire_failures_total, 홀드 API p95가 같이 튀면 좌석 락/Redis 경합 쪽 힌트.
- * - 좌석 조회만 느리면 DB/쿼리·풀 쪽을 의심.
+ * 부하 곡선·VU·시간: lib/stages.js (K6_PEAK_VU, K6_PEAK_HOLD, K6_PROFILE=stress 등)
  */
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { baseUrl, concertId, formLogin } from './lib/common.js';
+import { buildRampPeakStages, pickThresholds } from './lib/stages.js';
 
-// VU 시작 시 한 번만 로그인. 매 이터레이션 로그인 시 30 VU가 같은 계정을 쓰면
-// Spring Session Fixation Protection 이 이전 세션을 무효화해 DELETE 등이 401로 실패함.
-let loggedIn = false;
+const DEFAULT_PEAK = 60;
 
-// [조정] 홀드 경합을 보려면 VU·플래토 시간을 올려 같은 공연·좌석 풀에 걸기
 export const options = {
-  stages: [
-    { duration: '30s', target: 10 }, // [조정]
-    { duration: '1m', target: 30 }, // [조정]
-    { duration: '1m', target: 50 }, // [조정]
-    { duration: '30s', target: 0 }, // [조정]
-  ],
-  thresholds: {
+  stages: buildRampPeakStages(DEFAULT_PEAK, {
+    midDur: '75s',
+    peakHold: '2m',
+  }),
+  thresholds: pickThresholds({
     http_req_duration: ['p(95)<5000'],
     http_req_failed: ['rate<0.2'],
-  },
+  }),
 };
 
 const BASE = baseUrl();
 const CID = concertId();
 const TEST_USER = __ENV.TEST_USER || '';
 const TEST_PASS = __ENV.TEST_PASS || '';
+
+const ITER_SLEEP_SEC = Math.max(0, parseFloat(__ENV.K6_ITER_SLEEP_SEC || '0.3') || 0.3);
+
+let loggedIn = false;
 
 export default function () {
   if (!loggedIn) {
@@ -50,7 +47,7 @@ export default function () {
   const seats = seatsRes.json('data') || [];
   const available = seats.filter((s) => s.status === 'AVAILABLE');
   if (available.length === 0) {
-    sleep(1); // [조정] 좌석 없을 때 대기
+    sleep(1);
     return;
   }
 
@@ -75,5 +72,5 @@ export default function () {
 
   const delRes = http.del(`${BASE}/api/holds/${holdToken}`);
   check(delRes, { '홀드 취소 204': (r) => r.status === 204 });
-  sleep(0.3); // [조정] 이터레이션 간 간격
+  sleep(ITER_SLEEP_SEC);
 }
