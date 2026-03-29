@@ -159,9 +159,9 @@ const checkQueueStatus = async () => {
 			if (queueCard) queueCard.classList.add('sold-out');
 		} else {
 			if (queueCard) queueCard.classList.remove('sold-out');
-			// 대기 중 메시지 업데이트
 			if (rank && totalWaitingCount) {
-				const estimatedWait = Math.max(1, Math.ceil(rank / 50));
+				// 서버가 batch-size/processing-interval 설정값으로 계산한 값을 사용
+				const estimatedWait = result.data.estimatedWaitMinutes;
 				queueMessage.textContent = `대기 중입니다. 예상 대기 시간: 약 ${estimatedWait}분`;
 			}
 		}

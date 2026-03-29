@@ -97,7 +97,15 @@ public class QueueController {
 		List<Long> seatIds = seatRepository.findSeatIdsByConcertId(concertId);
 		int heldCount = holdStore.findHeldSeatIds(seatIds).size();
 		long availableSeats = Math.max(0, totalSeats - reserved - heldCount);
-		return new QueueStatusResponse(token, rank, totalWaiting, isAllowed, availableSeats);
+
+		// 예상 대기 시간 = ceil(순번 / 분당입장인원)
+		// 분당입장인원 = batchSize × (60_000 / processingIntervalMs)
+		int batchSize = properties.getQueue().getBatchSize();
+		long intervalMs = properties.getQueue().getProcessingIntervalMs();
+		double perMinute = batchSize * (60_000.0 / intervalMs);
+		long estimatedWaitMinutes = Math.max(1L, (long) Math.ceil(rank / perMinute));
+
+		return new QueueStatusResponse(token, rank, totalWaiting, isAllowed, availableSeats, estimatedWaitMinutes);
 	}
 
 	// 입장 허용 여부 확인
