@@ -19,10 +19,13 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
       - name: Build with Gradle
         run: |
           chmod +x ./gradlew
-          ./gradlew clean build -x test
+          ./gradlew clean build -x test --no-daemon
 
       - name: Package JAR for Docker
         run: cp build/libs/ticketing-*-SNAPSHOT.jar ticketing-app.jar

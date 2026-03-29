@@ -1,1 +1,9 @@
+pluginManagement {
+	repositories {
+		// 플러그인·플러그인 의존성을 먼저 Maven Central에서 해석 (GHA 등에서 plugin portal → central 리다이렉트 경로의 403 완화)
+		mavenCentral()
+		gradlePluginPortal()
+	}
+}
+
 rootProject.name = 'ticketing'
