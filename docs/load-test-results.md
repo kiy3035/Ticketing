@@ -14,31 +14,6 @@
 | MySQL | 8.0 |
 | Redis | 7 |
 
-## 트러블슈팅: `/actuator/health` 병목
-
-### 현상
-`api-health.js` (VU 50) 부하 테스트에서 `/actuator/health`만 82% 실패, p95 = 60초 (타임아웃).
-같은 테스트의 `/api/queue/required`는 95% 성공.
-
-### 원인
-`management.endpoint.health.show-details=always` 설정으로, health check가 **매 요청마다 DB·Redis·Kafka·Disk 전체를 확인**했다.
-이 중 하나(Kafka health indicator)가 응답 지연 → 전체 health 응답이 60초 타임아웃.
-VU 50이 동시에 health를 호출하면 DB 커넥션 풀(10개)도 포화되어 다른 요청까지 영향.
-
-### 해결
-```properties
-# 변경 전
-management.endpoint.health.show-details=always
-
-# 변경 후: 일반 요청은 {"status":"UP"} 즉시 반환, 상세 진단은 인증된 관리자만
-management.endpoint.health.show-details=when-authorized
-```
-
-### 교훈
-모니터링 엔드포인트도 부하 테스트 대상이다. health check가 무거우면 부하 시 DB 커넥션을 잡아먹어 비즈니스 API까지 영향을 준다.
-
----
-
 ## 시나리오별 결과
 
 ### 1. 대기열 진입
