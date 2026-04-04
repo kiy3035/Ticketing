@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.Executors;
 import com.inyoung.ticketing.config.TicketingProperties;
 import com.inyoung.ticketing.hold.event.SeatHoldEventPublisher;
 import com.inyoung.ticketing.hold.event.SeatHoldEventType;
@@ -87,13 +88,20 @@ public class HoldCleanupScheduler {
 		}
 	}
 
+	// 건당 Redis release + Kafka publish (I/O 대기)이므로 Virtual Thread로 병렬 처리.
+	// try-with-resources가 모든 태스크 완료를 보장한다.
 	private void doCleanupExpiredHolds() {
 		int batchSize = properties.getHold().getCleanupBatchSize();
 		List<HoldPayload> expired = holdStore.findExpiredHolds(Instant.now(), batchSize);
-		for (HoldPayload payload : expired) {
-			holdStore.releaseByPayload(payload.info(), payload.payload());
-			holdReleaseMetrics.recordReleased("timeout");
-			eventPublisher.publish(SeatHoldEventType.HOLD_EXPIRED, payload.info());
+
+		try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+			for (HoldPayload payload : expired) {
+				executor.submit(() -> {
+					holdStore.releaseByPayload(payload.info(), payload.payload());
+					holdReleaseMetrics.recordReleased("timeout");
+					eventPublisher.publish(SeatHoldEventType.HOLD_EXPIRED, payload.info());
+				});
+			}
 		}
 	}
 }

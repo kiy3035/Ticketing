@@ -1,12 +1,11 @@
 package com.inyoung.ticketing.auth.domain;
 
-import java.time.LocalDateTime;
+import com.inyoung.ticketing.common.domain.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 
@@ -24,7 +23,7 @@ import jakarta.persistence.UniqueConstraint;
 		@UniqueConstraint(name = "uk_users_oauth", columnNames = { "oauth_provider", "oauth_subject" })
 	}
 )
-public class Users {
+public class Users extends BaseEntity {
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
@@ -58,15 +57,6 @@ public class Users {
 
 	@Column(name = "point", nullable = false)
 	private Long point = 0L;
-
-	/** 가입 시각 (서울 시간, DB DATETIME 저장) */
-	@Column(nullable = false, updatable = false)
-	private LocalDateTime createdAt;
-
-	@PrePersist
-	void prePersist() {
-		this.createdAt = LocalDateTime.now().withNano(0);
-	}
 
 	// 식별자
 	public Long getId() {
@@ -157,9 +147,5 @@ public class Users {
 	// 역할 설정
 	public void setRole(String role) {
 		this.role = role;
-	}
-
-	public LocalDateTime getCreatedAt() {
-		return createdAt;
 	}
 }

@@ -368,7 +368,7 @@ ticketing/
 - **상세/공부용**: [my-docs/](my-docs/README.md) — 전체 워크플로우, 소스 구조, 홀드·결제·스케줄러·Redis/Kafka 정리. 코드와 흐름 이해용.
 
 요약 링크:
-- [아키텍처/플로우](docs/architecture.md) | [API](docs/api.md) | [인프라](docs/infra.md) | [데이터 구조](docs/data.md) | [동시성](docs/concurrency.md) | [관리자](docs/admin-setup.md) | [EC2 배포](docs/deployment-ec2.md) | [부하 테스트](docs/load-test-results.md) | [모니터링](docs/monitoring.md) | [디바운스/쓰로틀](docs/debounce-throttle.md)
+- [아키텍처/플로우](docs/architecture.md) | [API](docs/api.md) | [인프라](docs/infra.md) | [데이터 구조](docs/data.md) | [동시성](docs/concurrency.md) | [관리자](docs/admin-setup.md) | [EC2 배포](docs/deployment-ec2.md) | [부하 테스트](docs/load-test-results.md) | [모니터링](docs/monitoring.md)
 
 ## 🎓 학습 포인트
 

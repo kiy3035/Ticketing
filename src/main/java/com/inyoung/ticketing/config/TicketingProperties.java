@@ -12,6 +12,7 @@ public class TicketingProperties {
 	private Payment payment = new Payment();
 	private Refund refund = new Refund();
 	private Toss toss = new Toss();
+	private RateLimitProps rateLimit = new RateLimitProps();
 
 	public Hold getHold() {
 		return hold;
@@ -268,4 +269,22 @@ public class TicketingProperties {
 			this.securityKey = securityKey != null ? securityKey : "";
 		}
 	}
+
+	// API Rate Limit 설정
+	public static class RateLimitProps {
+		private boolean enabled = true;
+		/** 윈도우 내 최대 요청 수. 기본 10. */
+		private int requestsPerSecond = 10;
+		/** 윈도우 크기(초). 기본 1. */
+		private int windowSeconds = 1;
+
+		public boolean isEnabled() { return enabled; }
+		public void setEnabled(boolean enabled) { this.enabled = enabled; }
+		public int getRequestsPerSecond() { return requestsPerSecond; }
+		public void setRequestsPerSecond(int requestsPerSecond) { this.requestsPerSecond = requestsPerSecond; }
+		public int getWindowSeconds() { return windowSeconds; }
+		public void setWindowSeconds(int windowSeconds) { this.windowSeconds = windowSeconds; }
+	}
+
+	public RateLimitProps getRateLimit() { return rateLimit; }
 }

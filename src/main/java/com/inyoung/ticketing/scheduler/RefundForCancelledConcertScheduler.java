@@ -3,6 +3,8 @@ package com.inyoung.ticketing.scheduler;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 import com.inyoung.ticketing.concert.domain.Concert;
 import com.inyoung.ticketing.concert.domain.ConcertStatus;
 import com.inyoung.ticketing.concert.repository.ConcertRepository;
@@ -92,6 +94,8 @@ public class RefundForCancelledConcertScheduler {
 		}
 	}
 
+	// 환불 건은 서로 독립적인 DB 트랜잭션이므로 Virtual Thread로 병렬 처리.
+	// 실제 동시성은 DB 커넥션 풀(HikariCP)이 자연스럽게 조절한다.
 	private void doRefundPaymentsForCancelledConcerts() {
 		List<Concert> cancelledConcerts = concertRepository.findByStatus(ConcertStatus.CANCELLED);
 		if (cancelledConcerts.isEmpty()) {
@@ -99,8 +103,8 @@ public class RefundForCancelledConcertScheduler {
 		}
 
 		int batchSize = properties.getRefund().getBatchSize();
-		int totalRefunded = 0;
-		int totalFailed = 0;
+		AtomicInteger totalRefunded = new AtomicInteger();
+		AtomicInteger totalFailed = new AtomicInteger();
 
 		for (Concert concert : cancelledConcerts) {
 			Long concertId = concert.getId();
@@ -113,24 +117,29 @@ public class RefundForCancelledConcertScheduler {
 				List<Payment> chunk = paymentPage.getContent();
 				hasMore = paymentPage.hasNext();
 
-				for (Payment payment : chunk) {
-					try {
-						boolean done = paymentService.refundCompletedPaymentForCancelledConcert(payment.getId());
-						if (done) {
-							totalRefunded++;
-							refundProcessedCounter.increment();
-						}
-					} catch (Exception e) {
-						totalFailed++;
-						log.warn("Refund failed for paymentId={}, concertId={}. {}", payment.getId(), concertId, e.getMessage());
+				try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+					for (Payment payment : chunk) {
+						executor.submit(() -> {
+							try {
+								boolean done = paymentService.refundCompletedPaymentForCancelledConcert(payment.getId());
+								if (done) {
+									totalRefunded.incrementAndGet();
+									refundProcessedCounter.increment();
+								}
+							} catch (Exception e) {
+								totalFailed.incrementAndGet();
+								log.warn("Refund failed for paymentId={}, concertId={}. {}",
+									payment.getId(), concertId, e.getMessage());
+							}
+						});
 					}
 				}
 				page++;
 			} while (hasMore);
 		}
 
-		if (totalRefunded > 0 || totalFailed > 0) {
-			log.info("Refund batch finished: refunded={}, failed={}", totalRefunded, totalFailed);
+		if (totalRefunded.get() > 0 || totalFailed.get() > 0) {
+			log.info("Refund batch finished: refunded={}, failed={}", totalRefunded.get(), totalFailed.get());
 		}
 	}
 }

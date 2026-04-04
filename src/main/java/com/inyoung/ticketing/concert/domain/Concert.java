@@ -1,8 +1,8 @@
 package com.inyoung.ticketing.concert.domain;
 
 import com.inyoung.ticketing.auth.domain.Users;
+import com.inyoung.ticketing.common.domain.BaseEntity;
 import java.time.Instant;
-import java.time.LocalDateTime;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -13,13 +13,12 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
-import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 
 // 콘서트 기본 정보 엔티티
 @Entity
 @Table(name = "concert")
-public class Concert {
+public class Concert extends BaseEntity {
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
@@ -45,15 +44,6 @@ public class Concert {
 	@ManyToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "seller_id")
 	private Users seller;
-
-	/** 등록 시각 (서울 시간, DB DATETIME 저장) */
-	@Column(nullable = false, updatable = false)
-	private LocalDateTime createdAt;
-
-	@PrePersist
-	void prePersist() {
-		this.createdAt = LocalDateTime.now().withNano(0);
-	}
 
 	// 식별자
 	public Long getId() {
@@ -117,9 +107,5 @@ public class Concert {
 
 	public void setSeller(Users seller) {
 		this.seller = seller;
-	}
-
-	public LocalDateTime getCreatedAt() {
-		return createdAt;
 	}
 }

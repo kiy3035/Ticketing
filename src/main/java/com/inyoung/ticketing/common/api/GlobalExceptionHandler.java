@@ -1,5 +1,7 @@
 package com.inyoung.ticketing.common.api;
 
+import com.inyoung.ticketing.common.exception.BusinessException;
+import com.inyoung.ticketing.common.exception.ErrorCode;
 import jakarta.servlet.http.HttpServletRequest;
 import com.inyoung.ticketing.common.util.TimeUtils;
 import org.slf4j.Logger;
@@ -11,10 +13,27 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
 
-// 공통 예외 처리 핸들러
+/**
+ * 전역 예외 처리.
+ * {@link BusinessException}을 우선 처리하고, 기존 {@link ResponseStatusException}도 호환 유지한다.
+ */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 	private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+	@ExceptionHandler(BusinessException.class)
+	public ResponseEntity<ErrorResponse> handleBusiness(
+		BusinessException ex,
+		HttpServletRequest request
+	) {
+		ErrorCode code = ex.getErrorCode();
+		HttpStatus status = code.getHttpStatus();
+		if (status.is5xxServerError()) {
+			logger.error("[{}] {} - {}", code.getCode(), ex.getMessage(), request.getRequestURI(), ex);
+		}
+		return ResponseEntity.status(status)
+			.body(buildError(status, code.getCode(), ex.getMessage(), request));
+	}
 
 	@ExceptionHandler(ResponseStatusException.class)
 	public ResponseEntity<ErrorResponse> handleResponseStatus(
@@ -23,7 +42,7 @@ public class GlobalExceptionHandler {
 	) {
 		HttpStatus status = HttpStatus.valueOf(ex.getStatusCode().value());
 		return ResponseEntity.status(status)
-			.body(buildError(status, ex.getReason(), request));
+			.body(buildError(status, null, ex.getReason(), request));
 	}
 
 	@ExceptionHandler(MethodArgumentNotValidException.class)
@@ -37,7 +56,7 @@ public class GlobalExceptionHandler {
 			.map(error -> error.getField() + ": " + error.getDefaultMessage())
 			.orElse("Validation failed");
 		return ResponseEntity.status(status)
-			.body(buildError(status, message, request));
+			.body(buildError(status, null, message, request));
 	}
 
 	@ExceptionHandler(Exception.class)
@@ -48,13 +67,13 @@ public class GlobalExceptionHandler {
 		logger.error("Unexpected error on {}", request.getRequestURI(), ex);
 		HttpStatus status = HttpStatus.INTERNAL_SERVER_ERROR;
 		return ResponseEntity.status(status)
-			.body(buildError(status, "Unexpected error", request));
+			.body(buildError(status, "COMMON_999", "Unexpected error", request));
 	}
 
-	private ErrorResponse buildError(HttpStatus status, String message, HttpServletRequest request) {
+	private ErrorResponse buildError(HttpStatus status, String code, String message, HttpServletRequest request) {
 		return new ErrorResponse(
 			status.value(),
-			status.getReasonPhrase(),
+			code != null ? code : status.getReasonPhrase(),
 			message == null ? status.getReasonPhrase() : message,
 			request.getRequestURI(),
 			TimeUtils.nowKst()

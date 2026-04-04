@@ -1,245 +1,93 @@
-# 아키텍처
+# 아키텍처 개요
 
-## 인프라 구성도
+## 시스템 구성
 
-```mermaid
-flowchart LR
-    %% 사용자
-    subgraph user [사용자]
-        Browser[Browser]
-    end
+```
+┌─────────────┐     ┌─────────────────────────────────┐
+│   Client     │     │         ALB (추후 적용)           │
+│  (Browser)   │────▶│   Sticky Session (JSESSIONID)    │
+└─────────────┘     └───────────┬───────────────────────┘
+                                │
+                    ┌───────────┴───────────┐
+                    ▼                       ▼
+            ┌──────────────┐       ┌──────────────┐
+            │  App Server  │       │  App Server  │
+            │  (t3.small)  │       │  (t3.small)  │
+            │  Spring Boot │       │  Spring Boot │
+            │  Java 21     │       │  Java 21     │
+            └──────┬───────┘       └──────┬───────┘
+                   │                      │
+                   └──────────┬───────────┘
+                              │
+              ┌───────────────┼───────────────┐
+              ▼               ▼               ▼
+       ┌────────────┐ ┌────────────┐ ┌──────────────┐
+       │   MySQL    │ │   Redis    │ │    Kafka     │
+       │  (RDS)     │ │ (세션/락/  │ │ (이벤트)     │
+       │            │ │  캐시/홀드 │ │              │
+       └────────────┘ │  /대기열)  │ └──────────────┘
+                      └────────────┘
+                      
+       ┌────────────┐ ┌────────────┐
+       │ Prometheus │ │  Grafana   │
+       │ (메트릭)   │ │ (대시보드) │
+       └────────────┘ └────────────┘
 
-    %% CI/CD
-    subgraph cicd [CI/CD]
-        GH[GitHub]
-        GHA[GitHub Actions]
-    end
-
-    %% AWS
-    subgraph aws [AWS]
-        ALB[ALB<br/>Application Load Balancer]
-
-        subgraph appCluster [App Servers t3-small x2]
-            App1[App Server 1<br/>Docker + Spring Boot]
-            App2[App Server 2<br/>Docker + Spring Boot]
-        end
-
-        subgraph infra [Infra Server t3a-medium]
-            DC[Docker Compose]
-            Redis[(Redis)]
-            Kafka[(Kafka + Zookeeper)]
-            Prom[Prometheus]
-            Graf[Grafana]
-        end
-
-        RDS[(Amazon RDS<br/>MySQL)]
-
-        subgraph k6srv [k6 Server]
-            K6[k6 부하 테스트]
-        end
-    end
-
-    %% 흐름
-    Browser --> ALB
-    ALB --> App1
-    ALB --> App2
-
-    App1 --> RDS
-    App2 --> RDS
-
-    App1 --> Redis
-    App2 --> Redis
-    App1 --> Kafka
-    App2 --> Kafka
-
-    Prom --> App1
-    Prom --> App2
-    Graf --> Prom
-
-    K6 --> ALB
-
-    GH --> GHA
-    GHA --> App1
-    GHA --> App2
+       Infra Server (t3a.medium) 1대에서 Redis, Kafka, Prometheus, Grafana 운영
+       k6 Server (t3a.small) 1대에서 부하 테스트 실행
 ```
 
-| 구성 요소 | 스펙 | 용도 |
-|-----------|------|------|
-| **App Server x2** | t3.small | Spring Boot 애플리케이션 (Docker) |
-| **Infra Server** | t3a.medium | Redis, Kafka, Prometheus, Grafana (Docker Compose) |
-| **RDS** | MySQL | 영구 데이터 (공연, 좌석, 예약, 결제, 사용자) |
-| **ALB** | — | 트래픽 분산, 헬스체크 (`/actuator/health`) |
-| **k6 Server** | — | 부하 테스트 실행 |
-| **GitHub Actions** | — | main push → 빌드 → EC2 배포 |
+## 기술 스택
 
-## 애플리케이션 레이어 구조
+| 구분 | 기술 | 용도 |
+|------|------|------|
+| Language | Java 21 | LTS, Virtual Thread 적용 ([ADR-005](adr/005-virtual-threads.md)) |
+| Framework | Spring Boot 3.4.1 | Web, Security, Data JPA, Kafka |
+| Database | MySQL 8.0 | 콘서트/좌석/예약/결제 영속 데이터 |
+| Cache/Lock | Redis 7 | 세션, 분산 락, 좌석 홀드, 대기열, 캐시, 알림 |
+| Message Queue | Kafka | 이벤트 드리븐: 홀드 이벤트, 결제 완료 알림 |
+| Migration | Flyway | DB 스키마 버전 관리 |
+| Monitoring | Prometheus + Grafana | 비즈니스/인프라 메트릭, 대시보드 |
+| Load Test | k6 | 부하 테스트, Knee Point 측정 |
+| API Doc | SpringDoc (Swagger) | OpenAPI 3.0 자동 문서화 |
+| Resilience | Resilience4j | Redis 서킷브레이커 |
 
-```mermaid
-flowchart TB
-    Controller["Controller Layer<br/>(REST API + SSE)"]
-    Security["Spring Security<br/>(Redis Session 인증)"]
-    Service["Service Layer<br/>(비즈니스 로직, @Transactional)"]
-    Store["Store Layer<br/>(HoldStore · RedisLockService)"]
-    Scheduler["Scheduler Layer<br/>(대기열 처리 · 홀드 정리 · 환불 배치)"]
-    Event["Event Layer<br/>(Kafka Producer/Consumer)"]
-    MySQL[(MySQL)]
-    Redis[(Redis)]
-    Kafka[Kafka]
+## 핵심 설계 원칙
 
-    Controller --> Security --> Service
-    Service --> Store
-    Service --> MySQL
-    Store --> Redis
-    Scheduler --> Service
-    Scheduler --> Store
-    Event --> Kafka
-    Service --> Event
+### 0. Virtual Thread (Java 21)
+- **Tomcat 요청 스레드**를 Virtual Thread로 전환 → Platform Thread 200개 한계 제거
+- **배치 스케줄러** 내부 I/O 작업을 Virtual Thread로 병렬 처리 (홀드 정리, 환불)
+- **Kafka Consumer 리스너**도 Virtual Thread에서 실행 → DB/이메일 I/O 대기 중 OS 스레드 미점유
+- CPU-bound이거나 라이브러리 내부 스레드(Netty, Kafka Producer)는 의도적으로 제외 → [ADR-005](adr/005-virtual-threads.md)
+
+### 1. 동시성 제어 (좌석 선점)
+- **Redis 분산 락** (SETNX + TTL + Lua 해제)으로 좌석 단위 배타적 잠금
+- **Redis Lua 스크립트**로 홀드 생성/해제를 원자적 처리
+- **DB 비관적 락** (PESSIMISTIC_WRITE)으로 결제/포인트 정합성 보장
+
+### 2. 이벤트 드리븐 아키텍처
+- 결제 완료 → Kafka → 이메일/SMS 비동기 알림
+- 홀드 만료/예약 확정 → Kafka → SSE + Redis 알림
+- **DLQ(Dead Letter Queue)**: 처리 실패 메시지 → `*.DLT` 토픽으로 전송, 수동 재처리
+
+### 3. 장애 대응
+- **멱등성 키**: 결제 API에 `Idempotency-Key` 헤더로 중복 방지
+- **보상 트랜잭션 (Saga)**: 예약 확정 실패 시 결제 승인 되돌림
+- **서킷브레이커**: Redis 장애 시 빠른 실패 전환
+- **Rate Limiting**: Redis Sliding Window로 API 남용 방지
+
+### 4. 관측성 (Observability)
+- Prometheus 커스텀 메트릭: 활성 홀드 수, 선점 성공률, 결제 완료 소요 시간
+- 구조화 로깅 (JSON): 운영 환경에서 ELK/Loki 연동 대비
+- 커스텀 헬스 체크: Redis, Kafka, DB 상태 모니터링
+
+## 예매 흐름
+
 ```
-
-| 레이어 | 역할 | 비고 |
-|--------|------|------|
-| **Security** | 세션 기반 인증/인가 | Redis 세션 저장 |
-| **Controller** | REST API + SSE 엔드포인트 | `ApiResponse` 공통 래핑 |
-| **Service** | 도메인 비즈니스 로직 | `@Transactional`, `@Cacheable` |
-| **Store** | Redis 기반 홀드 저장소 + 분산 락 | Lua 스크립트 원자성 |
-| **Scheduler** | 대기열·홀드·토큰 정리, 환불 배치 | 4종, 분산 락으로 중복 방지 |
-| **Event** | Kafka Producer/Consumer | 알림·SSE 비동기 전달 |
-
-## 핵심 예매 플로우 (End-to-End)
-
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant API as Spring Boot
-    participant R as Redis
-    participant SCH as Schedulers
-    participant DB as MySQL
-    participant K as Kafka
-
-    Note over U,K: 1. 대기열 진입
-    U->>API: POST /api/queue/enter
-    API->>R: ZADD queue:concert:{id} (ZSet)
-    API->>R: SET queue:token:{token} EX 1800
-    API-->>U: token, rank
-
-    Note over U,K: 2. 입장 허용 (스케줄러 2초 주기)
-    SCH->>R: ZRANGE 상위 N명 조회
-    SCH->>R: SET queue:allowed:{token}
-    U->>API: GET /api/queue/status (폴링)
-    API-->>U: isAllowed=true → 좌석 페이지 이동
-
-    Note over U,K: 3. 좌석 홀드
-    U->>API: POST /api/holds
-    API->>R: SETNX lock:seat:{seatId} (분산 락)
-    API->>R: Lua Script (홀드 원자적 생성)
-    API->>K: publish(HOLD_CREATED)
-    API-->>U: holdToken, expiresAt
-
-    Note over U,K: 4. 결제 (READY → APPROVED → COMPLETED)
-    U->>API: POST /api/payments/request
-    API->>DB: Payment READY 생성
-    U->>API: POST /api/payments/{key}/approve
-    API->>DB: 포인트 차감, APPROVED
-    U->>API: POST /api/payments/{key}/complete
-    API->>DB: 좌석 RESERVED, 예약 생성, COMPLETED
-
-    Note over U,K: 5. 예약 확정 후처리 (DB 커밋 후)
-    API->>R: 홀드 해제 (Lua Script)
-    API->>K: publish(RESERVATION_CONFIRMED)
-    K->>API: Consumer → 알림 저장 + SSE 전송
+사용자 → 대기열 진입 → 좌석 선택 → 홀드(선점) → 결제 요청 → 결제 승인 → 결제 완료(예약 확정)
+                                    │                                      │
+                                    │ Redis 분산 락                         │ DB 트랜잭션
+                                    │ + Lua 원자적 생성                     │ + 보상 트랜잭션
+                                    │                                      │
+                                    └── 홀드 만료 시 자동 해제 ──────────────┘
 ```
-
-## 기술적 의사결정
-
-| 기술 | 선택 이유 |
-|------|----------|
-| **Redis ZSet** (대기열) | RANK O(log N) 순번 조회, 타임스탬프 기준 자동 정렬 |
-| **Redis 분산 락** | Lua 스크립트로 원자적 lock/unlock, 토큰 검증으로 안전한 해제 |
-| **Kafka** | 이벤트 발행/소비 분리, Consumer Group 분산, 재처리 가능 |
-| **SSE** | 서버→클라이언트 단방향 푸시, WebSocket보다 구현 간단, 자동 재연결 |
-| **Lua 스크립트** (홀드) | 홀드 생성/해제 시 다중 키 원자적 연산 (EXISTS→SET→ZADD) |
-| **AFTER_COMMIT 리스너** | DB 커밋 후 Redis 홀드 해제·Kafka 발행으로 롤백 시 불일치 방지 |
-| **Google SMTP / Solapi** | 결제 완료 알림: 이메일(SMTP) 또는 SMS(Solapi), Kafka 비동기 처리 |
-
-## ERD
-
-```mermaid
-erDiagram
-    USERS ||--o{ RESERVATION : makes
-    USERS ||--o{ PAYMENT : pays
-    CONCERT ||--o{ SEAT : has
-    CONCERT ||--o{ RESERVATION : reserves
-    CONCERT ||--o{ PAYMENT : "결제 대상"
-    SEAT ||--o| RESERVATION : reserves
-    SEAT ||--o| PAYMENT : "결제 좌석"
-    RESERVATION ||--o| PAYMENT : "결제 연결"
-
-    USERS {
-        BIGINT id PK
-        STRING username UK
-        STRING pw
-        STRING email
-        STRING phone
-        STRING noti_type
-        STRING role
-        BIGINT point
-        DATETIME created_at
-    }
-
-    CONCERT {
-        BIGINT id PK
-        STRING title
-        STRING venue
-        INSTANT concert_at
-        ENUM status
-        ENUM category
-        BIGINT seller_id FK
-        DATETIME created_at
-    }
-
-    SEAT {
-        BIGINT id PK
-        BIGINT concert_id FK
-        STRING section
-        STRING seat_no
-        BIGINT price
-        ENUM status
-    }
-
-    RESERVATION {
-        BIGINT id PK
-        BIGINT concert_id FK
-        BIGINT seat_id FK
-        STRING user_id
-        ENUM status
-        DATETIME reserved_at
-    }
-
-    PAYMENT {
-        BIGINT id PK
-        STRING payment_key UK
-        STRING hold_token UK
-        STRING user_id
-        BIGINT concert_id FK
-        BIGINT seat_id FK
-        LONG amount
-        ENUM payment_method
-        STRING order_id
-        STRING toss_payment_key
-        ENUM status
-        BIGINT reservation_id FK
-        DATETIME approved_at
-        DATETIME completed_at
-        DATETIME canceled_at
-        DATETIME created_at
-    }
-```
-
-## 확장성
-
-| 항목 | 전략 |
-|------|------|
-| **세션/홀드/대기열/알림** | Redis 기반 → 앱 수평 확장 시 상태 공유 |
-| **SSE 연결** | 인스턴스별 관리 → 로드밸런서 Sticky Session 필요 |
-| **Kafka Consumer** | Consumer Group 자동 분산 |
-| **스케줄러** | 다중 인스턴스 시 분산 락으로 중복 실행 방지 |

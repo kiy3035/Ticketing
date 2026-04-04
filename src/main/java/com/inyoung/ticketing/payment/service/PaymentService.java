@@ -179,6 +179,17 @@ public class PaymentService {
 		return new PaymentResponse(payment);
 	}
 
+	/**
+	 * 결제 완료: 예약 확정을 시도하고 성공 시 COMPLETED로 전환한다.
+	 *
+	 * <p><b>Saga 보상 패턴</b>: 예약 확정이 실패하면
+	 * 이미 승인된 결제(포인트 차감 또는 토스 승인)를 보상 처리해야 한다.
+	 * <ul>
+	 *   <li>POINT: 차감된 포인트를 환불하고 결제를 CANCELED로 변경</li>
+	 *   <li>CARD: 토스 승인은 외부 PG이므로 별도 취소 API 호출이 필요하지만,
+	 *           현재 샌드박스 환경에서는 DB 상태만 CANCELED로 변경한다</li>
+	 * </ul>
+	 */
 	@Transactional
 	public PaymentResponse completePayment(String paymentKey, String userId) {
 		Timer.Sample sample = Timer.start();
@@ -196,24 +207,45 @@ public class PaymentService {
 
 			ReservationRequest reservationRequest = new ReservationRequest();
 			reservationRequest.setHoldToken(payment.getHoldToken());
-			ReservationResponse reservation = reservationService.confirm(reservationRequest, userId);
+
+			ReservationResponse reservation;
+			try {
+				reservation = reservationService.confirm(reservationRequest, userId);
+			} catch (Exception e) {
+				log.error("예약 확정 실패 → 보상 트랜잭션 실행: paymentKey={}, reason={}", paymentKey, e.getMessage());
+				compensatePayment(payment);
+				throw e;
+			}
 
 			payment.setStatus(PaymentStatus.COMPLETED);
 			payment.setCompletedAt(now());
 			payment.setReservationId(reservation.getReservationId());
 			paymentCompletedCounter.increment();
 
-			// 결제 완료 이벤트 발행 (Kafka를 통해 비동기로 이메일/SMS 전송)
 			paymentCompleteEventPublisher.publishPaymentComplete(
-				paymentKey,
-				userId,
-				payment.getConcertId(),
-				payment.getAmount()
+				paymentKey, userId, payment.getConcertId(), payment.getAmount()
 			);
 
 			return new PaymentResponse(payment);
 		} finally {
 			sample.stop(paymentCompleteTimer);
+		}
+	}
+
+	/**
+	 * 보상 트랜잭션: 예약 확정 실패 시 결제 승인을 되돌린다.
+	 * POINT 결제는 차감 포인트를 복구하고, 결제 상태를 CANCELED로 변경한다.
+	 */
+	private void compensatePayment(Payment payment) {
+		try {
+			if (payment.getPaymentMethod() == PaymentMethod.POINT) {
+				refundPoints(payment.getUserId(), payment.getAmount());
+				log.info("보상 완료: 포인트 환불 {}원, userId={}", payment.getAmount(), payment.getUserId());
+			}
+			payment.setStatus(PaymentStatus.CANCELED);
+			payment.setCanceledAt(now());
+		} catch (Exception compensationError) {
+			log.error("보상 트랜잭션 실패: paymentKey={}, 수동 확인 필요", payment.getPaymentKey(), compensationError);
 		}
 	}
 

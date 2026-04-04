@@ -1,5 +1,6 @@
 package com.inyoung.ticketing.seat.domain;
 
+import com.inyoung.ticketing.common.domain.BaseEntity;
 import com.inyoung.ticketing.concert.domain.Concert;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -22,7 +23,7 @@ import jakarta.persistence.UniqueConstraint;
 		@UniqueConstraint(columnNames = { "concert_id", "section", "seat_no" })
 	}
 )
-public class Seat {
+public class Seat extends BaseEntity {
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;

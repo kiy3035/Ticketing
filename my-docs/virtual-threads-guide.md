@@ -1,0 +1,247 @@
+# Virtual Thread (Java 21 Loom) 상세 가이드
+
+## Virtual Thread란?
+
+Java 21에서 정식 도입된 **경량 스레드**. OS가 관리하는 Platform Thread와 달리, JVM이 직접 스케줄링한다.
+
+### 핵심 차이
+
+```
+Platform Thread (기존):
+  - OS 커널이 관리
+  - 스택: 기본 1MB 고정
+  - 생성 비용: ~1ms
+  - 200개 → 스택만 ~200MB
+  - 컨텍스트 스위칭: 커널 모드 전환 필요
+
+Virtual Thread (Java 21):
+  - JVM이 관리, OS 스레드(carrier thread) 위에서 실행
+  - 스택: 수KB (필요 시 자동 확장)
+  - 생성 비용: ~1μs (1000배 빠름)
+  - 10,000개 만들어도 수십MB
+  - I/O 대기 시 carrier thread를 반납 → 다른 Virtual Thread가 사용
+```
+
+### 비유로 이해하기
+
+- **Platform Thread** = 택시 1대에 승객 1명. 승객이 병원에서 기다려도 택시는 대기.
+- **Virtual Thread** = 택시가 승객을 내려놓고 다른 승객 태움. 병원 끝나면 다시 태움.
+- **carrier thread** = 택시. `ForkJoinPool`에서 관리 (기본 vCPU 개수만큼).
+
+---
+
+## 이 프로젝트에서 적용한 곳
+
+### 1. Tomcat 요청 처리 (가장 큰 효과)
+
+**설정 1줄:**
+```properties
+spring.threads.virtual.enabled=true
+```
+
+**Spring Boot 3.2+에서 이 한 줄이 하는 것:**
+- `TomcatProtocolHandlerCustomizer`가 활성화됨
+- Tomcat의 기본 `ThreadPoolExecutor`(max 200) 대신 `VirtualThreadExecutor` 사용
+- 모든 HTTP 요청 핸들러(@Controller, @RestController)가 Virtual Thread에서 실행됨
+
+**왜 효과가 큰가:**
+```
+홀드 API 1건의 시간 분해:
+  ┌──────────────────────────────────────────────────┐
+  │ Redis 락 획득     │██░░░░░░░░│  2ms (I/O 대기)     │
+  │ Redis Lua 홀드    │█░░░░░░░░░│  1ms (I/O 대기)     │
+  │ Kafka 발행        │█████░░░░░│  5ms (I/O 대기)     │
+  │ CPU 연산          │░░░░░░░░░░│  0.1ms              │
+  └──────────────────────────────────────────────────┘
+  → I/O 대기 99%. Platform Thread는 99% 시간을 "점유만" 하고 있었다.
+```
+
+**기존**: Thread 200개 → 동시 요청 200개 한계
+**변경**: Virtual Thread → carrier thread는 vCPU 2개만 있어도 수천 동시 요청 처리
+(실제 병목은 DB 커넥션 풀이나 Redis 커넥션 수로 넘어감)
+
+### 2. HoldCleanupScheduler — 만료 홀드 병렬 정리
+
+**변경 전 (순차):**
+```java
+for (HoldPayload payload : expired) {
+    holdStore.releaseByPayload(payload.info(), payload.payload());  // Redis I/O
+    holdReleaseMetrics.recordReleased("timeout");
+    eventPublisher.publish(SeatHoldEventType.HOLD_EXPIRED, payload.info());  // Kafka I/O
+}
+// 200건 × 8ms/건 = 1.6초
+```
+
+**변경 후 (병렬):**
+```java
+try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+    for (HoldPayload payload : expired) {
+        executor.submit(() -> {
+            holdStore.releaseByPayload(payload.info(), payload.payload());
+            holdReleaseMetrics.recordReleased("timeout");
+            eventPublisher.publish(SeatHoldEventType.HOLD_EXPIRED, payload.info());
+        });
+    }
+}
+// try-with-resources: close()가 모든 태스크 완료를 기다림 (ExecutorService.close())
+// 200건 병렬 → ~50ms (Redis/Kafka 커넥션이 자연 조절)
+```
+
+**`Executors.newVirtualThreadPerTaskExecutor()` 동작:**
+- submit()할 때마다 새 Virtual Thread 생성
+- 생성 비용이 ~1μs이므로 200개 만들어도 ~0.2ms
+- try-with-resources의 close()에서 모든 Virtual Thread 종료를 기다림
+- Platform Thread Executor처럼 풀 크기 설정 불필요 (Virtual Thread는 풀링하지 않는다)
+
+### 3. RefundForCancelledConcertScheduler — 환불 병렬 처리
+
+```java
+// 페이지(50건) 내 결제 건을 Virtual Thread로 병렬 환불
+try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+    for (Payment payment : chunk) {
+        executor.submit(() -> {
+            paymentService.refundCompletedPaymentForCancelledConcert(payment.getId());
+            // 각 환불은 독립적인 @Transactional — 서로 간섭 없음
+        });
+    }
+}
+```
+
+**카운터를 AtomicInteger로 바꾼 이유:**
+```java
+// 기존: int totalRefunded = 0; → 여러 Virtual Thread에서 동시 접근하면 Lost Update
+// 변경: AtomicInteger totalRefunded = new AtomicInteger();
+//       totalRefunded.incrementAndGet(); → CAS 연산으로 Thread-safe
+```
+
+**DB 커넥션 풀이 자연 조절하는 원리:**
+- Virtual Thread 50개가 동시에 DB 접근 시도
+- HikariCP 커넥션 풀은 기본 10개
+- 10개 Virtual Thread만 실제 DB 연결 획득, 나머지 40개는 대기
+- 대기 중 Virtual Thread는 carrier thread를 반납 → 다른 작업 처리 가능
+- Platform Thread 50개였다면 40개 OS 스레드가 아무것도 안 하며 점유
+
+### 4. Kafka Consumer 리스너
+
+```java
+// KafkaConfig.java
+private SimpleAsyncTaskExecutor virtualThreadExecutor(String prefix) {
+    SimpleAsyncTaskExecutor executor = new SimpleAsyncTaskExecutor(prefix);
+    executor.setVirtualThreads(true);  // Spring 6.1+ API
+    return executor;
+}
+
+// 각 listener factory에 적용
+factory.getContainerProperties().setListenerTaskExecutor(virtualThreadExecutor("kafka-seat-hold-"));
+```
+
+**왜 Kafka Consumer에도 적용했는가:**
+- `PaymentCompleteEventConsumer`는 이벤트 수신 시 이메일/SMS를 보냄 (SMTP I/O ~100ms)
+- `SeatHoldEventConsumer`는 이벤트 수신 시 DB 조회/SSE 발송
+- 이 I/O 대기 동안 Consumer의 Platform Thread가 묶이면, 다음 이벤트 처리가 지연됨
+
+---
+
+## 적용하지 않은 곳과 이유
+
+### @Scheduled 트리거 스레드
+```java
+@Scheduled(fixedDelayString = "${ticketing.hold.cleanup-interval-ms:60000}")
+public void cleanupExpiredHolds() {
+    // ← 이 메서드를 "호출"하는 스레드는 Spring TaskScheduler의 Platform Thread
+    //    호출 자체가 가볍고, 분산 락 획득(Redis SETNX) 1번이 전부
+    //    내부의 doCleanupExpiredHolds()에서 Virtual Thread를 사용
+}
+```
+트리거 스레드를 Virtual Thread로 바꿔도 이득이 없다. 60초마다 1번 실행되고, 락 획득 1회뿐이니까.
+
+### QueueProcessingScheduler
+```java
+for (Concert concert : concerts) {
+    for (String token : topTokens) {
+        queueService.isAllowed(token);   // Redis GET ~0.5ms
+        queueService.allowEntry(token);  // Redis SET ~0.5ms
+    }
+}
+```
+- 2초마다 실행, 콘서트 수 적음, 각 호출이 1ms 미만
+- Virtual Thread 생성·스케줄링 오버헤드가 I/O 대기보다 클 수 있음
+- 순차 실행이 더 예측 가능하고 디버깅도 쉬움
+
+### Lettuce(Redis) Netty I/O 스레드
+- Lettuce는 내부적으로 Netty의 `EventLoopGroup`에서 non-blocking I/O를 수행
+- 우리가 `redisTemplate.opsForValue().get(key)` 호출하면:
+  1. Virtual Thread(호출 측)가 Lettuce에 명령 전달
+  2. Netty I/O 스레드가 Redis에 명령 전송 (우리가 제어하는 영역 아님)
+  3. 응답 도착 시 Virtual Thread가 깨어남
+- Netty I/O 스레드를 Virtual Thread로 바꾸면 오히려 성능 저하 (epoll 기반 이벤트 루프가 깨짐)
+
+### Kafka Producer 내부 I/O 스레드
+- Kafka Producer는 `sender` 스레드 1개가 배치 전송을 담당
+- 이 스레드는 Kafka 클라이언트 라이브러리가 생성·관리
+- 우리가 `kafkaTemplate.send()`를 호출하면 레코드가 내부 버퍼에 추가되고, sender가 비동기로 전송
+- 우리 코드에서 직접 제어할 수 없는 영역
+
+---
+
+## Pinning (고정) 문제
+
+### 문제
+```java
+synchronized (lock) {
+    // 이 블록 안에서 I/O를 수행하면
+    jdbc.executeQuery("SELECT ...");  // Virtual Thread가 carrier thread에 pin됨!
+    // carrier thread를 반납하지 못함 → Platform Thread와 동일한 문제
+}
+```
+
+### 이 프로젝트에서 안전한 이유
+1. **직접 `synchronized` 사용 없음** — 모든 동시성 제어가 Redis 분산 락
+2. **MySQL Connector/J 9.x** — 내부 `synchronized` → `ReentrantLock`으로 교체 완료
+3. **Lettuce** — Netty 기반, `synchronized` 사용 안 함
+4. **Spring Framework 6.1** — 내부 락을 `ReentrantLock`으로 전환 중
+
+### 확인 방법
+```bash
+# JVM 옵션으로 pinning 감지 (개발 환경에서 테스트 시)
+-Djdk.tracePinnedThreads=short
+```
+pinning이 발생하면 로그에 스택 트레이스가 출력된다.
+
+---
+
+## 면접 대비 Q&A
+
+### Q: Virtual Thread를 왜 사용했나요?
+> 이 프로젝트는 요청 1건당 Redis 락, DB 트랜잭션, Kafka 발행 등 I/O 대기가 99%입니다.
+> 기존 Platform Thread 200개 풀에서는 200명이 동시에 I/O 대기만 해도 스레드가 고갈됩니다.
+> Virtual Thread를 적용하면 I/O 대기 중 carrier thread를 반납하므로, vCPU 2개인 t3.small에서도 수천 동시 요청을 처리할 수 있습니다.
+
+### Q: 왜 전부 다 Virtual Thread로 안 바꿨나요?
+> Virtual Thread는 "I/O 대기를 저렴하게" 만드는 기술입니다. CPU 연산 위주이거나, 라이브러리가 자체 스레드를 관리하는 곳(Netty, Kafka sender)에는 이득이 없거나 오히려 해롭습니다.
+> 예를 들어 QueueProcessingScheduler는 Redis 호출 1건당 0.5ms인데, Virtual Thread 생성·스케줄링 오버헤드가 그보다 클 수 있어서 순차 실행을 유지했습니다.
+
+### Q: WebFlux(리액티브)와 비교하면?
+> WebFlux는 전체 코드를 Mono/Flux 기반으로 재작성해야 합니다. JPA도 R2DBC로 바꿔야 하고요.
+> Virtual Thread는 기존 동기 코드(JPA, @Transactional) 그대로 두면서 I/O 효율만 개선합니다.
+> "코드 복잡도 vs 성능 이득" 트레이드오프에서 Virtual Thread가 이 프로젝트에 더 적합합니다.
+
+### Q: 실제 성능 차이를 측정했나요?
+> k6 부하 테스트로 Virtual Thread 적용 전후를 비교할 수 있습니다.
+> 주요 관측 포인트:
+> - `http_reqs` (초당 처리량): Platform Thread 풀 200 → Virtual Thread 전환 시 동시 요청 증가분
+> - `http_req_duration` p95: 스레드 고갈 시점의 응답 시간 급등 여부
+> - Grafana `jvm_threads_live_threads` 메트릭: Platform Thread 수 감소 확인
+
+### Q: Pinning 문제는 없나요?
+> 이 프로젝트에서는 synchronized를 직접 사용하지 않습니다. 모든 동시성 제어가 Redis 분산 락이고,
+> MySQL Connector/J 9.x와 Spring 6.1이 내부 synchronized를 ReentrantLock으로 교체했기 때문에
+> pinning이 발생할 가능성이 매우 낮습니다. 개발 환경에서 `-Djdk.tracePinnedThreads=short`로 검증했습니다.
+
+---
+
+## 참고 자료
+
+- [JEP 444: Virtual Threads (Java 21)](https://openjdk.org/jeps/444)
+- [Spring Boot 3.2 — Virtual Threads Support](https://spring.io/blog/2023/09/09/all-together-now-spring-boot-3-2-graalvm-native-images-java-21-and-virtual)
+- [Baeldung — Virtual Threads in Spring Boot](https://www.baeldung.com/spring-boot-virtual-threads)

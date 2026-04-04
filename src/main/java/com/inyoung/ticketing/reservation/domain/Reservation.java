@@ -1,6 +1,7 @@
 package com.inyoung.ticketing.reservation.domain;
 
 import java.time.LocalDateTime;
+import com.inyoung.ticketing.common.domain.BaseEntity;
 import com.inyoung.ticketing.concert.domain.Concert;
 import com.inyoung.ticketing.seat.domain.Seat;
 import jakarta.persistence.Column;
@@ -19,7 +20,7 @@ import jakarta.persistence.Table;
 // 좌석 예약 확정 엔티티
 @Entity
 @Table(name = "reservation")
-public class Reservation {
+public class Reservation extends BaseEntity {
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;

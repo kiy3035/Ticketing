@@ -1,6 +1,7 @@
 package com.inyoung.ticketing.payment.domain;
 
 import java.time.LocalDateTime;
+import com.inyoung.ticketing.common.domain.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -8,8 +9,6 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 
@@ -25,7 +24,7 @@ import jakarta.persistence.UniqueConstraint;
 		@UniqueConstraint(columnNames = { "hold_token" })
 	}
 )
-public class Payment {
+public class Payment extends BaseEntity {
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
@@ -83,24 +82,6 @@ public class Payment {
 
 	@Column(name = "canceled_at")
 	private LocalDateTime canceledAt;
-
-	@Column(nullable = false, updatable = false)
-	private LocalDateTime createdAt;
-
-	@Column(nullable = false)
-	private LocalDateTime updatedAt;
-
-	@PrePersist
-	void prePersist() {
-		LocalDateTime now = LocalDateTime.now().withNano(0);
-		this.createdAt = now;
-		this.updatedAt = now;
-	}
-
-	@PreUpdate
-	void preUpdate() {
-		this.updatedAt = LocalDateTime.now().withNano(0);
-	}
 
 	public Long getId() {
 		return id;
@@ -216,13 +197,5 @@ public class Payment {
 
 	public void setCanceledAt(LocalDateTime canceledAt) {
 		this.canceledAt = canceledAt;
-	}
-
-	public LocalDateTime getCreatedAt() {
-		return createdAt;
-	}
-
-	public LocalDateTime getUpdatedAt() {
-		return updatedAt;
 	}
 }
