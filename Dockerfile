@@ -10,6 +10,7 @@ FROM eclipse-temurin:21-jre-jammy
 RUN groupadd -r app && useradd -r -g app -u 1000 app
 WORKDIR /app
 COPY --from=builder --chown=app:app /workspace/build/libs/ticketing-*-SNAPSHOT.jar app.jar
+RUN mkdir -p /app/logs && chown app:app /app/logs
 USER app
 EXPOSE 8080
 ENV SPRING_PROFILES_ACTIVE=prod
