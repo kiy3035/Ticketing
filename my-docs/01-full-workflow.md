@@ -61,7 +61,7 @@
      → approvePaymentWithOption: 포인트 차감, APPROVED
   3. `POST /api/payments/{paymentKey}/complete`  
      → completePayment: ReservationService.confirm() 호출 → 예약 생성, COMPLETED, reservationId 저장, Kafka 결제 완료 이벤트
-- **예약 확정**: confirm() 안에서 seat RESERVED, reservation 저장 후 **ReservationConfirmedEvent** 발행 → **DB 커밋 후** ReservationConfirmedEventListener가 Redis 홀드 해제 + Kafka RESERVATION_CONFIRMED 발행
+- **예약 확정**: `confirm()` 한 트랜잭션 안에서 좌석 `RESERVED`·예약 저장·**`kafka_outbox` 에 `RESERVATION_CONFIRMED` 페이로드 INSERT** 까지 커밋된다. 커밋 후 **`ReservationConfirmedEventListener`(AFTER_COMMIT)** 는 **Redis 홀드 해제만** 한다. **`RESERVATION_CONFIRMED` Kafka 전송**은 **`KafkaOutboxPublishScheduler`** 가 outbox 행을 읽어 `send` 하고 성공 시 행을 **삭제**한다.
 
 ### 8) 예매 내역 조회
 
@@ -96,7 +96,7 @@
 로그인 → app(공연 목록) → queue required 확인
   → (필요 시) queue enter → 폴링 status → 입장 허용 시 concert 페이지
   → seats 조회 → holds POST(홀드) → payment 페이지
-  → payments/request → approve → complete (예약 확정 + 홀드 해제는 커밋 후)
+  → payments/request → approve → complete (예약·outbox 커밋 → 커밋 후 Redis 홀드 해제 → outbox 스케줄러가 Kafka)
   → reservations/me 로 예매 내역 확인
 ```
 

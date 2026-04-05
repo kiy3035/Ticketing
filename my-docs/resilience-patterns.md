@@ -98,12 +98,26 @@ CircuitBreakerConfig.custom()
 - `@RateLimit(maxRequests = 5, windowSeconds = 1)` → 결제 API
 - 사용자 식별: 로그인 사용자는 username, 미로그인은 IP
 
-## 5. 장애 시나리오 정리
+## 5. Transactional Outbox (`RESERVATION_CONFIRMED`)
+
+**문제**: 예약 row 는 커밋됐는데 Kafka 전송만 실패하면, 다운스트림(알림·연동)이 영원히 모를 수 있다. 반대로 전송만 성공하고 DB 가 롤백되면 "유령 이벤트" 가 된다.
+
+**이 프로젝트의 선택**:
+
+- `ReservationService.confirm()` 안에서 **`KafkaOutboxService.enqueueSeatHoldEvent`** 로 같은 트랜잭션에 outbox INSERT.
+- 브로커로의 `send` 는 **`KafkaOutboxPublishScheduler`** 가 비동기로 수행. 성공 시 행 **DELETE**, 실패 시 재시도 후 `FAILED`.
+
+**다른 이벤트**: `HOLD_CREATED`, `PaymentComplete` 등은 여전히 **직접 `KafkaTemplate.send`** — 브로커 장애 시 "DB 는 반영됐는데 이벤트만 없음" 구간이 생길 수 있어, 필요하면 동일 패턴으로 확장할지 트레이드오프를 본다.
+
+---
+
+## 6. 장애 시나리오 정리
 
 | 장애 | 영향 | 대응 |
 |------|------|------|
-| Redis 다운 | 세션/락/홀드/대기열 불능 | 서킷브레이커 → 빠른 실패 |
-| Kafka 다운 | 알림 전송 불가 | 결제는 성공, 알림만 DLQ 적체 |
+| Redis 다운 | 세션/락/홀드/대기열 불능 | 헬스 `ticketingDatastores` DOWN → 트래픽 제거 검토 |
+| Kafka 다운 | 직접 send 경로는 알림 등 지연·유실 가능 | `RESERVATION_CONFIRMED` 는 outbox 적재까지는 DB 에 남음 → 브로커 복구 후 스케줄러가 밀어 넣음 |
+| Outbox 반복 실패 | `publish_attempts` 초과 시 `FAILED` | 모니터링·수동 재처리·원인(브로커·페이로드) 조사 |
 | DB 다운 | 전체 서비스 불능 | 헬스체크 → ALB에서 제거 |
 | 외부 PG 장애 | 카드 결제 불가 | 포인트 결제는 정상 작동 |
 | 앱 서버 OOM | 해당 인스턴스 불능 | ALB가 다른 인스턴스로 라우팅 |

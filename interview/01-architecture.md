@@ -4,52 +4,55 @@
 
 ### Q1. 이 프로젝트의 전체 아키텍처를 간단히 설명해 주세요.
 
-**A.** 클라이언트 → Spring Boot API 서버 → MySQL/Redis/Kafka로 구성된 레이어드 아키텍처입니다. API 서버 내부는 `Controller → Service → Store/Repository`로 나뉘고, 그 위에 Spring Security + Redis Session 기반 인증 레이어, 옆으로 Kafka 기반 Event Layer(`SeatHoldEventPublisher/Consumer`, `PaymentCompleteEventPublisher/Consumer`)와 Scheduler Layer(`QueueProcessingScheduler`, `HoldCleanupScheduler`, `RefundForCancelledConcertScheduler`)를 두어 책임을 분리했습니다. MySQL은 결제·예약·좌석 같은 영구 데이터를 담당하고, Redis는 대기열·홀드·락·세션 등 실시간성이 필요한 휘발성 데이터를 전담합니다.
+**A.** 클라이언트 → Spring Boot API → MySQL / Redis / Kafka 로 나뉜 **레이어드 + 이벤트 주변부** 구조입니다. 내부는 `Controller → Service → (JPA)Repository` 와 Redis 전용 `HoldStore`, `RedisLockService` 로 분리하고, Spring Security + **Spring Session Redis** 로 인증·세션을 다중 인스턴스에 맞췄습니다. 비동기는 `SeatHoldEventPublisher` / `PaymentCompleteEventPublisher` 와 컨슈머, 그리고 `QueueProcessingScheduler`, `HoldCleanupScheduler`, `RefundForCancelledConcertScheduler`, **`KafkaOutboxPublishScheduler`** 등 스케줄러로 나뉩니다. MySQL은 예약·결제·좌석 등 **감사 가능한 진실**, Redis는 대기열·홀드·락·세션 등 **고속·휘발성** 데이터를 담당합니다.
 
-> **Q1-1. Controller에서 Service까지는 일반적인데, Store라는 레이어를 별도로 둔 이유가 있나요?**
-> **A.** `HoldStore`나 `RedisLockService`처럼 Redis에 직접 접근하는 코드를 Service 안에 넣으면, `ZADD`·`SET`·`EXPIRE` 같은 Redis 명령이 비즈니스 로직과 섞여 가독성이 떨어집니다. 그래서 "도메인 서비스는 비즈니스 용어만 사용하고, Redis 자료구조/명령어는 Store 안에 캡슐화한다"는 기준을 세웠습니다. 예를 들어 `HoldService`는 `holdStore.createHold(info, ttl)`만 호출하고, 실제 Lua 스크립트 실행과 `hold:seat:{seatId}`·`hold:token:{token}`·`hold:expires` ZSet 갱신은 `HoldStore` 내부에서 처리합니다.
+> **Q1-1. Store 레이어를 둔 이유는요?**
+> **A.** `HoldStore` 처럼 Lua·ZSET·여러 키를 다루는 코드를 서비스에 풀어두면 비즈니스 규칙과 Redis 명령이 뒤섞입니다. 서비스는 `holdStore.createHold(info, ttl)` 같은 도메인 언어만 쓰고, 키 패턴·스크립트는 Store 에 캡슐화했습니다.
 
----
-
-### Q2. Kafka를 왜 도입하셨나요? 동기 호출로도 가능할 것 같은데요.
-
-**A.** 결제 완료 후 이메일·SMS 알림은 사용자 응답 시간과 직접적 상관이 없어서 비동기로 분리했습니다. `PaymentService.completePayment()`는 예약 확정과 결제 상태 변경만 동기로 처리하고, 이후 `PaymentCompleteEventPublisher.publishPaymentComplete()`로 Kafka에 이벤트를 발행합니다. Consumer 쪽(`PaymentCompleteEventConsumer → NotificationService → EmailService`)은 별도로 동작하기 때문에, 알림 채널을 추가하거나 재시도/DLT를 붙일 때 결제 로직을 건드리지 않아도 됩니다. 홀드 이벤트도 마찬가지로 `SeatHoldEventPublisher`가 `ticketing.seat-hold-events` 토픽에 `HOLD_CREATED`·`HOLD_EXPIRED`·`RESERVATION_CONFIRMED` 등을 발행하고, `SeatHoldEventConsumer`가 알림을 처리합니다.
-
-> **Q2-1. Kafka가 장애 나면 결제가 실패하나요?**
-> **A.** 아닙니다. 설계 원칙이 "결제가 알림에 의존하면 안 된다"이기 때문에, `completePayment()` 안에서 DB 트랜잭션(좌석 RESERVED + Reservation 생성 + Payment COMPLETED)이 먼저 커밋됩니다. Kafka 발행이 실패하더라도 결제/예약 자체는 정상 커밋되고, 알림만 누락됩니다. 운영 환경에서는 Dead Letter Topic + 재처리 배치로 보완하는 것을 전제로 설계했습니다.
+> **Q1-2. Controller 가 Repository 를 직접 안 쓰나요?**
+> **A.** 레이어 규칙을 **ArchUnit** 테스트로 고정해 두었습니다. 예를 들어 대기열에서 “남은 좌석 수”는 `QueueController` → `SeatService.countAvailableSeats()` 로만 계산하고, JPA Repository 는 서비스 이하에 둡니다.
 
 ---
 
-### Q3. `ReservationConfirmedEventListener`의 `AFTER_COMMIT` 패턴은 왜 사용하셨나요?
+### Q2. Kafka 를 왜 썼고, 동기 호출과 뭐가 다른가요?
 
-**A.** `ReservationService.confirm()`에서 좌석을 RESERVED로 바꾸고 Reservation을 생성한 뒤, DB 커밋이 **성공한 후에만** Redis 홀드를 해제하고 Kafka 이벤트를 발행해야 합니다. 만약 트랜잭션 안에서 바로 `holdStore.releaseHold()`를 호출하면, 이후 예외로 롤백될 경우 "DB에는 예약이 없는데 Redis 홀드는 이미 해제된" 불일치가 생깁니다. 그래서 `applicationEventPublisher.publishEvent(new ReservationConfirmedEvent(...))`로 Spring 이벤트를 발행하고, `ReservationConfirmedEventListener`에서 `@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)`으로 받아 `holdStore.releaseHold()`와 `eventPublisher.publish(RESERVATION_CONFIRMED, ...)`를 수행합니다.
+**A.** 결제 완료 후 이메일·SMS 는 **응답 시간과 분리**해야 해서 `PaymentCompleteEvent` 를 Kafka 로 보내고, 컨슈머에서 알림을 처리합니다. 홀드 관련 이벤트(`HOLD_CREATED` 등)도 동일하게 비동기 확장·DLT 연계가 쉽습니다. **`RESERVATION_CONFIRMED` 만** 예약 **DB 커밋과 같은 트랜잭션**에 `kafka_outbox` 행으로 적재하고, `KafkaOutboxPublishScheduler` 가 주기적으로 Kafka 로 밀어 넣습니다. 직접 `send` 만 하면 “DB 는 커밋됐는데 브로커 장애로 메시지가 영원히 안 나가는” 구간이 생기기 쉬운데, outbox 는 **재시도·FAILED 표기**까지 같은 테이블로 추적할 수 있습니다.
 
-> **Q3-1. AFTER_COMMIT에서 실패하면 홀드가 영구히 남는 거 아닌가요?**
-> **A.** 맞습니다. 하지만 `HoldCleanupScheduler`가 1분마다 `hold:expires` ZSet을 스캔해서 만료된 홀드를 `releaseByPayload()`로 정리하기 때문에, 최악의 경우에도 홀드 TTL(기본 10분, 결제 중 20분 연장) 이내에 정리됩니다. DB가 source of truth이므로, 좌석이 이미 RESERVED로 확정된 상태에서 홀드가 잠시 남아있어도 기능에 영향은 없습니다.
-
----
-
-### Q4. Repository(JPA)와 Store(Redis)를 함께 사용할 때 기준을 어떻게 나누셨나요?
-
-**A.** 1차 기준은 "영속성이 필요한가"입니다. 예매 내역·결제 내역·좌석 상태처럼 감사·정산·추적이 필요한 데이터는 MySQL + JPA Repository에 저장했습니다. 반대로 대기열 토큰(`queue:token:{token}`), 홀드(`hold:seat:{seatId}`), 좌석 락(`lock:seat:{seatId}`), 세션(`ticketing:sessions:*`)처럼 시간에 민감하고 사라져도 복구 가능한 데이터는 Redis Store에 두었습니다. 두 저장소가 동시에 관여하는 플로우(예: 예약 확정 시 DB 업데이트 + Redis 홀드 해제)는 앞서 설명한 `AFTER_COMMIT` 패턴으로 트랜잭션 경계를 맞췄습니다.
-
-> **Q4-1. 그럼 Redis가 죽으면 전체 서비스가 중단되나요?**
-> **A.** 현재 구조에서는 Redis가 죽으면 대기열 진입·좌석 홀드·락 획득이 불가능해지므로 예매 기능은 사실상 중단됩니다. 다만 이미 DB에 저장된 예약/결제 데이터는 영향을 받지 않아 조회나 관리자 기능은 정상 동작합니다. 이 리스크를 줄이려면 Redis Sentinel이나 Cluster 구성이 필요하고, 현재 포트폴리오 스펙(t3a.medium 1대)에서는 단일 Redis를 사용하되, 키 네이밍을 `prefix:domain:sub` 형태로 일관되게 맞춰 샤딩 전환이 용이하도록 준비했습니다.
+> **Q2-1. Kafka 가 죽으면 결제가 실패하나요?**
+> **A.** 결제·예약 **커밋은 Kafka 와 무관**합니다. `PaymentComplete` 직접 send 가 실패해도 DB 는 이미 반영된 상태일 수 있고, 그때는 알림만 지연·유실 가능 구간이 됩니다(프로듀서 `retries`, `acks=all` 로 완화). `RESERVATION_CONFIRMED` 는 outbox 가 남으므로 브로커가 살아나면 스케줄러가 다시 보냅니다.
 
 ---
 
-### Q5. 스케일아웃을 어떻게 고려하셨나요?
+### Q3. `ReservationConfirmedEventListener` 의 `AFTER_COMMIT` 은 왜 쓰나요? Kafka 도 여기서내나요?
 
-**A.** 첫째, 애플리케이션 서버를 Stateless에 가깝게 설계했습니다. 세션·홀드·대기열·락 등 모든 상태를 Redis에 두었기 때문에 인스턴스를 늘려도 세션 공유 문제가 없습니다. 둘째, Kafka Consumer는 Consumer Group을 활용해 파티션 기준으로 자동 분산 소비됩니다. 셋째, 스케줄러(`QueueProcessingScheduler`, `HoldCleanupScheduler`, `RefundForCancelledConcertScheduler`)는 모두 `lock:batch:*` 키로 분산 락을 잡아 다중 인스턴스에서도 한 노드만 실행되도록 했습니다.
+**A.** `ReservationService.confirm()` 안에서 좌석 `RESERVED`·예약·**outbox INSERT** 까지 한 트랜잭션으로 묶입니다. **`publishEvent(ReservationConfirmedEvent)`** 는 리스너를 **커밋 이후**에만 돌리기 위해 쓰고, 리스너는 **`holdStore.releaseHold()`** 만 수행합니다. 예전처럼 트랜잭션 안에서 Redis 를 풀면 롤백 시 “DB 는 없는데 홀드만 풀린” 상태가 될 수 있습니다. **`RESERVATION_CONFIRMED` Kafka 발행은 리스너가 아니라 outbox 스케줄러**가 담당합니다.
 
-> **Q5-1. SSE 연결은 스케일아웃 시 문제가 되지 않나요?**
-> **A.** 맞습니다. `SseNotificationService`는 `ConcurrentHashMap<String, SseEmitter>`로 인스턴스 로컬 메모리에 연결을 관리하기 때문에, 같은 사용자가 다른 인스턴스로 요청이 가면 알림을 받지 못합니다. 그래서 로드밸런서 레벨에서 Sticky Session을 전제로 했고, 완전한 해결을 위해서는 Redis Pub/Sub이나 별도 메시지 브로커를 통해 인스턴스 간 SSE 이벤트를 브로드캐스트하는 구조로 개선해야 합니다.
+> **Q3-1. AFTER_COMMIT 에서 Redis 해제만 실패하면?**
+> **A.** DB 예약은 이미 확정입니다. 홀드 키가 잠시 남을 수 있으나 좌석은 DB 상 판매 완료라 이중 판매로 이어지지 않습니다. TTL·`HoldCleanupScheduler` 로 정리됩니다. 상세 표는 [docs/sequence-diagrams §5](../docs/sequence-diagrams.md#consistency-failure-scenarios) 참고.
 
 ---
 
-### Q6. 현재 아키텍처에서 가장 아쉬운 점이나 개선하고 싶은 부분은요?
+### Q4. MySQL 과 Redis 를 같이 쓸 때 역할 분리 기준은?
 
-**A.** 첫째, SSE를 인스턴스 로컬에서 관리하는 부분이 가장 아쉽습니다. Redis Pub/Sub 기반으로 전환하면 Sticky Session 제약을 없앨 수 있습니다. 둘째, `QueueService.removeExistingTokens()`에서 ZSet 전체를 `range(0, -1)`로 조회하는 부분은 대기열이 커지면 성능 이슈가 될 수 있어, userId 기반 역인덱스 키를 추가하는 것을 검토하고 있습니다. 셋째, Kafka 이벤트 발행 실패 시 재처리 메커니즘(DLT + 재시도 배치)이 아직 구현되어 있지 않아, 운영 환경에서는 이 부분을 추가해야 합니다.
+**A.** **감사·정산·법적 추적**이 필요하면 MySQL. **순위·선점·세션**처럼 지연·TTL 이 핵심이면 Redis. 두 저장소가 엮이는 지점(예약 확정)은 **DB 커밋 후 Redis 정리(AFTER_COMMIT)** 와 **outbox 로 Kafka** 로 경계를 나눕니다.
 
-> **Q6-1. 만약 처음부터 다시 설계한다면 무엇을 바꾸실 건가요?**
-> **A.** 대기열 서비스를 별도 모듈이나 마이크로서비스로 분리하는 것을 고려할 것 같습니다. 현재는 단일 Spring Boot에 모든 기능이 들어 있어 배포와 스케일링이 한 덩어리로 묶여 있습니다. 대기열은 트래픽 특성이 다른 도메인(읽기 위주, 짧은 응답 시간 요구)이라 별도로 스케일링할 수 있으면 효율적입니다.
+> **Q4-1. Redis 장애 시?**
+> **A.** 대기열·홀드·락이 막히므로 **오픈 예매 플로우는 사실상 중단**에 가깝습니다. 이미 적재된 예약·결제 조회는 DB 로 가능합니다. 다운스트림으로는 Sentinel/Cluster·캐시 우회 읽기 전략을 논의할 수 있습니다.
+
+---
+
+### Q5. 스케일아웃을 어떻게 고려했나요?
+
+**A.** 앱은 **상태를 Redis·DB·Kafka**에 두어 수평 확장 가능하게 했습니다. 스케줄러·outbox 발행은 **`lock:batch:*` 분산 락**으로 멀티 인스턴스에서 단일 실행을 보장합니다. Kafka 컨슈머는 **동일 group-id** 로 파티션 단위 분산. 배포·ALB·OAuth 리디렉션·SSE 스티키 등은 [docs/deployment-ec2.md](../docs/deployment-ec2.md) 와 동일 맥락입니다.
+
+> **Q5-1. SSE 는?**
+> **A.** `SseNotificationService` 가 인스턴스 로컬에 `SseEmitter` 를 들고 있어 **스티키 세션** 또는 **Redis Pub/Sub 브로드캐스트** 같은 다음 단계가 필요합니다. 면접에서는 한계를 인정하고 개선안을 말하는 게 좋습니다.
+
+---
+
+### Q6. 지금 구조에서 아쉬운 점·개선하고 싶은 점은?
+
+**A.** (1) **SSE 다중 인스턴스** (2) **직접 Kafka send 경로**(`HOLD_CREATED`, `PaymentComplete` 등)의 운영 재처리·모니터링을 outbox 수준으로 끌어올릴지 (3) 대기열 `removeExistingTokens` 의 ZSet 전체 스캔 (4) **홀드 TTL 연장**이 Lua 가 아닌 다중 명령인 점 — 를 코드 레벨에서 인지하고 있습니다.
+
+> **Q6-1. 처음부터 다시 짠다면?**
+> **A.** 트래픽 도메인(대기열·좌석 조회)을 **별도 서비스 또는 읽기 전용 API** 로 분리해 스케일 단위를 나누는 걸 검토합니다. 단일 모듈은 포트폴리오·온보딩에는 유리합니다.

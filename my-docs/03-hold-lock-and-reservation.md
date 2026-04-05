@@ -35,22 +35,28 @@
 3. holdStore.isSeatHeldByToken(seatId, holdToken) 재확인
 4. Seat 조회, concert 일치·과거 공연 X·CANCELLED X·이미 RESERVED 아님 확인
 5. **DB**: seat.status = RESERVED, save; Reservation 생성(CONFIRMED), save
-6. **이벤트 발행**: applicationEventPublisher.publishEvent(new ReservationConfirmedEvent(holdToken, hold))  
-   → 이 시점에서는 **Redis 홀드 해제·Kafka 발행 안 함**
-7. **finally**에서 unlock
+6. **도메인 이벤트**: `applicationEventPublisher.publishEvent(new ReservationConfirmedEvent(holdToken, hold))`  
+   → **아직 커밋 전**이므로 리스너는 실행되지 않는다(AFTER_COMMIT 이므로).
+7. **Transactional Outbox**: `kafkaOutboxService.enqueueSeatHoldEvent(...)` 로 **`SeatHoldEvent`(타입 `RESERVATION_CONFIRMED`) JSON 을 `kafka_outbox` 테이블에 INSERT** — 이 INSERT 도 **같은 트랜잭션**에 포함된다.
+8. **finally**에서 `lock:seat:{id}` unlock
 
-**트랜잭션 경계**:  
-DB 커밋이 성공한 뒤에만 Redis 홀드 해제와 Kafka 이벤트를 하려고 **ReservationConfirmedEventListener**를 쓴다.
+**트랜잭션 경계 한 줄 요약**:  
+- **커밋 성공 시** 함께 영구화되는 것: 예약 row, 좌석 상태, **outbox row**.  
+- **커밋 후**에만 할 일: Redis 홀드 키 정리(리스너).  
+- **Kafka 브로커로의 실제 send**: 트랜잭션 밖의 **`KafkaOutboxPublishScheduler`** 가 담당한다.
 
 ---
 
-## 3. DB 커밋 후 홀드 해제 (ReservationConfirmedEventListener)
+## 3. DB 커밋 후 Redis 홀드만 해제 (ReservationConfirmedEventListener)
 
 - **@TransactionalEventListener(phase = AFTER_COMMIT)**
-- 이벤트: ReservationConfirmedEvent(holdToken, holdInfo)
-- 동작: holdStore.releaseHold(holdToken), SeatHoldEventPublisher.publish(RESERVATION_CONFIRMED, holdInfo)
+- 이벤트: `ReservationConfirmedEvent(holdToken, holdInfo)`
+- 동작: **`holdStore.releaseHold(holdToken)`** 만 호출 (`HoldReleaseMetrics` 기록).
 
-**이렇게 하는 이유**: confirm() 안에서 releaseHold()를 부르면, DB 트랜잭션이 롤백돼도 Redis는 이미 바뀌어서 "홀드는 없는데 예약도 없음" 불일치가 생길 수 있다. 커밋 후에만 Redis/Kafka를 건드리면 롤백 시 불일치가 없다.
+**Kafka `RESERVATION_CONFIRMED` 는 여기서 보내지 않는다.** 리스너 주석대로, 전송은 `KafkaOutboxPublishScheduler` 가 outbox 를 읽어 수행한다.
+
+**왜 releaseHold 는 AFTER_COMMIT 인가?**  
+`confirm()` 안에서 Redis 를 먼저 지우면, DB 가 롤백될 때 "예약은 없는데 홀드만 없어짐" 이 될 수 있다. 반대로 커밋이 확정된 뒤에만 홀드를 지우면, Redis 정리 실패가 나도 **DB 상 예약은 이미 유효**하다(홀드 TTL·cleanup 으로 정리 가능). 상세 표는 `docs/sequence-diagrams.md` §5.
 
 ---
 
@@ -77,4 +83,4 @@ DB 트랜잭션 없고 Redis만 정리한다.
 
 ---
 
-더 많은 Redis 키·Lua 스크립트 설명은 `docs/data.md`, `my-docs/06-redis-kafka-reference.md` 참고.
+더 많은 Redis 키·Outbox·Kafka 경로는 `docs/data.md`, **`my-docs/06-redis-kafka-reference.md`** 참고.

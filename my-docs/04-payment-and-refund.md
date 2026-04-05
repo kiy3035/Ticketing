@@ -26,7 +26,7 @@
 
 - Payment PESSIMISTIC_WRITE, 소유자 검증
 - APPROVED가 아니면 409
-- **ReservationService.confirm(holdToken)** 호출 → 예약 생성, DB 커밋 후 리스너가 홀드 해제·RESERVATION_CONFIRMED 발행
+- **ReservationService.confirm** 호출 → 예약·좌석·**`kafka_outbox`(RESERVATION_CONFIRMED)** 가 **한 트랜잭션**으로 커밋 → 커밋 후 리스너가 **Redis 홀드만** 해제 → **`KafkaOutboxPublishScheduler`** 가 Kafka 로 발행
 - Payment COMPLETED, completedAt, reservationId 저장
 - PaymentCompleteEventPublisher로 Kafka 발행 (이메일/SMS 등)
 

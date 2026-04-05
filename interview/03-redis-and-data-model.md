@@ -4,7 +4,7 @@
 
 ### Q1. 이 프로젝트에서 Redis를 어디에 어떻게 사용했는지 전체적으로 설명해 주세요.
 
-**A.** Redis는 "실시간성 + 휘발성 + 대량 동시성"이 필요한 영역을 전담합니다. 구체적으로 대기열(`queue:concert:{id}` ZSet, `queue:token:{token}` String, `queue:allowed:{token}` String), 홀드(`hold:seat:{seatId}`, `hold:token:{token}`, `hold:expires` ZSet, `hold:user:{userId}` Set), 분산 락(`lock:seat:{seatId}`, `lock:batch:*`), 세션(`ticketing:sessions:*`), 활성 사용자 추적(`ActiveUserTracker` ZSet) 등에 사용했습니다. 메모리 정책은 `maxmemory 400mb`, `maxmemory-policy allkeys-lru`이고, 각 키에 TTL을 설정하고 스케줄러로 만료 데이터를 정리하는 구조입니다.
+**A.** Redis는 "실시간성 + 휘발성 + 대량 동시성"이 필요한 영역을 전담합니다. 구체적으로 대기열(`queue:concert:{id}` ZSet, `queue:token:{token}` String, `queue:allowed:{token}` String), 홀드(`hold:seat:{seatId}`, `hold:token:{token}`, `hold:expires` ZSet, `hold:user:{userId}` Set), 분산 락(`lock:seat:{seatId}`, 배치용 `lock:batch:queue-process`·`lock:batch:queue-cleanup`·`lock:batch:hold-cleanup`·`lock:batch:refund`·`lock:batch:kafka-outbox`), 세션(`ticketing:sessions:*`), 활성 사용자 추적(`ActiveUserTracker` ZSet) 등에 사용했습니다. 메모리 정책은 `maxmemory 400mb`, `maxmemory-policy allkeys-lru`이고, 각 키에 TTL을 설정하고 스케줄러로 만료 데이터를 정리하는 구조입니다.
 
 > **Q1-1. 왜 Redis 하나에 모든 기능을 넣었나요? 용도별로 분리하는 게 낫지 않나요?**
 > **A.** 인프라 스펙이 t3a.medium 1대로 제한되어 있어, Redis 인스턴스를 여러 개 띄우면 각각에 메모리를 나눠야 해서 오히려 비효율적입니다. 대신 키 네이밍으로 `queue:*`, `hold:*`, `lock:*`, `ticketing:sessions:*` 등 prefix를 명확히 구분해서, Redis Insight로 모니터링할 때 어떤 키가 어떤 기능인지 바로 파악할 수 있게 했습니다. 향후 트래픽이 커지면 prefix 기반으로 별도 인스턴스나 클러스터 해시 슬롯을 분리할 수 있도록 준비된 상태입니다.

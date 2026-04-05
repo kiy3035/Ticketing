@@ -2,45 +2,48 @@
 
 ---
 
-### Q1. 이 시스템에서 데이터 일관성을 가장 신경 쓴 플로우는 어디인가요?
+### Q1. 예약 확정(`confirm`) 시 DB 와 Redis·Kafka 는 어떤 순서로 움직이나요?
 
-**A.** `PaymentService.completePayment()` → `ReservationService.confirm()` → `AFTER_COMMIT` 리스너 흐름입니다. 좌석 상태(RESERVED), 예약 레코드, 결제 상태(COMPLETED), Redis 홀드, Kafka 이벤트가 모두 일관되어야 하는데, 이 중 좌석/예약/결제는 하나의 DB 트랜잭션 안에서 처리하고, Redis 홀드 해제와 Kafka 이벤트 발행은 `ReservationConfirmedEventListener`에서 `@TransactionalEventListener(phase = AFTER_COMMIT)`으로 DB 커밋 성공 후에만 수행합니다. 이렇게 하면 트랜잭션이 롤백돼도 Redis/Kafka 상태가 DB와 어긋나지 않습니다.
+**A.** 한 트랜잭션 안에서: 좌석 `RESERVED`·예약 INSERT·**`kafka_outbox` 에 `RESERVATION_CONFIRMED` 페이로드 INSERT** 까지 묶습니다. 커밋 후 `ReservationConfirmedEvent` 리스너(`AFTER_COMMIT`)가 **`holdStore.releaseHold()`** 만 호출해 Redis 홀드를 정리합니다. Kafka 로의 실제 발행은 **`KafkaOutboxPublishScheduler`** 가 outbox 행을 읽어 `send` 하고, 성공 시 `SENT` 로 갱신합니다. 순서·실패 시 “무엇이 깨지는지” 표는 [docs/sequence-diagrams §5](../docs/sequence-diagrams.md#consistency-failure-scenarios) 와 맞춥니다.
 
-> **Q1-1. AFTER_COMMIT에서 Redis/Kafka 호출이 실패하면 어떻게 되나요?**
-> **A.** 홀드가 Redis에 남아있게 되지만, `HoldCleanupScheduler`가 60초마다 `hold:expires` ZSet을 스캔해 만료된 홀드를 `releaseByPayload()`로 정리합니다. DB에는 이미 좌석이 RESERVED로 확정됐으므로, 홀드가 잠시 남아있어도 다른 사용자가 같은 좌석을 홀드할 수 없습니다(`HoldStore.CREATE_SCRIPT`의 `EXISTS` 검증). 즉, 최악의 경우 불필요한 홀드가 TTL(최대 20분)까지 남지만 기능 정합성은 깨지지 않습니다.
+> **Q1-1. 왜 Kafka 를 트랜잭션 안에서 직접 send 안 하나요?**
+> **A.** 브로커 지연이 길어지면 DB 커밋이 지연되고, send 직후 롤백이면 “메시지는 나갔는데 DB 는 없음” 같은 **이중 쓰기** 문제가 생깁니다. outbox 는 **로컬 트랜잭션 한 번**으로 “발행할 의무”를 남기고, 비동기 워커가 밀어 넣습니다.
 
----
-
-### Q2. 왜 예약 확정을 별도 API가 아니라 결제 완료 API 안에서 처리했나요?
-
-**A.** 결제와 예약을 별도 API로 나누면, 결제는 완료됐지만 예약 API 호출 전에 네트워크가 끊기는 경우 "돈은 빠졌는데 예약이 안 된" 상태가 생깁니다. `completePayment()` 안에서 `reservationService.confirm()`을 호출하면, 예약 생성에 실패하면 결제도 함께 롤백됩니다. 성공하면 항상 `좌석 RESERVED + Reservation CONFIRMED + Payment COMPLETED`가 동시에 커밋되어 불일치를 원천 차단합니다.
-
-> **Q2-1. 그럼 "결제는 됐는데 응답이 끊긴" 상황은요?**
-> **A.** Payment에 `paymentKey`, `holdToken` 고유 키와 상태 필드(READY/APPROVED/COMPLETED/CANCELED)가 있어, 운영자가 `paymentKey` 기준으로 상태를 조회할 수 있습니다. 또한 `completePayment()`은 이미 COMPLETED인 Payment에 대해 중복 호출 시 기존 결과를 반환하므로(멱등), 클라이언트가 재시도해도 안전합니다.
+> **Q1-2. outbox 발행이 계속 실패하면?**
+> **A.** 재시도 횟수를 넘기면 `FAILED` 로 두고, 운영에서 재처리·수동 점검 대상이 됩니다. 예약·좌석 DB 상태는 이미 확정이라 **강한 일관성(예약 데이터)** 은 유지되고, **다운스트림(예: 재고 연동)** 만 지연될 수 있습니다.
 
 ---
 
-### Q3. Redis와 DB가 동시에 관여할 때 분산 트랜잭션은 어떻게 바라보셨나요?
+### Q2. 결제 완료 플로우의 트랜잭션 경계는?
 
-**A.** "DB + Redis + Kafka를 하나의 분산 트랜잭션으로 묶는 건 비용 대비 실효가 낮다"고 판단하고, **DB를 source of truth로 한 최종 일관성(Eventual Consistency)** 전략을 택했습니다. 원칙은 "돈/좌석의 확정 상태는 MySQL이 진리이고, Redis/Kafka는 실시간 캐시·알림·비동기 프로세스"입니다. 그래서 모든 핵심 플로우에서 DB 트랜잭션 커밋 후에야 Redis/Kafka를 갱신하고, Redis/Kafka에서 문제가 생기면 알림만 지연될 뿐 결제/예약 정합성은 DB가 보장합니다.
+**A.** `PaymentService.completePayment()` 가 `@Transactional` 로 **결제 상태·예약 상태·좌석 SOLD** 를 한 트랜잭션에서 갱신합니다. 이후 `PaymentCompleteEventPublisher` 가 Kafka `PaymentComplete` 를 **직접 send** 합니다(이 경로는 outbox 가 아님). 알림 컨슈머는 **멱등**(`notification_sent` 플래그)으로 중복 처리를 막습니다.
 
-> **Q3-1. 이 구조에서 Redis 데이터가 DB와 불일치하는 경우를 어떻게 탐지하나요?**
-> **A.** 현재는 별도의 일관성 체크 배치가 없지만, `SeatService.listSeats()`에서 DB의 좌석 상태(RESERVED)와 Redis 홀드 상태를 매번 조합하기 때문에, 사용자에게 보이는 좌석 현황은 항상 두 저장소의 최신 상태를 반영합니다. 장기적으로는 DB의 RESERVED 좌석 수와 Redis 활성 홀드 수를 비교하는 모니터링 메트릭을 추가하면 불일치를 조기에 감지할 수 있습니다.
-
----
-
-### Q4. 취소된 공연 환불 배치의 트랜잭션 처리를 설명해 주세요.
-
-**A.** `RefundForCancelledConcertScheduler`는 5분마다 `concertRepository.findByStatus(CANCELLED)`로 취소된 공연을 조회하고, 각 공연의 COMPLETED 결제를 `PageRequest`로 청크 조회합니다. 각 결제 건은 `PaymentService.refundCompletedPaymentForCancelledConcert(paymentId)`에서 **건별 트랜잭션**으로 처리합니다. 순서는: (1) `paymentRepository.findWithLockById()` → (2) `reservationService.cancelReservationForRefund()`(Reservation CANCELLED + Seat AVAILABLE) → (3) POINT 결제면 `refundPoints()` → (4) Payment CANCELED. 예약 취소를 먼저 하는 이유는, 포인트 환불이 실패해도 좌석은 이미 해제되어 다른 사용자가 예매할 수 있도록 하기 위해서입니다.
-
-> **Q4-1. 환불 중 특정 건이 실패하면 다른 건에 영향을 주나요?**
-> **A.** 아닙니다. 각 건이 별도 트랜잭션이고, `try/catch`로 감싸서 실패 시 로그만 남기고 다음 건을 계속 처리합니다. 이미 CANCELED 상태인 결제는 `refundCompletedPaymentForCancelledConcert()`에서 `return true`로 스킵하므로 멱등합니다. 다음 배치 주기에서 실패한 건만 다시 시도됩니다.
+> **Q2-1. 멱등은 어디까지 적용했나요?**
+> **A.** **HTTP 결제 API** 는 `Idempotency-Key` 헤더를 받아 **동일 키·동일 바디**면 캐시된 응답을 돌려 **중복 결제 POST** 를 방지합니다. Kafka 쪽은 컨슈머·스케줄러가 DB 플래그·상태로 중복을 흡수합니다.
 
 ---
 
-### Q5. "강한 일관성"과 "최종 일관성"을 어디서 나눴는지 정리해 주세요.
+### Q3. “보상 트랜잭션”이나 환불은 어떻게 하나요?
 
-**A.** 사용자가 금전적으로 체감하는 영역(결제 금액, 좌석 예약, 포인트 잔액)은 MySQL 트랜잭션 + Redis 분산 락으로 **강한 일관성**을 보장합니다. `PaymentService`의 `approve`에서 `findWithLockByUsername()`으로 포인트를 비관적 잠금 조회하고, `ReservationService.confirm()`에서 좌석 락 + DB 트랜잭션으로 RESERVED를 확정합니다. 반면 알림(SSE/이메일/SMS), 활성 사용자 수(`ActiveUserTracker`), 대기열 순번 표시, 콘서트 목록 캐시(5분 TTL) 같은 영역은 잠깐 틀리거나 늦게 반영돼도 사용 경험에 치명적이지 않으므로 **최종 일관성**을 허용합니다.
+**A.** 결제 **취소 API** 는 결제·예약·좌석을 되돌리는 **동기 보상**입니다. **콘서트 취소**는 이미 팔린 티켓에 대해 `RefundForCancelledConcertScheduler` 가 **분산 락 + 배치**로 환불·상태를 맞춥니다. Saga 오케스트레이터까지는 두지 않았고, **도메인별 스케줄 보상**으로 단순화했습니다.
 
-> **Q5-1. 이 경계를 어떤 기준으로 결정하셨나요?**
-> **A.** "이 데이터가 1초라도 틀리면 사용자에게 금전적 손해나 좌석 중복 예약이 발생하는가?"가 기준입니다. 포인트 차감·좌석 예약·결제 상태는 1건이라도 틀리면 치명적이므로 강한 일관성, 나머지는 "최대한 빠르게 맞추되 잠깐 틀려도 괜찮다"로 분류했습니다.
+> **Q3-1. 스케줄러가 두 번 돌면 중복 환불되나요?**
+> **A.** `lock:batch:refund` 로 한 인스턴스만 실행하고, 처리 단위마다 상태 전이로 **이미 환불 처리된 건은 스킵**합니다.
+
+---
+
+### Q4. 강한 일관성 vs 최종 일관성을 이 프로젝트에서 어떻게 나눴나요?
+
+**A.** **강한 일관성:** 예약·결제·좌석 상태는 **단일 DB 트랜잭션**과 비관적 락·유니크 제약으로 보호합니다. **최종 일관성:** 알림·일부 이벤트·outbox 발행은 **비동기**이며, 실패 시 재시도·DLT·`FAILED` 표기로 수렴시킵니다. “예약은 됐는데 이메일이 안 갔다”는 **허용 가능한 지연**으로 두고, “같은 좌석 두 번 팔림”은 **허용 불가**로 설계했습니다.
+
+> **Q4-1. Redis 홀드와 DB 좌석이 어긋나면?**
+> **A.** **이중 방어**입니다. Redis TTL 로 휘발성 선점을 풀고, 예약 확정 시 DB 에서 `AVAILABLE` 인 좌석만 `RESERVED` 로 바꿉니다. Lua 로 홀드 생성 시 좌석 ID·콘서트 ID 를 함께 검증해 **다른 공연 좌석으로 홀드 치환**을 막습니다.
+
+---
+
+### Q5. 분산 환경에서 “한 번만 실행”이 필요한 작업은?
+
+**A.** `QueueProcessingScheduler`, `QueueCleanupScheduler`, `HoldCleanupScheduler`, `RefundForCancelledConcertScheduler`, **`KafkaOutboxPublishScheduler`** 가 각각 `lock:batch:queue-process`, `lock:batch:queue-cleanup`, `lock:batch:hold-cleanup`, `lock:batch:refund`, **`lock:batch:kafka-outbox`** 로 **`RedisLockService.tryLock`** 을 잡아 **멀티 인스턴스에서 단일 실행**을 보장합니다. 락 TTL 은 작업 시간보다 길게 두어 **좀비 워커**에 대비합니다.
+
+> **Q5-1. 락 TTL 이 짧으면?**
+> **A.** 작업 중 락이 만료되면 다른 인스턴스가 같은 배치를 집어 **중복 처리**될 수 있습니다. 그래서 스케줄 작업은 **멱등**(상태 전이·플래그)을 함께 두는 것이 안전합니다.
