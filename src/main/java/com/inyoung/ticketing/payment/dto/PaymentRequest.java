@@ -6,27 +6,18 @@ import jakarta.validation.constraints.NotBlank;
 /**
  * 결제 요청 DTO. POST /api/payments/request body.
  * READY 상태의 Payment 를 생성하고, CARD 일 경우 orderId 를 부여해 프론트에 반환.
+ * <p>
+ * {@code compact constructor}(이름 없는 블록): JSON 에 {@code paymentMethod} 가 없으면 Jackson 이 null 을 넣고,
+ * 여기서 {@link PaymentMethod#POINT} 로 바꿔 "기본값은 포인트" 규칙을 한 곳에 모은다.
+ * </p>
  */
-public class PaymentRequest {
-	@NotBlank
-	private String holdToken;
-
-	/** 결제 수단: POINT(기본, 포인트 차감) / CARD(토스 결제창 모의결제) */
-	private PaymentMethod paymentMethod = PaymentMethod.POINT;
-
-	public String getHoldToken() {
-		return holdToken;
-	}
-
-	public void setHoldToken(String holdToken) {
-		this.holdToken = holdToken;
-	}
-
-	public PaymentMethod getPaymentMethod() {
-		return paymentMethod;
-	}
-
-	public void setPaymentMethod(PaymentMethod paymentMethod) {
-		this.paymentMethod = paymentMethod;
+public record PaymentRequest(
+	@NotBlank String holdToken,
+	PaymentMethod paymentMethod
+) {
+	public PaymentRequest {
+		if (paymentMethod == null) {
+			paymentMethod = PaymentMethod.POINT;
+		}
 	}
 }

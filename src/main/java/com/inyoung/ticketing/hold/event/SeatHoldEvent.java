@@ -1,9 +1,17 @@
 package com.inyoung.ticketing.hold.event;
 
 import java.time.Instant;
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonFormat;
 
-// Kafka로 발행되는 홀드/예약 이벤트
+/**
+ * Kafka 로 발행되는 홀드/예약 이벤트.
+ * <p>
+ * {@link JsonAutoDetect}: setter 없이도 outbox 에서 JSON → 객체 역직렬화가 되게 한다(필드 직접 바인딩).
+ * Kafka Consumer 쪽과 동일한 스키마를 유지해야 한다.
+ * </p>
+ */
+@JsonAutoDetect(fieldVisibility = JsonAutoDetect.Visibility.ANY)
 public class SeatHoldEvent {
 	private SeatHoldEventType type;
 	private String holdToken;

@@ -92,7 +92,8 @@ public class PaymentService {
 	 */
 	@Transactional
 	public PaymentResponse requestPayment(PaymentRequest request, String userId) {
-		String holdToken = request.getHoldToken();
+		// PaymentRequest 는 record: holdToken(), paymentMethod()
+		String holdToken = request.holdToken();
 		HoldInfo hold = loadHold(holdToken, userId);
 
 		// 결제 진행 단계: 홀드 TTL 을 설정값(기본 20분)으로 연장
@@ -108,7 +109,7 @@ public class PaymentService {
 		if (seat.getConcert().getStatus() == ConcertStatus.CANCELLED) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Concert is cancelled");
 		}
-		PaymentMethod method = request.getPaymentMethod() != null ? request.getPaymentMethod() : PaymentMethod.POINT;
+		PaymentMethod method = request.paymentMethod();
 		Payment payment = new Payment();
 		payment.setPaymentKey(generatePaymentKey());
 		payment.setHoldToken(holdToken);
@@ -205,8 +206,7 @@ public class PaymentService {
 				throw new ResponseStatusException(HttpStatus.CONFLICT, "Payment not approved");
 			}
 
-			ReservationRequest reservationRequest = new ReservationRequest();
-			reservationRequest.setHoldToken(payment.getHoldToken());
+			ReservationRequest reservationRequest = new ReservationRequest(payment.getHoldToken());
 
 			ReservationResponse reservation;
 			try {

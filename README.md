@@ -59,11 +59,12 @@
 - **글로벌 예외 처리**: `GlobalExceptionHandler`로 예외 상황 일관성 있게 처리
 - **에러 로깅**: 보안/에러 로그를 파일로 기록하여 운영 관찰 가능
 
-### 8. 배치·스케줄러 (4종, 주기 설정 가능)
+### 8. 배치·스케줄러 (5종, 주기 설정 가능)
 - **QueueProcessingScheduler**: 대기열 상위 N명 입장 허용. 기본 2초 주기.
 - **QueueCleanupScheduler**: 대기열 만료 토큰 제거. 기본 60초 주기.
 - **HoldCleanupScheduler**: 만료된 좌석 홀드 정리 + Kafka HOLD_EXPIRED 발행. 기본 60초 주기.
 - **RefundForCancelledConcertScheduler**: CANCELLED 공연의 COMPLETED 결제 청크 환불. 기본 5분 주기, 배치 50건.
+- **KafkaOutboxPublishScheduler**: DB outbox의 PENDING 행을 Kafka로 발행 (`RESERVATION_CONFIRMED` 등). 기본 500ms 주기.
 
 주기는 모두 `application.properties`/환경 변수로 변경 가능. 주기 선택 근거·튜닝은 [docs/infra.md](docs/infra.md)의 "스케줄러 주기 가이드" 참고.
 
@@ -290,7 +291,7 @@ docker compose up -d
    - 홀드 생성 시 Kafka로 `HOLD_CREATED` 이벤트 발행
 
 7. **결제 완료 및 예약 확정**
-   - 결제 완료 API 호출 시 예약 확정 (DB 기록), DB 커밋 후 Redis 홀드 제거 및 Kafka `RESERVATION_CONFIRMED` 이벤트 발행
+   - 결제 완료 API 호출 시 예약 확정 (DB 기록). `RESERVATION_CONFIRMED` 는 DB transactional outbox에 같은 트랜잭션으로 적재되고, 스케줄러가 Kafka로 발행한다. DB 커밋 후 리스너가 Redis 홀드를 제거한다.
 
 8. **홀드 만료 알림**
    - 스케줄러가 만료된 홀드 스캔

@@ -3,6 +3,7 @@
 | 문서 | 설명 |
 |------|------|
 | [architecture.md](architecture.md) | 시스템 아키텍처, 핵심 플로우, ERD, 기술적 의사결정 |
+| [sequence-diagrams.md](sequence-diagrams.md) | 핵심 시퀀스 다이어그램, **정합성·실패 시나리오 표**(§5) |
 | [api.md](api.md) | REST API 엔드포인트 명세 |
 | [concurrency.md](concurrency.md) | Redis 분산 락, 좌석 동시성 제어 |
 | [data.md](data.md) | Redis 키 구조, Kafka 토픽/이벤트 |

@@ -8,10 +8,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.inyoung.ticketing.config.TicketingProperties;
-import com.inyoung.ticketing.hold.store.HoldStore;
 import com.inyoung.ticketing.metrics.service.ActiveUserTracker;
 import com.inyoung.ticketing.queue.service.QueueService;
-import com.inyoung.ticketing.seat.repository.SeatRepository;
+import com.inyoung.ticketing.seat.service.SeatService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,7 +23,7 @@ import org.springframework.test.web.servlet.MockMvc;
 /**
  * 대기열 API 통합 테스트.
  * POST /api/queue/enter 에 대한 HTTP 계약을 검증한다.
- * QueueController만 로딩하고, QueueService·SeatRepository 등은 Mock으로 대체하여
+ * QueueController만 로딩하고, QueueService·SeatService 등은 Mock으로 대체하여
  * 실제 Redis/DB 없이 "요청 → 컨트롤러 → 응답 형식"이 기대대로 동작하는지 확인한다.
  */
 @WebMvcTest(QueueController.class)
@@ -39,9 +38,7 @@ class QueueControllerIntegrationTest {
 	@MockitoBean
 	private QueueService queueService;
 	@MockitoBean
-	private SeatRepository seatRepository;
-	@MockitoBean
-	private HoldStore holdStore;
+	private SeatService seatService;
 	@MockitoBean
 	private TicketingProperties properties;
 

@@ -59,7 +59,7 @@ class UsersServiceOAuthProvisioningTest {
 		assertThat(result.getOauthProvider()).isEqualTo("google");
 		assertThat(result.getOauthSubject()).isEqualTo("999");
 		assertThat(result.getEmail()).isEqualTo("user@example.com");
-		assertThat(result.getPhone()).isNull();
+		assertThat(result.getPhone()).isEmpty();
 		assertThat(result.getNotiType()).isEqualTo("email");
 		assertThat(result.getPw()).isNotBlank();
 		verify(usersRepository).save(any(Users.class));

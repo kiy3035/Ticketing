@@ -12,7 +12,7 @@
 
 Redis 옵션: `--maxmemory 400mb --maxmemory-policy allkeys-lru --save ""`
 
-## 스케줄러 (4종)
+## 스케줄러 (5종)
 
 | 스케줄러 | 설정 키 | 기본 주기 | 용도 |
 |----------|---------|----------|------|
@@ -20,8 +20,23 @@ Redis 옵션: `--maxmemory 400mb --maxmemory-policy allkeys-lru --save ""`
 | **QueueCleanupScheduler** | `ticketing.queue.cleanup-interval-ms` | 60초 | 만료 토큰 ZSet 정리 |
 | **HoldCleanupScheduler** | `ticketing.hold.cleanup-interval-ms` | 60초 | 만료 홀드 스캔·해제·이벤트 발행 |
 | **RefundForCancelledConcertScheduler** | `ticketing.refund.interval-ms` | 5분 | 취소 공연 COMPLETED 결제 환불 |
+| **KafkaOutboxPublishScheduler** | `ticketing.outbox.publish-interval-ms` | 500ms | DB outbox → Kafka (`RESERVATION_CONFIRMED` 등) |
 
 모든 주기는 `application.properties` 또는 환경 변수로 변경 가능하다.
+
+### Kafka transactional outbox
+
+| 설정 키 | 기본값 | 용도 |
+|---------|--------|------|
+| `ticketing.outbox.publish-interval-ms` | 500 | PENDING 행을 Kafka 로 발행하는 주기 |
+| `ticketing.outbox.batch-size` | 50 | 한 번에 처리할 최대 행 수 |
+| `ticketing.outbox.max-publish-attempts` | 25 | 초과 시 행을 `FAILED` 로 표시 (수동 조치 대상) |
+
+예약 확정 시 `RESERVATION_CONFIRMED` 는 예약 DB 커밋과 동일 트랜잭션에서 `kafka_outbox` 에 적재되고, 위 스케줄러가 비동기로 토픽에 발행한다.
+
+DB·Redis·Kafka 가 어긋날 때 남는 상태, 재시도, 사용자 오류 응답은 [sequence-diagrams.md §5](sequence-diagrams.md#consistency-failure-scenarios) 표·시퀀스를 참고한다.
+
+운영·JVM 관점 요약은 [java-ops.md](java-ops.md) 참고.
 
 ## 주요 설정
 

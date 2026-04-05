@@ -2,23 +2,9 @@ package com.inyoung.ticketing.hold.dto;
 
 import java.time.Instant;
 
-// 홀드 응답 DTO
-public class HoldResponse {
-	private String holdToken;
-	private Instant expiresAt;
-
-	public HoldResponse(String holdToken, Instant expiresAt) {
-		this.holdToken = holdToken;
-		this.expiresAt = expiresAt;
-	}
-
-	// 홀드 토큰
-	public String getHoldToken() {
-		return holdToken;
-	}
-
-	// 만료 시각
-	public Instant getExpiresAt() {
-		return expiresAt;
-	}
+/**
+ * 홀드 생성 성공 시 클라이언트에 돌려주는 값.
+ * record 이므로 API 응답 JSON은 {@code holdToken}, {@code expiresAt} 키로 직렬화된다(일반 클래스의 getter 명명 규칙과 동일한 관례).
+ */
+public record HoldResponse(String holdToken, Instant expiresAt) {
 }

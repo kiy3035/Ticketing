@@ -87,9 +87,7 @@ class HoldServiceTest {
 		when(seatRepository.findById(SEAT_ID)).thenReturn(Optional.of(seat));
 		when(lockService.tryLock(any(), any())).thenReturn(Optional.empty());
 
-		HoldRequest request = new HoldRequest();
-		request.setConcertId(CONCERT_ID);
-		request.setSeatId(SEAT_ID);
+		HoldRequest request = new HoldRequest(CONCERT_ID, SEAT_ID);
 
 		assertThatThrownBy(() -> holdService.createHold(request, USER_ID))
 			.isInstanceOf(ResponseStatusException.class)
@@ -106,9 +104,7 @@ class HoldServiceTest {
 	void createHold_throws404_whenSeatNotFound() {
 		when(seatRepository.findById(SEAT_ID)).thenReturn(Optional.empty());
 
-		HoldRequest request = new HoldRequest();
-		request.setConcertId(CONCERT_ID);
-		request.setSeatId(SEAT_ID);
+		HoldRequest request = new HoldRequest(CONCERT_ID, SEAT_ID);
 
 		assertThatThrownBy(() -> holdService.createHold(request, USER_ID))
 			.isInstanceOf(ResponseStatusException.class)
@@ -130,15 +126,13 @@ class HoldServiceTest {
 		when(lockService.tryLock(any(), any())).thenReturn(Optional.of("lock-token"));
 		when(holdStore.createHold(any(), any())).thenReturn(true);
 
-		HoldRequest request = new HoldRequest();
-		request.setConcertId(CONCERT_ID);
-		request.setSeatId(SEAT_ID);
+		HoldRequest request = new HoldRequest(CONCERT_ID, SEAT_ID);
 
 		var response = holdService.createHold(request, USER_ID);
 
 		assertThat(response).isNotNull();
-		assertThat(response.getHoldToken()).isNotBlank();
-		assertThat(response.getExpiresAt()).isAfter(Instant.now());
+		assertThat(response.holdToken()).isNotBlank();
+		assertThat(response.expiresAt()).isAfter(Instant.now());
 		verify(lockService).unlock(eq("lock:seat:" + SEAT_ID), eq("lock-token"));
 	}
 

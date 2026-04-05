@@ -78,10 +78,11 @@ public class HoldService {
 	// - Redis Lua 스크립트(HoldStore)를 통해 좌석→토큰, 토큰→홀드 정보, 만료 ZSET을 한 번에 갱신한다.
 	// 이렇게 해서 "이미 RESERVED인 좌석"과 "동시에 들어온 다른 홀드 요청"을 모두 차단한다.
 	public HoldResponse createHold(HoldRequest request, String userId) {
-		Seat seat = seatRepository.findById(request.getSeatId())
+		// HoldRequest 는 record → 필드 접근은 seatId(), concertId() (JavaBean 스타일 getter 가 아님)
+		Seat seat = seatRepository.findById(request.seatId())
 			.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Seat not found"));
 
-		if (!seat.getConcert().getId().equals(request.getConcertId())) {
+		if (!seat.getConcert().getId().equals(request.concertId())) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Seat does not belong to concert");
 		}
 		Concert concert = seat.getConcert();

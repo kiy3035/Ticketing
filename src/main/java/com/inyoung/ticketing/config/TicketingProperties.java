@@ -13,6 +13,7 @@ public class TicketingProperties {
 	private Refund refund = new Refund();
 	private Toss toss = new Toss();
 	private RateLimitProps rateLimit = new RateLimitProps();
+	private Outbox outbox = new Outbox();
 
 	public Hold getHold() {
 		return hold;
@@ -287,4 +288,46 @@ public class TicketingProperties {
 	}
 
 	public RateLimitProps getRateLimit() { return rateLimit; }
+
+	public Outbox getOutbox() {
+		return outbox;
+	}
+
+	public void setOutbox(Outbox outbox) {
+		this.outbox = outbox != null ? outbox : new Outbox();
+	}
+
+	/** Kafka transactional outbox (예약 확정 → seat-hold 토픽 발행) */
+	public static class Outbox {
+		/** PENDING 행을 Kafka 로 밀어 넣는 주기(ms). 기본 500 */
+		private long publishIntervalMs = 500L;
+		/** 한 번의 배치에서 꺼내 발행 시도할 최대 행 수 */
+		private int batchSize = 50;
+		/** 초과 시 FAILED 로 표시해 무한 재시도·로그 폭주를 막음 */
+		private int maxPublishAttempts = 25;
+
+		public long getPublishIntervalMs() {
+			return publishIntervalMs;
+		}
+
+		public void setPublishIntervalMs(long publishIntervalMs) {
+			this.publishIntervalMs = publishIntervalMs;
+		}
+
+		public int getBatchSize() {
+			return batchSize;
+		}
+
+		public void setBatchSize(int batchSize) {
+			this.batchSize = batchSize;
+		}
+
+		public int getMaxPublishAttempts() {
+			return maxPublishAttempts;
+		}
+
+		public void setMaxPublishAttempts(int maxPublishAttempts) {
+			this.maxPublishAttempts = maxPublishAttempts;
+		}
+	}
 }

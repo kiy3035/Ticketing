@@ -4,7 +4,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import com.inyoung.ticketing.hold.event.SeatHoldEvent;
+import com.inyoung.ticketing.hold.event.SeatHoldEventType;
 import com.inyoung.ticketing.hold.store.HoldInfo;
+import com.inyoung.ticketing.outbox.KafkaOutboxService;
 import com.inyoung.ticketing.reservation.event.ReservationConfirmedEvent;
 import com.inyoung.ticketing.config.TicketingProperties;
 import com.inyoung.ticketing.hold.store.HoldStore;
@@ -39,6 +42,7 @@ public class ReservationService {
 	private final TicketingProperties properties;
 	private final HoldStore holdStore;
 	private final ApplicationEventPublisher applicationEventPublisher;
+	private final KafkaOutboxService kafkaOutboxService;
 	private final PaymentRepository paymentRepository;
 	private final Counter lockFailureCounter;
 	private final MeterRegistry meterRegistry;
@@ -50,6 +54,7 @@ public class ReservationService {
 		TicketingProperties properties,
 		HoldStore holdStore,
 		ApplicationEventPublisher applicationEventPublisher,
+		KafkaOutboxService kafkaOutboxService,
 		PaymentRepository paymentRepository,
 		MeterRegistry meterRegistry
 	) {
@@ -59,6 +64,7 @@ public class ReservationService {
 		this.properties = properties;
 		this.holdStore = holdStore;
 		this.applicationEventPublisher = applicationEventPublisher;
+		this.kafkaOutboxService = kafkaOutboxService;
 		this.paymentRepository = paymentRepository;
 		this.lockFailureCounter = Counter.builder("ticketing_lock_acquire_failures_total")
 			.tag("operation", "reservation")
@@ -103,9 +109,10 @@ public class ReservationService {
 	// 1) Redis 에서 홀드 정보를 조회·만료/소유자 검증
 	// 2) 좌석 단위 락을 획득해 동시 예약 경쟁 차단
 	// 3) 좌석/공연 상태(취소/시각/기예약 여부) 검증 후 Reservation 생성, 좌석 RESERVED 로 변경
-	// 4) DB 커밋 이후 ReservationConfirmedEvent 리스너가 Redis 홀드 해제·Kafka 이벤트 발행을 수행
+	// 4) 커밋 후 리스너가 Redis 홀드 해제. Kafka 는 동일 트랜잭션의 outbox 적재 → 스케줄러 발행
 	public ReservationResponse confirm(ReservationRequest request, String userId) {
-		HoldInfo hold = holdStore.getHold(request.getHoldToken())
+		// record 접근자: getHoldToken() 대신 holdToken()
+		HoldInfo hold = holdStore.getHold(request.holdToken())
 			.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hold not found"));
 
 		if (hold.getExpiresAt().isBefore(Instant.now())) {
@@ -153,8 +160,19 @@ public class ReservationService {
 			Reservation saved = reservationRepository.save(reservation);
 			meterRegistry.counter("ticketing_reservation_confirmed_total", "concert_id", String.valueOf(hold.getConcertId()))
 				.increment();
-			// DB 커밋 후 리스너에서 홀드 해제·이벤트 발행 (트랜잭션 경계 일치)
+			// 도메인 이벤트: 커밋 성공 시점에만 리스너 실행(AFTER_COMMIT) → Redis 홀드만 정리.
 			applicationEventPublisher.publishEvent(new ReservationConfirmedEvent(hold.getHoldToken(), hold));
+			// Outbox: 이 INSERT 도 지금 트랜잭션에 포함 → 예약 row 와 함께 커밋/롤백된다.
+			Instant occurredAt = Instant.now();
+			kafkaOutboxService.enqueueSeatHoldEvent(new SeatHoldEvent(
+				SeatHoldEventType.RESERVATION_CONFIRMED,
+				hold.getHoldToken(),
+				hold.getConcertId(),
+				hold.getSeatId(),
+				hold.getUserId(),
+				hold.getExpiresAt(),
+				occurredAt
+			));
 
 			return new ReservationResponse(saved);
 		} finally {

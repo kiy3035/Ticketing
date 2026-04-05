@@ -86,9 +86,7 @@ class SeatHoldConcurrencyTest extends IntegrationTestBase {
 					readyLatch.countDown();
 					startLatch.await();
 
-					HoldRequest request = new HoldRequest();
-					request.setConcertId(concertId);
-					request.setSeatId(seatId);
+					HoldRequest request = new HoldRequest(concertId, seatId);
 					HoldResponse response = holdService.createHold(request, userId);
 					if (response != null) {
 						successCount.incrementAndGet();

@@ -29,11 +29,26 @@ public class SeatService {
 		Set<Long> heldSeatIds = holdStore.findHeldSeatIds(seatIds);
 		return seats.stream()
 			.map(seat -> {
-				SeatStatus status = seat.getStatus() == SeatStatus.RESERVED
-					? SeatStatus.RESERVED
-					: heldSeatIds.contains(seat.getId()) ? SeatStatus.HELD : SeatStatus.AVAILABLE;
+				// enum switch 표현식: 모든 SeatStatus 케이스를 컴파일러가 검사(누락 시 에러) → 상태 추가 시 안전.
+				// DB가 RESERVED면 그대로. 그 외에는 Redis 홀드 집합에 있으면 HELD, 아니면 AVAILABLE 로 화면에 보여 준다.
+				SeatStatus status = switch (seat.getStatus()) {
+					case RESERVED -> SeatStatus.RESERVED;
+					case AVAILABLE, HELD -> heldSeatIds.contains(seat.getId()) ? SeatStatus.HELD : SeatStatus.AVAILABLE;
+				};
 				return new SeatResponse(seat, status);
 			})
 			.toList();
+	}
+
+	/**
+	 * 대기열 UI용: 예매 가능 좌석 수 (전체 − DB 예약 − Redis 홀드).
+	 * 컨트롤러가 Repository 를 직접 들지 않게 해 레이어 규칙(ArchUnit)과 응집도를 맞춘다.
+	 */
+	public long countAvailableSeats(Long concertId) {
+		long totalSeats = seatRepository.countByConcertId(concertId);
+		long reserved = seatRepository.countByConcertIdAndStatus(concertId, SeatStatus.RESERVED);
+		List<Long> seatIds = seatRepository.findSeatIdsByConcertId(concertId);
+		int heldCount = holdStore.findHeldSeatIds(seatIds).size();
+		return Math.max(0, totalSeats - reserved - heldCount);
 	}
 }

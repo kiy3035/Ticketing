@@ -1,18 +1,15 @@
 package com.inyoung.ticketing.queue.controller;
 
-import java.util.List;
 import java.util.Optional;
 import com.inyoung.ticketing.common.api.ApiResponse;
 import com.inyoung.ticketing.config.TicketingProperties;
-import com.inyoung.ticketing.hold.store.HoldStore;
 import com.inyoung.ticketing.queue.dto.QueueAllowedResponse;
 import com.inyoung.ticketing.queue.dto.QueueEnterResponse;
 import com.inyoung.ticketing.queue.dto.QueueRequiredResponse;
 import com.inyoung.ticketing.queue.dto.QueueStatusResponse;
 import com.inyoung.ticketing.queue.dto.QueueTicketResponse;
 import com.inyoung.ticketing.queue.service.QueueService;
-import com.inyoung.ticketing.seat.domain.SeatStatus;
-import com.inyoung.ticketing.seat.repository.SeatRepository;
+import com.inyoung.ticketing.seat.service.SeatService;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.http.HttpStatus;
@@ -27,20 +24,22 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
-// 대기열 API 컨트롤러
+/**
+ * 대기열 API 컨트롤러.
+ * 좌석 집계(예매 가능 수)는 {@link SeatService} 에 위임한다 — 컨트롤러가 JPA Repository 를 직접 쓰지 않게 해
+ * 테스트·ArchUnit 규칙( controller → repository 의존 금지 )을 지키기 위함이다.
+ */
 @RestController
 @Validated
 @RequestMapping("/api/queue")
 public class QueueController {
 	private final QueueService queueService;
-	private final SeatRepository seatRepository;
-	private final HoldStore holdStore;
+	private final SeatService seatService;
 	private final TicketingProperties properties;
 
-	public QueueController(QueueService queueService, SeatRepository seatRepository, HoldStore holdStore, TicketingProperties properties) {
+	public QueueController(QueueService queueService, SeatService seatService, TicketingProperties properties) {
 		this.queueService = queueService;
-		this.seatRepository = seatRepository;
-		this.holdStore = holdStore;
+		this.seatService = seatService;
 		this.properties = properties;
 	}
 
@@ -60,11 +59,8 @@ public class QueueController {
 		boolean immediatelyAllowed = false;
 		int threshold = properties.getQueue().getImmediateAllowThreshold();
 		if (threshold > 0 && tokenInfo.getTotalWaiting() <= threshold) {
-			long totalSeats = seatRepository.countByConcertId(concertId);
-			long reserved = seatRepository.countByConcertIdAndStatus(concertId, SeatStatus.RESERVED);
-			List<Long> seatIds = seatRepository.findSeatIdsByConcertId(concertId);
-			int heldCount = holdStore.findHeldSeatIds(seatIds).size();
-			long availableSeats = Math.max(0, totalSeats - reserved - heldCount);
+			// Redis 홀드 + DB RESERVED 를 반영한 "남은 좌석" (SeatService 에 캡슐화)
+			long availableSeats = seatService.countAvailableSeats(concertId);
 			if (tokenInfo.getTotalWaiting() <= availableSeats) {
 				queueService.allowEntry(tokenInfo.getToken(), concertId);
 				immediatelyAllowed = true;
@@ -92,11 +88,8 @@ public class QueueController {
 		Long totalWaiting = queueService.countWaiting(concertId);
 		Optional<Long> allowedConcertId = queueService.isAllowed(token);
 		Boolean isAllowed = allowedConcertId.isPresent() && allowedConcertId.get().equals(concertId);
-		long totalSeats = seatRepository.countByConcertId(concertId);
-		long reserved = seatRepository.countByConcertIdAndStatus(concertId, SeatStatus.RESERVED);
-		List<Long> seatIds = seatRepository.findSeatIdsByConcertId(concertId);
-		int heldCount = holdStore.findHeldSeatIds(seatIds).size();
-		long availableSeats = Math.max(0, totalSeats - reserved - heldCount);
+		// 프론트 대기열 화면에 표시할 남은 좌석 수
+		long availableSeats = seatService.countAvailableSeats(concertId);
 
 		// 예상 대기 시간 = ceil(순번 / 분당입장인원)
 		// 분당입장인원 = batchSize × (60_000 / processingIntervalMs)
