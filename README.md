@@ -121,7 +121,7 @@
 
 **해결**:
 - 지표 API (`GET /api/metrics`)로 실시간 접속자 수, 콘서트 수 등 제공
-- **Prometheus 커스텀 메트릭**: 대기열(`ticketing_queue_waiting_count`), 홀드 생성/활성/해제(`ticketing_hold_created_total`, `ticketing_holds_active_count`, `ticketing_hold_released_total`), 전환율·결제(`ticketing_reservation_confirmed_total`, `ticketing_payment_completed_total`), 환불 배치(`ticketing_refund_processed_total`), 락 실패(`ticketing_lock_acquire_failures_total`) 등으로 관측 ([docs/monitoring.md](docs/monitoring.md))
+- **Prometheus 커스텀 메트릭**: 대기열(`ticketing_queue_waiting_count`), 홀드 생성/활성/해제(`ticketing_hold_created_total`, `ticketing_holds_active_count`, `ticketing_hold_released_total`), 홀드 경합(`ticketing_hold_conflict_total`), 전환율·결제(`ticketing_reservation_confirmed_total`, `ticketing_payment_completed_total`), 환불 배치(`ticketing_refund_processed_total`), 락 획득 실패(`ticketing_lock_acquire_failures_total`) 등으로 관측 ([docs/monitoring.md](docs/monitoring.md))
 - 보안/에러 로그를 파일로 기록 (`logs/ticketing.log`)
 - Redis Insight, Kafka UI로 인프라 상태 모니터링 가능
 

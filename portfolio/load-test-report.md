@@ -21,7 +21,9 @@
 | DB 커넥션 active | `hikaricp_connections_active{application="ticketing"}` |
 | DB 커넥션 pending | `hikaricp_connections_pending{application="ticketing"}` |
 | JVM 스레드 수 | `jvm_threads_live_threads{application="ticketing"}` |
-| 락 실패율 | `rate(ticketing_lock_acquire_failures_total{application="ticketing"}[30s])` |
+| 락 실패(429, tryLock) | `sum(rate(ticketing_lock_acquire_failures_total{application="ticketing",operation="hold"}[1m]))` |
+| 홀드 경합(409, Redis) | `sum(rate(ticketing_hold_conflict_total{application="ticketing"}[1m]))` |
+| 홀드 POST 상태코드 | `sum by (status) (rate(http_server_requests_seconds_count{application="ticketing",uri="/api/holds",method="POST"}[1m]))` |
 | 대기열 인원 | `ticketing_queue_waiting_count{application="ticketing"}` |
 
 ---

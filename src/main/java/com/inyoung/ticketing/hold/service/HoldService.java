@@ -43,6 +43,7 @@ public class HoldService {
 	private final HoldReleaseMetrics holdReleaseMetrics;
 	private final Counter holdCreatedCounter;
 	private final Counter lockFailureCounter;
+	private final Counter holdConflictCounter;
 
 	public HoldService(
 		SeatRepository seatRepository,
@@ -68,6 +69,10 @@ public class HoldService {
 		this.lockFailureCounter = Counter.builder("ticketing_lock_acquire_failures_total")
 			.tag("operation", "hold")
 			.description("Number of lock acquire failures when creating hold")
+			.register(meterRegistry);
+		this.holdConflictCounter = Counter.builder("ticketing_hold_conflict_total")
+			.tag("reason", "seat_already_held_redis")
+			.description("Hold rejected: seat already held in Redis (Lua createHold false)")
 			.register(meterRegistry);
 	}
 
@@ -129,6 +134,7 @@ public class HoldService {
 			);
 			boolean created = holdStore.createHold(info, Duration.ofSeconds(properties.getHold().getTtlSeconds()));
 			if (!created) {
+				holdConflictCounter.increment();
 				throw new ResponseStatusException(HttpStatus.CONFLICT, "Seat already held");
 			}
 			eventPublisher.publish(SeatHoldEventType.HOLD_CREATED, info);

@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
  *   <li>{@code ticketing_hold_created_total}: 홀드 생성 총 수 (Counter, HoldService에서 등록)</li>
  *   <li>{@code ticketing_hold_released_total}: 홀드 해제 총 수 (Counter, HoldReleaseMetrics에서 등록)</li>
  *   <li>{@code ticketing_lock_acquire_failures_total}: 락 획득 실패 수 (Counter, HoldService/ReservationService에서 등록)</li>
+ *   <li>{@code ticketing_hold_conflict_total}: Redis 홀드 경합으로 생성 거절 (Counter, HoldService)</li>
  *   <li>{@code ticketing_payment_completed_total}: 결제 완료 수 (Counter, PaymentService에서 등록)</li>
  *   <li>{@code ticketing_payment_complete_duration_seconds}: 결제 완료 소요 시간 (Timer, PaymentService에서 등록)</li>
  *   <li>{@code ticketing_reservation_confirmed_total}: 예약 확정 수 (Counter, ReservationService에서 등록)</li>
@@ -23,7 +24,7 @@ import org.springframework.stereotype.Service;
  *
  * <p>Grafana 대시보드에서 이 메트릭들을 조합해:
  * <ul>
- *   <li>좌석 선점 성공률 = created / (created + lock_failures)</li>
+ *   <li>홀드 시도 대비 성공 = created / (created + lock_failures + hold_conflict)</li>
  *   <li>결제 완료율 = completed / total_payment_requests</li>
  *   <li>평균 결제 소요 시간 = payment_complete_duration_seconds</li>
  * </ul>

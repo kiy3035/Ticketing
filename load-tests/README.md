@@ -85,7 +85,7 @@ k6 run -e BASE_URL=... -e CONCERT_ID=1 -e K6_PEAK_VU=2000 -e K6_PROFILE=stress l
 
 **모니터링과의 연결**: `ticketing_lock_acquire_failures_total`과 홀드 API 지연이 함께 오르면 좌석 락·Redis 경합 힌트. 좌석 조회만 느리면 DB/풀 쪽을 본다.
 
-**특징**: 동일 공연·좌석 풀에 VU를 올리면 홀드 경합을 보기 좋다. 좌석이 매우 많으면 랜덤이 분산되어 락 실패가 안 나올 수 있다 → `-e K6_HOT_SEAT_ID=<id>`로 한 좌석만 공유해 경합을 만든다. 기본 피크 **60** VU. (핫 시트 미사용 시) `AVAILABLE`이 없으면 sleep 후 스킵.
+**특징**: 동일 공연·좌석 풀에 VU를 올리면 홀드 경합을 보기 좋다. 좌석이 매우 많으면 랜덤이 분산되어 락 실패가 안 나올 수 있다 → `-e K6_HOT_SEAT_ID=<id>`로 한 좌석만 공유해 경합을 만든다. **`ticketing_lock_acquire_failures_total`은 `tryLock` 실패(429)만** 세므로, 경합은 **`ticketing_hold_conflict_total`** 또는 **`http_server_requests`의 POST `/api/holds` 409**로 보는 것이 맞다. 겹침을 키우려면 `-e K6_ITER_SLEEP_SEC=0` 과 `K6_PEAK_VU` 상향을 권장한다. 기본 피크 **60** VU. (핫 시트 미사용 시) `AVAILABLE`이 없으면 sleep 후 스킵.
 
 ---
 
