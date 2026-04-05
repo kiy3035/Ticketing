@@ -22,6 +22,7 @@
 |------|-----------|------|
 | `K6_LOOP_SLEEP_SEC` | `db-read.js` | 이터레이션 끝 sleep 초 (기본 `0.2`) |
 | `K6_ITER_SLEEP_SEC` | `seats-hold.js` | 이터레이션 간 sleep 초 (기본 `0.3`) |
+| `K6_HOT_SEAT_ID` | `seats-hold.js` | 지정 시 **항상 그 좌석 ID**로만 홀드 시도(랜덤 분산 방지, 락 실패율 관측용) |
 | `K6_FLOW_SLEEP_SEC` | `full-flow.js` | 이터레이션 간 sleep 초 (기본 `0.35`) |
 | `K6_EXTRA_QUEUE_COUNT` | `full-flow.js` | 결제 후 `queue/count` 추가 호출 횟수 (기본 `0`) |
 | `K6_QUEUE_MAX_POLL` / `K6_QUEUE_POLL_SLEEP_SEC` | `queue-flow.js`, `full-flow.js` | 큐 폴링 최대 횟수·간격(초) |
@@ -84,7 +85,7 @@ k6 run -e BASE_URL=... -e CONCERT_ID=1 -e K6_PEAK_VU=2000 -e K6_PROFILE=stress l
 
 **모니터링과의 연결**: `ticketing_lock_acquire_failures_total`과 홀드 API 지연이 함께 오르면 좌석 락·Redis 경합 힌트. 좌석 조회만 느리면 DB/풀 쪽을 본다.
 
-**특징**: 동일 공연·좌석 풀에 VU를 올리면 홀드 경합을 보기 좋다. 기본 피크 **60** VU. 좌석이 없으면 sleep 후 스킵.
+**특징**: 동일 공연·좌석 풀에 VU를 올리면 홀드 경합을 보기 좋다. 좌석이 매우 많으면 랜덤이 분산되어 락 실패가 안 나올 수 있다 → `-e K6_HOT_SEAT_ID=<id>`로 한 좌석만 공유해 경합을 만든다. 기본 피크 **60** VU. (핫 시트 미사용 시) `AVAILABLE`이 없으면 sleep 후 스킵.
 
 ---
 
