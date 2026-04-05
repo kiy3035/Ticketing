@@ -63,7 +63,7 @@ auth, concert, seat, hold, queue, reservation, payment, notification, metrics
 config, lock, scheduler(HoldCleanup, QueueProcessing, RefundForCancelledConcert), common
 ```
 
-- **문서**: `README.md`, `docs/architecture.md`, `docs/api.md`, `docs/data.md`, `docs/infra.md`, `docs/concurrency.md`, `docs/admin-setup.md`, `docs/deployment-ec2.md`, `docs/load-test-results.md`
+- **문서**: `README.md`, `docs/README.md`, `docs/architecture.md`, `docs/decisions.md`, `docs/sequence-diagrams.md`, `docs/api.md`, `docs/data.md`, `docs/infra.md`, `docs/deployment-ec2.md`, `docs/load-test-results.md`, `docs/monitoring.md`, `docs/admin-setup.md`
 - **실행**: `.env` 설정 후 `docker compose up -d` → `./gradlew bootRun` → `http://localhost:8080`
 
 ---

@@ -24,7 +24,7 @@
 - **만료 정리**: 토큰 TTL + 정리 스케줄러로 유령 대기열 자동 제거
 
 ### 2. 좌석 홀드/만료 시스템 (Hold System)
-- **Redis TTL + 분산 락**: 경쟁 상태 해결 및 중복 홀드 방지. 락 키 `lock:seat:{seatId}`, TTL은 설정으로 조정 ([docs/concurrency.md](docs/concurrency.md))
+- **Redis TTL + 분산 락**: 경쟁 상태 해결 및 중복 홀드 방지. 락 키 `lock:seat:{seatId}`, TTL·재시도는 설정으로 조정 ([docs/architecture.md](docs/architecture.md#distributed-lock))
 - **홀드 TTL**: 10분(600초, `ticketing.hold.ttl-seconds`). 결제 진행 시 연장 설정 가능
 - **자동 만료 처리**: 스케줄러가 만료된 홀드를 스캔하여 자동 정리
 - **이벤트 기반 알림**: Kafka로 만료 이벤트 발행 후 SSE로 실시간 전달
@@ -352,10 +352,10 @@ ticketing/
 │   ├── static/            # 정적 리소스 (HTML, JS, CSS)
 │   └── application.properties
 ├── docs/                  # 문서 (포트폴리오/면접관용) — 목차: docs/README.md
-│   ├── README.md         # 문서 목차
-│   ├── architecture.md   # 아키텍처 및 플로우
-│   ├── api.md            # API 문서
-│   └── ...
+│   ├── architecture.md   # 구성·동시성·결제·OAuth
+│   ├── decisions.md      # 기술 선택 요약(구 ADR 통합)
+│   ├── sequence-diagrams.md # 시퀀스·정합성 §5
+│   ├── api.md, data.md, infra.md, deployment-ec2.md, …
 ├── my-docs/              # 상세/공부용 (워크플로우, 소스 구조, Redis/Kafka 등)
 │   ├── README.md         # my-docs 목차
 │   ├── 01-full-workflow.md
@@ -369,7 +369,7 @@ ticketing/
 - **상세/공부용**: [my-docs/](my-docs/README.md) — 전체 워크플로우, 소스 구조, 홀드·결제·스케줄러·Redis/Kafka 정리. 코드와 흐름 이해용.
 
 요약 링크:
-- [아키텍처/플로우](docs/architecture.md) | [API](docs/api.md) | [인프라](docs/infra.md) | [데이터 구조](docs/data.md) | [동시성](docs/concurrency.md) | [관리자](docs/admin-setup.md) | [EC2 배포](docs/deployment-ec2.md) | [부하 테스트](docs/load-test-results.md) | [모니터링](docs/monitoring.md)
+- [아키텍처](docs/architecture.md) | [기술결정](docs/decisions.md) | [시퀀스·정합성](docs/sequence-diagrams.md) | [API](docs/api.md) | [데이터](docs/data.md) | [인프라](docs/infra.md) | [배포](docs/deployment-ec2.md) | [부하테스트](docs/load-test-results.md) | [모니터링](docs/monitoring.md) | [관리자](docs/admin-setup.md)
 
 ## 🎓 학습 포인트
 

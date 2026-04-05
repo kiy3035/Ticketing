@@ -1,16 +1,18 @@
-# 프로젝트 문서
+# 프로젝트 문서 (포트폴리오용)
+
+`docs/` 는 **이력서·면접관이 10~20분 안에 훑을 수 있는 분량**을 목표로 한다. 깊은 공부용 노트는 저장소 루트의 `my-docs/` 를 사용한다.
+
+## 문서 목차
 
 | 문서 | 설명 |
 |------|------|
-| [architecture.md](architecture.md) | 시스템 아키텍처, 핵심 플로우, ERD, 기술적 의사결정 |
-| [sequence-diagrams.md](sequence-diagrams.md) | 핵심 시퀀스 다이어그램, **정합성·실패 시나리오 표**(§5) |
-| [api.md](api.md) | REST API 엔드포인트 명세 |
-| [concurrency.md](concurrency.md) | Redis 분산 락, 좌석 동시성 제어 |
-| [data.md](data.md) | Redis 키 구조, Kafka 토픽/이벤트 |
-| [infra.md](infra.md) | Docker 구성, 스케줄러, 설정 가이드 |
-| [deployment-ec2.md](deployment-ec2.md) | AWS EC2 배포 구성 |
+| [architecture.md](architecture.md) | 구성도, 스택, 동시성·이벤트·결제·OAuth, 락 키 요약 |
+| [decisions.md](decisions.md) | 기술 선택 이유 5가지 (락, Kafka, DB락, 멱등, Virtual Thread) |
+| [sequence-diagrams.md](sequence-diagrams.md) | 홀드·결제·보상·DLQ 시퀀스, **정합성·실패 표(§5)** |
+| [api.md](api.md) | REST API 요약 |
+| [data.md](data.md) | Redis 키, Kafka 토픽·이벤트 참조표 |
+| [infra.md](infra.md) | Docker Compose, 스케줄러, 설정, 헬스·JVM 한 페이지 |
+| [deployment-ec2.md](deployment-ec2.md) | 목표 EC2 구성, ALB, 수평 확장 체크리스트 |
 | [load-test-results.md](load-test-results.md) | k6 부하 테스트 결과 |
-| [monitoring.md](monitoring.md) | Prometheus/Grafana 메트릭 |
-| [oauth2-login.md](oauth2-login.md) | Google OAuth2 로그인(서버 사이드, JIT 가입, 세션) |
-| [payment-method-and-toss.md](payment-method-and-toss.md) | 결제 수단(포인트/카드) |
-| [admin-setup.md](admin-setup.md) | 관리자/판매자 역할 |
+| [monitoring.md](monitoring.md) | Prometheus / Grafana |
+| [admin-setup.md](admin-setup.md) | 관리자·판매자 역할 및 API |

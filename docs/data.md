@@ -29,7 +29,7 @@
 | `ticketing.seat-hold-events` | `HOLD_CREATED` | 좌석 홀드 생성 |
 | | `HOLD_CANCELED` | 사용자 홀드 취소 |
 | | `HOLD_EXPIRED` | 스케줄러 만료 홀드 정리 |
-| | `RESERVATION_CONFIRMED` | 결제 완료 후 예약 확정 (DB 커밋 후 발행) |
+| | `RESERVATION_CONFIRMED` | 예약 DB 커밋과 동일 트랜잭션에 outbox 적재 → 스케줄러가 Kafka 발행 |
 | `ticketing.payment-complete-events` | `PAYMENT_COMPLETED` | 결제 완료 → 이메일/SMS 비동기 알림 |
 
 - **Consumer Group**: `ticketing-notification` — 이벤트 수신 후 Redis 알림 저장 + SSE 전송

@@ -1,6 +1,6 @@
 # 07. OAuth2 로그인 (Google) — 원리·흐름·코드
 
-OAuth2를 **처음** 접할 때 읽기 좋게, 이 프로젝트에서 **무엇이 어디서 일어나는지** 정리했다. 면접용 요약은 [docs/oauth2-login.md](../docs/oauth2-login.md)에 있다.
+OAuth2를 **처음** 접할 때 읽기 좋게, 이 프로젝트에서 **무엇이 어디서 일어나는지** 정리했다. 면접용 한 페이지 요약은 [docs/architecture.md](../docs/architecture.md#oauth2-google) § 인증을 본다.
 
 ---
 
