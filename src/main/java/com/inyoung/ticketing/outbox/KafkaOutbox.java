@@ -8,7 +8,6 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 
 /**
@@ -30,8 +29,7 @@ public class KafkaOutbox {
 	private String partitionKey;
 
 	/** {@link com.fasterxml.jackson.databind.ObjectMapper} 로 직렬화한 {@link com.inyoung.ticketing.hold.event.SeatHoldEvent} JSON */
-	@Lob
-	@Column(name = "payload_json", nullable = false)
+	@Column(name = "payload_json", nullable = false, columnDefinition = "LONGTEXT")
 	private String payloadJson;
 
 	@Enumerated(EnumType.STRING)

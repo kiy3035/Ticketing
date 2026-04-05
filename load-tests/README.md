@@ -20,7 +20,6 @@
 
 | 변수 | 스크립트 | 설명 |
 |------|-----------|------|
-| `K6_COUNTS_PER_ITER` | `cache-hot-read.js` | 이터당 `/api/queue/count` 호출 횟수 (기본 `15`) |
 | `K6_LOOP_SLEEP_SEC` | `db-read.js` | 이터레이션 끝 sleep 초 (기본 `0.2`) |
 | `K6_ITER_SLEEP_SEC` | `seats-hold.js` | 이터레이션 간 sleep 초 (기본 `0.3`) |
 | `K6_FLOW_SLEEP_SEC` | `full-flow.js` | 이터레이션 간 sleep 초 (기본 `0.35`) |
@@ -36,7 +35,7 @@
 k6 run -e BASE_URL=https://app.example.com:8080 -e CONCERT_ID=1 load-tests/api-health.js
 k6 run -e BASE_URL=... -e CONCERT_ID=1 -e TEST_USER=u -e TEST_PASS=p load-tests/full-flow.js
 # 피크만 키워 한계 보기 (모든 스크립트 동일)
-k6 run -e BASE_URL=... -e CONCERT_ID=1 -e K6_PEAK_VU=2000 -e K6_PROFILE=stress load-tests/cache-hot-read.js
+k6 run -e BASE_URL=... -e CONCERT_ID=1 -e K6_PEAK_VU=2000 -e K6_PROFILE=stress load-tests/queue-flow.js
 ```
 
 ---
@@ -67,21 +66,7 @@ k6 run -e BASE_URL=... -e CONCERT_ID=1 -e K6_PEAK_VU=2000 -e K6_PROFILE=stress l
 
 ---
 
-## 3. `cache-hot-read.js`
-
-**역할**: **`GET /api/queue/count` 고빈도** — 대기 인원 조회 한 종류만 반복한다. 구현상 Redis ZSet `size` 읽기에 가깝다(Spring HTTP 응답 캐시라기보다 **Redis 핫 읽기 경로**).
-
-**모니터링과의 연결**: Prometheus `http_server_requests_*`에서 `/api/queue/count` URI의 **RPS·지연**을 올리기 위한 전용 시나리오. `queue-flow.js`와 겹쳐 보면 **“읽기만 폭주”** vs **“진입+폴링”**을 나눠 볼 수 있다.
-
-**특징**: 인증 불필요. 기본 피크 **200** VU, 이터당 호출 **`K6_COUNTS_PER_ITER`**(기본 15). RPS는 `K6_PEAK_VU` × `K6_COUNTS_PER_ITER` / 이터 길이에 비례.
-
-**한계(knee)**: `K6_PROFILE=stress` + `K6_PEAK_VU`만 올려서 본다. OOM·연결 거절 나면 피크·`K6_COUNTS_PER_ITER`를 내린다.
-
-**Grafana에 안 찍힐 때**: 앱·DB·Redis·TCP(SG) 확인 후, 과부하면 `K6_PEAK_VU` / `K6_COUNTS_PER_ITER` 낮춘다. Prometheus `count by (uri) (http_server_requests_seconds_count)` 로 `uri` 확인.
-
----
-
-## 4. `db-read.js`
+## 3. `db-read.js`
 
 **역할**: **DB 읽기 위주** API를 한 이터레이션에서 연속 호출한다.
 
@@ -93,7 +78,7 @@ k6 run -e BASE_URL=... -e CONCERT_ID=1 -e K6_PEAK_VU=2000 -e K6_PROFILE=stress l
 
 ---
 
-## 5. `seats-hold.js`
+## 4. `seats-hold.js`
 
 **역할**: 로그인 → 좌석 목록 → **홀드 생성** → **`DELETE`로 홀드 취소**를 반복한다. 예약·결제 확정은 없다.
 
@@ -103,7 +88,7 @@ k6 run -e BASE_URL=... -e CONCERT_ID=1 -e K6_PEAK_VU=2000 -e K6_PROFILE=stress l
 
 ---
 
-## 6. `full-flow.js`
+## 5. `full-flow.js`
 
 **역할**: **E2E** — `queue/required`가 true일 때만 대기열 진입·폴링 → 좌석 조회 → 홀드 → **포인트 결제**(`POINT` 고정) → 완료까지.
 
