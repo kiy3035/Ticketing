@@ -99,3 +99,44 @@ k6 run -e BASE_URL=... -e CONCERT_ID=1 -e K6_PEAK_VU=2000 -e K6_PROFILE=stress l
 - **캐시( count ) RPS**: 기본은 `queue/count`를 거의 호출하지 않는다. 같은 스크립트로 보강하려면 `-e K6_EXTRA_QUEUE_COUNT=15`처럼 지정한다.
 
 **특징**: 카드 등 외부 위젯 결제는 k6로 자동화하지 않는다. 기본 피크 **140** VU. 곡선·피크는 `K6_PEAK_VU` 등 공통 env로 조절.
+
+---
+
+## 6. `jwt-scenarios.js` (기능 검증용)
+
+**역할**: JWT 대표 경우의수(정상/만료 조합/블랙리스트/탈취 재사용/헤더 누락/서명 위조)를 **1회 시퀀스**로 검증한다.
+
+- 포함: `S1,S2,S3,S4,S5,S6` + `E2,E4,E5`
+- 부하 곡선 없음(기능 시나리오 전용)
+
+필수 변수:
+
+- `BASE_URL`
+- `TEST_USER`, `TEST_PASS`
+
+선택 변수:
+
+- `TEST_USER_2`, `TEST_PASS_2` (subject mismatch 테스트)
+- `K6_WAIT_EXPIRY_MAX_SEC` (기본 120초, 만료 대기 최대치)
+- `JWT_PROTECTED_PATH` (기본 `/api/concerts/counts`)
+
+실행 예:
+
+```bash
+k6 run -e BASE_URL=http://localhost:18080 -e TEST_USER=u -e TEST_PASS=p load-tests/jwt-scenarios.js
+```
+
+만료 케이스(`S2/S3/S4`)는 토큰 TTL이 길면 대기 시간이 커지므로, 테스트 환경에서 JWT TTL을 짧게 설정하는 것을 권장한다.
+JWT 시나리오 전용 `application-test` 프로파일은 **`server.port=18080`** 과 짧은 TTL(`access=20s`, `refresh=70s`)만 둔다.
+
+```bash
+# 서버 (JWT 시나리오용 test 프로파일 → 18080)
+./gradlew bootRun --args='--spring.profiles.active=test'
+
+# k6 (만료까지 최대 180초까지 기다림)
+k6 run -e BASE_URL=http://localhost:18080 -e TEST_USER=u -e TEST_PASS=p -e K6_WAIT_EXPIRY_MAX_SEC=180 load-tests/jwt-scenarios.js
+```
+
+원격 k6 서버에서는 `BASE_URL`을 앱 인스턴스의 **프라이빗 IP:18080** 등으로 맞춘다.
+
+`K6_WAIT_EXPIRY_MAX_SEC`는 "토큰 만료를 기다릴 최대 시간(초)"이다. 실제 남은 만료 시간이 이 값보다 크면 해당 케이스를 실패(스킵) 처리해 테스트가 끝없이 길어지는 것을 막는다.

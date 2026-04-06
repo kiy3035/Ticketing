@@ -61,7 +61,7 @@ public class JwtTokenService {
 	 */
 	public String createAccessToken(String username, String role) {
 		Instant now = Instant.now();
-		Instant exp = now.plusSeconds(properties.getJwt().getAccessTtlMinutes() * 60);
+		Instant exp = now.plusSeconds(resolveAccessTtlSeconds());
 		String jti = UUID.randomUUID().toString();
 		return Jwts.builder()
 			.id(jti)
@@ -79,7 +79,7 @@ public class JwtTokenService {
 	 */
 	public String createRefreshToken(String username, String jti) {
 		Instant now = Instant.now();
-		Instant exp = now.plusSeconds(properties.getJwt().getRefreshTtlDays() * 24 * 3600);
+		Instant exp = now.plusSeconds(resolveRefreshTtlSeconds());
 		return Jwts.builder()
 			.id(jti)
 			.subject(username)
@@ -121,5 +121,20 @@ public class JwtTokenService {
 	/** Refresh 메타 DB에 넣을 새 jti(표준 UUID 문자열) */
 	public String newJti() {
 		return UUID.randomUUID().toString();
+	}
+
+	/** Refresh DB 만료시각 계산(토큰 exp 와 동일 기준) */
+	public LocalDateTime newRefreshExpiryDateTime() {
+		return LocalDateTime.now().plusSeconds(resolveRefreshTtlSeconds());
+	}
+
+	private long resolveAccessTtlSeconds() {
+		long sec = properties.getJwt().getAccessTtlSeconds();
+		return sec > 0 ? sec : properties.getJwt().getAccessTtlMinutes() * 60;
+	}
+
+	private long resolveRefreshTtlSeconds() {
+		long sec = properties.getJwt().getRefreshTtlSeconds();
+		return sec > 0 ? sec : properties.getJwt().getRefreshTtlDays() * 24 * 3600;
 	}
 }

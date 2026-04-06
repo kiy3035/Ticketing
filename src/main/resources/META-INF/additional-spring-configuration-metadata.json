@@ -1,0 +1,14 @@
+{
+  "properties": [
+    {
+      "name": "ticketing.jwt.access-ttl-seconds",
+      "type": "java.lang.Long",
+      "description": "JWT Access TTL override in seconds for test environments. If <= 0, access-ttl-minutes is used."
+    },
+    {
+      "name": "ticketing.jwt.refresh-ttl-seconds",
+      "type": "java.lang.Long",
+      "description": "JWT Refresh TTL override in seconds for test environments. If <= 0, refresh-ttl-days is used."
+    }
+  ]
+}

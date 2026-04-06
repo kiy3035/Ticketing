@@ -32,6 +32,16 @@ public class TicketingProperties {
 		private String secret = "dev-only-change-me-please-use-at-least-32-chars!!";
 		private long accessTtlMinutes = 30;
 		private long refreshTtlDays = 14;
+		/**
+		 * 테스트/검증용 초 단위 오버라이드. 0 이하면 비활성화.
+		 * 설정 시 {@link #accessTtlMinutes} 보다 우선한다.
+		 */
+		private long accessTtlSeconds = 0;
+		/**
+		 * 테스트/검증용 초 단위 오버라이드. 0 이하면 비활성화.
+		 * 설정 시 {@link #refreshTtlDays} 보다 우선한다.
+		 */
+		private long refreshTtlSeconds = 0;
 
 		public String getSecret() {
 			return secret;
@@ -55,6 +65,22 @@ public class TicketingProperties {
 
 		public void setRefreshTtlDays(long refreshTtlDays) {
 			this.refreshTtlDays = refreshTtlDays;
+		}
+
+		public long getAccessTtlSeconds() {
+			return accessTtlSeconds;
+		}
+
+		public void setAccessTtlSeconds(long accessTtlSeconds) {
+			this.accessTtlSeconds = accessTtlSeconds;
+		}
+
+		public long getRefreshTtlSeconds() {
+			return refreshTtlSeconds;
+		}
+
+		public void setRefreshTtlSeconds(long refreshTtlSeconds) {
+			this.refreshTtlSeconds = refreshTtlSeconds;
 		}
 	}
 

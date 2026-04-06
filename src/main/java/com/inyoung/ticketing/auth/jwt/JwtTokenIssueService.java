@@ -1,9 +1,7 @@
 package com.inyoung.ticketing.auth.jwt;
 
-import java.time.LocalDateTime;
 import com.inyoung.ticketing.auth.dto.TokenPairResponse;
 import com.inyoung.ticketing.auth.service.UsersService;
-import com.inyoung.ticketing.config.TicketingProperties;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,18 +17,15 @@ public class JwtTokenIssueService {
 	private final JwtTokenService jwtTokenService;
 	private final RefreshTokenPersistenceService refreshTokenPersistenceService;
 	private final UsersService usersService;
-	private final TicketingProperties ticketingProperties;
 
 	public JwtTokenIssueService(
 		JwtTokenService jwtTokenService,
 		RefreshTokenPersistenceService refreshTokenPersistenceService,
-		UsersService usersService,
-		TicketingProperties ticketingProperties
+		UsersService usersService
 	) {
 		this.jwtTokenService = jwtTokenService;
 		this.refreshTokenPersistenceService = refreshTokenPersistenceService;
 		this.usersService = usersService;
-		this.ticketingProperties = ticketingProperties;
 	}
 
 	/**
@@ -45,8 +40,7 @@ public class JwtTokenIssueService {
 		String refreshJti = jwtTokenService.newJti();
 		String access = jwtTokenService.createAccessToken(username, role);
 		String refresh = jwtTokenService.createRefreshToken(username, refreshJti);
-		LocalDateTime refreshExp = LocalDateTime.now().plusDays(ticketingProperties.getJwt().getRefreshTtlDays());
-		refreshTokenPersistenceService.saveNew(refreshJti, username, refreshExp, familyId);
+		refreshTokenPersistenceService.saveNew(refreshJti, username, jwtTokenService.newRefreshExpiryDateTime(), familyId);
 		return new TokenPairResponse(access, refresh, "Bearer");
 	}
 }

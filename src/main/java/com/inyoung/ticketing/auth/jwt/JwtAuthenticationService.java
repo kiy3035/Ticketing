@@ -1,10 +1,8 @@
 package com.inyoung.ticketing.auth.jwt;
 
 import java.io.IOException;
-import java.time.LocalDateTime;
 import java.util.Collections;
 import com.inyoung.ticketing.auth.service.UsersService;
-import com.inyoung.ticketing.config.TicketingProperties;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -30,20 +28,17 @@ public class JwtAuthenticationService {
 	private final TokenBlacklistService tokenBlacklistService;
 	private final RefreshTokenPersistenceService refreshTokenPersistenceService;
 	private final UsersService usersService;
-	private final TicketingProperties ticketingProperties;
 
 	public JwtAuthenticationService(
 		JwtTokenService jwtTokenService,
 		TokenBlacklistService tokenBlacklistService,
 		RefreshTokenPersistenceService refreshTokenPersistenceService,
-		UsersService usersService,
-		TicketingProperties ticketingProperties
+		UsersService usersService
 	) {
 		this.jwtTokenService = jwtTokenService;
 		this.tokenBlacklistService = tokenBlacklistService;
 		this.refreshTokenPersistenceService = refreshTokenPersistenceService;
 		this.usersService = usersService;
-		this.ticketingProperties = ticketingProperties;
 	}
 
 	/**
@@ -104,8 +99,8 @@ public class JwtAuthenticationService {
 			}
 			String newRefreshJti = jwtTokenService.newJti();
 			String newRefresh = jwtTokenService.createRefreshToken(subR, newRefreshJti);
-			LocalDateTime refreshExp = LocalDateTime.now().plusDays(ticketingProperties.getJwt().getRefreshTtlDays());
-			refreshTokenPersistenceService.rotateRefreshAfterAccessRenewal(refreshJti, subR, newRefreshJti, refreshExp);
+			refreshTokenPersistenceService.rotateRefreshAfterAccessRenewal(
+				refreshJti, subR, newRefreshJti, jwtTokenService.newRefreshExpiryDateTime());
 			String role = usersService.loadUserRole(subR);
 			String newAccess = jwtTokenService.createAccessToken(subR, role);
 			setSecurityContext(subR, role);
@@ -129,8 +124,8 @@ public class JwtAuthenticationService {
 			String familyId = refreshTokenPersistenceService.findFamilyIdByJti(refreshJti)
 				.orElseGet(() -> jwtTokenService.newJti());
 			refreshTokenPersistenceService.revokeByJti(refreshJti);
-			LocalDateTime refreshExp = LocalDateTime.now().plusDays(ticketingProperties.getJwt().getRefreshTtlDays());
-			refreshTokenPersistenceService.saveNew(newJti, subR, refreshExp, familyId);
+			refreshTokenPersistenceService.saveNew(
+				newJti, subR, jwtTokenService.newRefreshExpiryDateTime(), familyId);
 			setSecurityContext(subR, role);
 			response.setHeader("X-New-Refresh-Token", newRefresh);
 			return true;
