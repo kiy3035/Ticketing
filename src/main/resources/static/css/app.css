@@ -556,23 +556,6 @@ img { max-width: 100%; display: block; }
 	background: var(--panel);
 }
 .helper { color: var(--muted); font-size: 12px; }
-.oauth-divider {
-	text-align: center;
-	margin: 20px 0 12px;
-	position: relative;
-}
-.oauth-divider::before,
-.oauth-divider::after {
-	content: "";
-	position: absolute;
-	top: 50%;
-	width: 38%;
-	height: 1px;
-	background: var(--line);
-}
-.oauth-divider::before { left: 0; }
-.oauth-divider::after { right: 0; }
-.oauth-row { margin: 0 0 8px; text-align: center; }
 a.button {
 	display: inline-block;
 	text-decoration: none;

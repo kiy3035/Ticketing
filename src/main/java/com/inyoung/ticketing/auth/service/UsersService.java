@@ -1,7 +1,6 @@
 package com.inyoung.ticketing.auth.service;
 
 import java.util.Collections;
-import java.util.UUID;
 import com.inyoung.ticketing.auth.domain.Users;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import com.inyoung.ticketing.auth.dto.MyPageResponse;
@@ -22,7 +21,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 // 사용자 계정 서비스 및 인증 사용자 조회.
 // - 회원 가입 시 초기 포인트/역할/알림 수단을 설정하고 환영 이메일을 비동기적으로 전송한다.
-// - 스프링 시큐리티의 UserDetailsService 를 구현해 세션 기반 인증에 필요한 사용자 정보를 제공한다.
+// - 스프링 시큐리티의 UserDetailsService 를 구현해 JWT 로그인에 필요한 사용자 정보를 제공한다.
 @Service
 public class UsersService implements UserDetailsService {
 	private static final Logger logger = LoggerFactory.getLogger(UsersService.class);
@@ -108,84 +107,4 @@ public class UsersService implements UserDetailsService {
 		);
 	}
 
-	/**
-	 * <b>소셜 로그인 후</b> IdP(Identity Provider, 여기서는 Google) 계정과 우리 {@code users} 행을 1:1로 연결한다.
-	 * <p>
-	 * <b>용어</b>
-	 * <ul>
-	 *   <li>{@code registrationId} : {@code application.properties} 의 {@code spring.security.oauth2.client.registration.google} 에서
-	 *       마지막 이름. 예: {@code google}. (같은 DB에 카카오를 붙이면 {@code kakao} 같은 값이 또 생길 수 있음)</li>
-	 *   <li>{@code oauthSubject} : IdP 가 발급한 계정 불변 ID. OpenID 에서 흔히 {@code sub} 클레임. 이메일과 별개로 쓴다.</li>
-	 * </ul>
-	 * <p>
-	 * 이미 ({@code oauth_provider}, {@code oauth_subject}) 로 행이 있으면 그대로 반환하고,
-	 * 없으면 <b>JIT(Just-In-Time) 가입</b>으로 새 행을 만든다. 별도 "구글 회원가입" 화면은 없다.
-	 */
-	@Transactional
-	public Users provisionOAuthUser(String registrationId, String oauthSubject, String email) {
-		return usersRepository.findByOauthProviderAndOauthSubject(registrationId, oauthSubject)
-			.orElseGet(() -> createOAuthUser(registrationId, oauthSubject, email));
-	}
-
-	/**
-	 * OAuth 전용 계정 한 건을 DB에 넣는다.
-	 * <ul>
-	 *   <li>비밀번호: 우리가 알 수 없으므로 랜덤 문자열을 BCrypt — 폼 로그인으로는 사실상 로그인 불가.</li>
-	 *   <li>{@code username}: 서비스 전역에서 쓰는 로그인 ID. {@code g} + {@code sub} 형태로 만들어 {@code users.username} 유니크와 맞춘다.</li>
-	 * </ul>
-	 */
-	private Users createOAuthUser(String registrationId, String oauthSubject, String email) {
-		String username = generateOauthUsername(registrationId, oauthSubject);
-		String safeEmail = (email != null && !email.isBlank())
-			? email
-			: "oauth+" + oauthSubject + "@placeholder.local";
-
-		Users account = new Users();
-		account.setUsername(username);
-		account.setPw(passwordEncoder.encode(UUID.randomUUID().toString()));
-		account.setEmail(safeEmail);
-		// 기존 DB에 phone 이 NOT NULL인 스키마가 남아 있으면 null INSERT 가 실패한다. 빈 문자열은 "번호 없음"으로 취급(알림은 notiType/email 분기).
-		account.setPhone("");
-		account.setNotiType("email");
-		account.setPoint(SIGNUP_POINT_BONUS);
-		account.setRole("USER");
-		account.setOauthProvider(registrationId);
-		account.setOauthSubject(oauthSubject);
-		usersRepository.save(account);
-
-		if (email != null && !email.isBlank()) {
-			try {
-				emailService.sendSignupSuccessEmail(email, username);
-			} catch (Exception e) {
-				logger.warn("OAuth signup success email failed for {}: {}", email, e.getMessage());
-			}
-		}
-		return account;
-	}
-
-	/**
-	 * IdP 마다 {@code sub} 형식이 달라도, 우리 DB {@code username} 컬럼(길이 제한) 안에 들어가도록 문자열을 만든다.
-	 * 충돌 시 짧은 랜덤 접미사로 재시도한다.
-	 */
-	private String generateOauthUsername(String registrationId, String oauthSubject) {
-		String base = "google".equals(registrationId)
-			? "g" + oauthSubject
-			: registrationId + "_" + oauthSubject;
-		if (base.length() > 50) {
-			base = base.substring(0, 50);
-		}
-		if (!usersRepository.existsByUsername(base)) {
-			return base;
-		}
-		for (int i = 0; i < 20; i++) {
-			String suffix = "_" + UUID.randomUUID().toString().replace("-", "").substring(0, 6);
-			String candidate = base.length() + suffix.length() > 50
-				? base.substring(0, Math.max(1, 50 - suffix.length())) + suffix
-				: base + suffix;
-			if (!usersRepository.existsByUsername(candidate)) {
-				return candidate;
-			}
-		}
-		throw new IllegalStateException("Could not allocate unique username for OAuth user");
-	}
 }

@@ -4,7 +4,7 @@
 
 ### Q1. 통합 테스트 인프라를 어떻게 구성했나요?
 
-**A.** `IntegrationTestBase` 가 **Testcontainers** 로 **MySQL 8**, **Redis 7**, **Kafka**(Confluent 7.5) 컨테이너를 띄우고, `@DynamicPropertySource` 로 Spring Boot 프로퍼티에 바인딩합니다. 로컬·CI 모두 **Docker 만 있으면** 동일하게 돌아가게 했고, 테스트 프로파일에서는 Flyway 를 끄고 JPA `create-drop` 으로 스키마를 맞춥니다. 외부 메일·SMS·OAuth 는 더미 호스트/키로 막아 **네트워크 의존 없이** API·서비스 통합을 검증합니다.
+**A.** `IntegrationTestBase` 가 **Testcontainers** 로 **MySQL 8**, **Redis 7**, **Kafka**(Confluent 7.5) 컨테이너를 띄우고, `@DynamicPropertySource` 로 Spring Boot 프로퍼티에 바인딩합니다. 로컬·CI 모두 **Docker 만 있으면** 동일하게 돌아가게 했고, 테스트 프로파일에서는 Flyway 를 끄고 JPA `create-drop` 으로 스키마를 맞춥니다. 외부 메일·SMS 는 더미 호스트/키로 막아 **네트워크 의존 없이** API·서비스 통합을 검증합니다.
 
 > **Q1-1. E2E 전부 Testcontainers 로만 하나요?**
 > **A.** 핵심 플로우는 컨테이너 기반 통합 테스트로 두고, 단위 테스트는 Mockito 등으로 빠르게 돌립니다. k6 부하는 `load-tests/` 에서 별도로 돌리는 편이 비용·시간 면에서 낫습니다.

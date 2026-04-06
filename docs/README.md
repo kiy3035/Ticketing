@@ -6,7 +6,8 @@
 
 | 문서 | 설명 |
 |------|------|
-| [architecture.md](architecture.md) | 구성도, 스택, 동시성·이벤트·결제·OAuth, 락 키 요약 |
+| [architecture.md](architecture.md) | 구성도, 스택, 동시성·이벤트·결제·JWT, 락 키 요약 |
+| [jwt-auth.md](jwt-auth.md) | JWT Access/Refresh, 블랙리스트, 4가지 재발급, SSE 쿼리 파라미터 |
 | [decisions.md](decisions.md) | 기술 선택 이유 5가지 (락, Kafka, DB락, 멱등, Virtual Thread) |
 | [sequence-diagrams.md](sequence-diagrams.md) | 홀드·결제·보상·DLQ 시퀀스, **정합성·실패 표(§5)** |
 | [api.md](api.md) | REST API 요약 |

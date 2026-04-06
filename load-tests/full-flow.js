@@ -7,7 +7,7 @@
  */
 import http from 'k6/http';
 import { check, sleep } from 'k6';
-import { baseUrl, concertId, formLogin } from './lib/common.js';
+import { authHeaders, baseUrl, concertId, jwtLogin } from './lib/common.js';
 import { buildRampPeakStages, pickThresholds } from './lib/stages.js';
 
 const DEFAULT_PEAK = 140;
@@ -41,7 +41,7 @@ let loggedIn = false;
 
 export default function () {
   if (!loggedIn) {
-    if (!formLogin(BASE, TEST_USER, TEST_PASS)) {
+    if (!jwtLogin(BASE, TEST_USER, TEST_PASS)) {
       return;
     }
     loggedIn = true;
@@ -64,7 +64,7 @@ export default function () {
     }
   }
 
-  const seatsRes = http.get(`${BASE}/api/concerts/${CID}/seats`);
+  const seatsRes = http.get(`${BASE}/api/concerts/${CID}/seats`, { headers: authHeaders(false) });
   check(seatsRes, { '좌석 조회': (r) => r.status === 200 });
   if (seatsRes.status !== 200) return;
   const seats = seatsRes.json('data') || [];
@@ -79,7 +79,7 @@ export default function () {
   const holdRes = http.post(
     `${BASE}/api/holds`,
     JSON.stringify({ concertId: Number(CID), seatId: Number(seatId) }),
-    { headers: { 'Content-Type': 'application/json' } },
+    { headers: authHeaders(true) },
   );
   const holdOk = holdRes.status === 200 || holdRes.status === 201;
   check(holdRes, { '홀드 생성': (r) => r.status === 200 || r.status === 201 });
@@ -90,7 +90,7 @@ export default function () {
   const reqRes = http.post(
     `${BASE}/api/payments/request`,
     JSON.stringify({ holdToken, paymentMethod: PAYMENT_METHOD_POINT }),
-    { headers: { 'Content-Type': 'application/json' } },
+    { headers: authHeaders(true) },
   );
   check(reqRes, { '결제 요청': (r) => r.status === 201 });
   if (reqRes.status !== 201) return;
@@ -98,12 +98,14 @@ export default function () {
   if (!paymentKey) return;
 
   const approveRes = http.post(`${BASE}/api/payments/${paymentKey}/approve`, '{}', {
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders(true),
   });
   check(approveRes, { '결제 승인(포인트)': (r) => r.status === 200 });
   if (approveRes.status !== 200) return;
 
-  const completeRes = http.post(`${BASE}/api/payments/${paymentKey}/complete`, null);
+  const completeRes = http.post(`${BASE}/api/payments/${paymentKey}/complete`, null, {
+    headers: authHeaders(false),
+  });
   check(completeRes, { '결제 완료': (r) => r.status === 200 });
 
   for (let c = 0; c < K6_EXTRA_QUEUE_COUNT; c++) {

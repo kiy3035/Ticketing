@@ -7,7 +7,7 @@
  */
 import http from 'k6/http';
 import { check, sleep } from 'k6';
-import { baseUrl, concertId, formLogin } from './lib/common.js';
+import { authHeaders, baseUrl, concertId, jwtLogin } from './lib/common.js';
 import { buildRampPeakStages, pickThresholds } from './lib/stages.js';
 
 const DEFAULT_PEAK = 60;
@@ -45,13 +45,13 @@ let loggedIn = false;
 
 export default function () {
   if (!loggedIn) {
-    if (!formLogin(BASE, TEST_USER, TEST_PASS)) {
+    if (!jwtLogin(BASE, TEST_USER, TEST_PASS)) {
       return;
     }
     loggedIn = true;
   }
 
-  const seatsRes = http.get(`${BASE}/api/concerts/${CID}/seats`);
+  const seatsRes = http.get(`${BASE}/api/concerts/${CID}/seats`, { headers: authHeaders(false) });
   check(seatsRes, { '좌석 조회 200': (r) => r.status === 200 });
   if (seatsRes.status !== 200) {
     return;
@@ -76,7 +76,7 @@ export default function () {
   const holdRes = http.post(
     `${BASE}/api/holds`,
     JSON.stringify({ concertId: Number(CID), seatId: Number(seatId) }),
-    { headers: { 'Content-Type': 'application/json' } },
+    { headers: authHeaders(true) },
   );
   const holdOk = holdRes.status === 200 || holdRes.status === 201;
   check(holdRes, { '홀드 생성': (r) => r.status === 200 || r.status === 201 });
@@ -89,7 +89,7 @@ export default function () {
     return;
   }
 
-  const delRes = http.del(`${BASE}/api/holds/${holdToken}`);
+  const delRes = http.del(`${BASE}/api/holds/${holdToken}`, { headers: authHeaders(false) });
   check(delRes, { '홀드 취소 204': (r) => r.status === 204 });
   sleep(ITER_SLEEP_SEC);
 }

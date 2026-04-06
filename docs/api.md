@@ -11,11 +11,13 @@
 | 메서드 | 엔드포인트 | 설명 | 인증 |
 |--------|-----------|------|------|
 | POST | `/api/auth/signup` | 회원가입 (username, password) | 불필요 |
+| POST | `/api/auth/login` | 로그인 → `accessToken`, `refreshToken` (성공 시 `ApiResponse` 래핑) | 불필요 |
+| POST | `/api/auth/logout` | 로그아웃(Access 블랙리스트·Refresh revoke) | 필요 |
 | GET | `/api/auth/me` | 현재 사용자 정보 조회 | 필요 |
 
-인증 방식: Spring Security 세션 기반. 로그인 성공 시 세션 쿠키 발급, Redis 저장 (TTL 30분).
+인증: **JWT**. `Authorization: Bearer <access>`, `X-Refresh-Token: <refresh>`. 상세·재발급 헤더는 [jwt-auth.md](jwt-auth.md).
 
-인증 불필요 경로: `/`, `/login.html`, `/signup.html`, `POST /login`, `POST /logout`, `POST /api/auth/signup`, `/api/queue/**`
+인증 불필요 경로(예): `/`, `/*.html`, `/css/**`, `/js/**`, `POST /api/auth/login`, `POST /api/auth/signup`, `/api/queue/**`, `/actuator/**`, Swagger 문서 경로
 
 ## 콘서트 API
 
@@ -32,12 +34,12 @@
 
 | 메서드 | 엔드포인트 | 설명 | 인증 |
 |--------|-----------|------|------|
-| POST | `/api/queue/enter?concertId={id}` | 대기열 진입 (토큰 발급, 중복 방지) | 필요 |
-| GET | `/api/queue/status?token=&concertId=` | 순번·대기인원·입장허용 조회 (2초 폴링) | 필요 |
-| GET | `/api/queue/allowed?token=` | 입장 허용 여부 확인 | 필요 |
-| GET | `/api/queue/count?concertId=` | 대기인원 수 조회 | 필요 |
-| GET | `/api/queue/required?concertId=` | 대기열 필요 여부 (유동 활성화) | 필요 |
-| DELETE | `/api/queue/exit?token=&concertId=` | 대기열 나가기 | 필요 |
+| POST | `/api/queue/enter?concertId={id}` | 대기열 진입 (토큰 발급, 중복 방지) | 불필요 (JWT 필터 스킵) |
+| GET | `/api/queue/status?token=&concertId=` | 순번·대기인원·입장허용 조회 (2초 폴링) | 불필요 |
+| GET | `/api/queue/allowed?token=` | 입장 허용 여부 확인 | 불필요 |
+| GET | `/api/queue/count?concertId=` | 대기인원 수 조회 | 불필요 |
+| GET | `/api/queue/required?concertId=` | 대기열 필요 여부 (유동 활성화) | 불필요 |
+| DELETE | `/api/queue/exit?token=&concertId=` | 대기열 나가기 | 불필요 |
 
 ## 홀드 API
 

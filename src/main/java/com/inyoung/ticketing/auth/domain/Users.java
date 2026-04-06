@@ -10,18 +10,12 @@ import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 
 /**
- * 로컬(폼) 가입과 소셜(OAuth/OIDC) 가입이 같은 테이블을 쓴다.
- * <p>
- * 소셜만 해당: {@code oauth_provider} + {@code oauth_subject} 가 있으면 IdP 계정과 매핑된 행이다.
- * 폼 가입만 한 행은 둘 다 null 일 수 있다.
+ * 로컬 회원가입 사용자 계정.
  */
 @Entity
 @Table(
 	name = "users",
-	uniqueConstraints = {
-		@UniqueConstraint(columnNames = { "username" }),
-		@UniqueConstraint(name = "uk_users_oauth", columnNames = { "oauth_provider", "oauth_subject" })
-	}
+	uniqueConstraints = @UniqueConstraint(columnNames = { "username" })
 )
 public class Users extends BaseEntity {
 	@Id
@@ -37,17 +31,9 @@ public class Users extends BaseEntity {
 	@Column(nullable = false, length = 100)
 	private String email;
 
-	/** OAuth 가입 등 전화번호 없음 허용. SMS 알림 시 이메일로 대체 처리 */
+	/** 비어 있을 수 있음. SMS 알림 시 번호 없으면 이메일 등으로 분기 */
 	@Column(length = 20)
 	private String phone;
-
-	/** OAuth2 클라이언트 등록 ID (예: google). {@code oauth_subject} 와 함께 IdP 계정을 유일하게 식별한다. */
-	@Column(name = "oauth_provider", length = 32)
-	private String oauthProvider;
-
-	/** IdP 가 발급한 계정 불변 ID. OpenID 에서 흔히 {@code sub} 클레임과 동일한 값을 저장한다. */
-	@Column(name = "oauth_subject", length = 255)
-	private String oauthSubject;
 
 	@Column(nullable = false, length = 20)
 	private String notiType = "sms";
@@ -101,22 +87,6 @@ public class Users extends BaseEntity {
 	// 휴대폰번호 설정
 	public void setPhone(String phone) {
 		this.phone = phone;
-	}
-
-	public String getOauthProvider() {
-		return oauthProvider;
-	}
-
-	public void setOauthProvider(String oauthProvider) {
-		this.oauthProvider = oauthProvider;
-	}
-
-	public String getOauthSubject() {
-		return oauthSubject;
-	}
-
-	public void setOauthSubject(String oauthSubject) {
-		this.oauthSubject = oauthSubject;
 	}
 
 	// 알림 방식

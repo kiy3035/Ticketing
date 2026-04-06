@@ -174,7 +174,7 @@ const renderHolds = (items) => {
 			const token = btn.dataset.holdToken;
 			if (!token || !confirm('이 좌석 예약을 취소하시겠습니까?')) return;
 			try {
-				const res = await fetch(`/api/holds/${encodeURIComponent(token)}`, { method: 'DELETE' });
+				const res = await window.apiFetch(`/api/holds/${encodeURIComponent(token)}`, { method: 'DELETE' });
 				if (res.ok) loadHolds();
 				else alert('취소에 실패했습니다.');
 			} catch (e) {

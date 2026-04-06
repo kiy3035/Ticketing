@@ -13,7 +13,7 @@
 | [04-payment-and-refund.md](04-payment-and-refund.md) | request → approve → complete, 보상 처리, 공연 취소 환불 배치 |
 | [05-schedulers.md](05-schedulers.md) | **스케줄러 5종**: 대기열 입장·정리, 홀드 만료, 환불, **Kafka Outbox 발행** |
 | [06-redis-kafka-reference.md](06-redis-kafka-reference.md) | Redis 키 전체, Rate limit Lua, **`kafka_outbox`**, Kafka 토픽·DLT·VT — *구 `redis-patterns`·`kafka-consumer-guide` 통합본* |
-| [07-oauth2-login.md](07-oauth2-login.md) | Google OAuth2, JIT 가입, `internal_username`, 코드 위치 |
+| [08-jwt-auth.md](08-jwt-auth.md) | JWT 로그인·Refresh DB·Redis 블랙리스트, 프론트 저장 키 |
 | [concurrency-deep-dive.md](concurrency-deep-dive.md) | SETNX·Lua·DB 비관적 락, 부하 테스트 아이디어 |
 | [resilience-patterns.md](resilience-patterns.md) | 멱등 키, 보상, 서킷브레이커(개념), 레이트 리밋, **Outbox** |
 | [virtual-threads-guide.md](virtual-threads-guide.md) | Virtual Thread 적용 지점(Tomcat, 스케줄러 내부, Kafka 리스너) |

@@ -1,6 +1,5 @@
 import http from 'k6/http';
 
-// [조정] 앱 URL·공연 ID는 보통 실행 시 -e BASE_URL / -e CONCERT_ID 로 넘기면 파일 수정 없이 바꿀 수 있음
 export function baseUrl() {
   return __ENV.BASE_URL || 'http://localhost:8080';
 }
@@ -9,18 +8,41 @@ export function concertId() {
   return __ENV.CONCERT_ID || '1';
 }
 
+let accessToken = '';
+let refreshToken = '';
+
 /**
- * 폼 로그인. 성공 시 302 + Set-Cookie. k6 VU 단위 쿠키 저장소에 유지된다.
+ * JWT 로그인 (POST /api/auth/login). 이후 http 요청에 authHeaders() 사용.
  * @returns {boolean}
  */
-export function formLogin(url, username, password) {
+export function jwtLogin(url, username, password) {
   if (!username || !password) {
     return false;
   }
-  const body = `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
-  const res = http.post(`${url}/login`, body, {
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    redirects: 0,
+  const res = http.post(`${url}/api/auth/login`, JSON.stringify({ username, password }), {
+    headers: { 'Content-Type': 'application/json' },
   });
-  return res.status === 302 || (res.status >= 200 && res.status < 400);
+  if (res.status !== 200) {
+    return false;
+  }
+  accessToken = res.json('data.accessToken') || res.json('accessToken');
+  refreshToken = res.json('data.refreshToken') || res.json('refreshToken');
+  return !!(accessToken && refreshToken);
+}
+
+/** @param {boolean} [withJsonContentType] JSON 본문 POST 시 true */
+export function authHeaders(withJsonContentType) {
+  const h = {
+    Authorization: `Bearer ${accessToken}`,
+    'X-Refresh-Token': refreshToken,
+  };
+  if (withJsonContentType) {
+    h['Content-Type'] = 'application/json';
+  }
+  return h;
+}
+
+/** @deprecated jwtLogin 사용 */
+export function formLogin(url, username, password) {
+  return jwtLogin(url, username, password);
 }

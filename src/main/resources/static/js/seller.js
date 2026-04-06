@@ -169,7 +169,7 @@ async function loadSales(concertId) {
 async function cancelConcert(concertId) {
 	if (!confirm('이 공연을 취소하시겠습니까? 취소 시 환불 배치가 실행됩니다.')) return;
 	try {
-		const res = await fetch(`/api/seller/concerts/${concertId}/cancel`, { method: 'POST' });
+		const res = await window.apiFetch(`/api/seller/concerts/${concertId}/cancel`, { method: 'POST' });
 		if (!res.ok) throw new Error(res.statusText);
 		document.getElementById('concertDetail').classList.remove('visible');
 		currentConcertId = null;
@@ -206,7 +206,7 @@ document.getElementById('modalCreateSubmit').addEventListener('click', async () 
 		return;
 	}
 	try {
-		const res = await fetch('/api/seller/concerts', {
+		const res = await window.apiFetch('/api/seller/concerts', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ title, venue, concertAt, category })
@@ -259,7 +259,7 @@ document.getElementById('modalSeatsSubmit').addEventListener('click', async () =
 		return;
 	}
 	try {
-		const res = await fetch(`/api/seller/concerts/${currentConcertId}/seats`, {
+		const res = await window.apiFetch(`/api/seller/concerts/${currentConcertId}/seats`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ section, seatNoFrom, seatNoTo, price })

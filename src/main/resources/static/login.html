@@ -8,34 +8,25 @@
 </head>
 <body class="auth">
 	<div class="auth-card">
-		<!-- 로그인 제목 -->
 		<h1>콘서트 예매 로그인</h1>
 		<p class="helper">안전한 예매를 위해 로그인 후 이용하세요.</p>
 
-		<!-- 상태 메시지 -->
 		<p id="statusOk" class="status ok" hidden>회원가입이 완료되었습니다. 로그인하세요.</p>
 		<p id="statusError" class="status error" hidden>아이디 또는 비밀번호가 올바르지 않습니다.</p>
 		<p id="statusLogout" class="status info" hidden>로그아웃되었습니다.</p>
 
-		<!-- 로그인 폼 -->
-		<form method="post" action="/login">
+		<form id="loginForm" method="post" action="#">
 			<label>
 				<span>아이디</span>
-				<input type="text" name="username" placeholder="아이디" required>
+				<input type="text" name="username" id="username" placeholder="아이디" required autocomplete="username">
 			</label>
 			<label>
 				<span>비밀번호</span>
-				<input type="password" name="password" placeholder="비밀번호" required>
+				<input type="password" name="password" id="password" placeholder="비밀번호" required autocomplete="current-password">
 			</label>
 			<button type="submit" class="primary">로그인</button>
 		</form>
 
-		<p class="helper oauth-divider">또는</p>
-		<p class="oauth-row">
-			<a class="button secondary oauth-google" href="/oauth2/authorization/google">Google로 로그인</a>
-		</p>
-
-		<!-- 회원가입 이동 -->
 		<p class="helper">계정이 없나요? <a href="/signup.html">회원가입</a></p>
 	</div>
 

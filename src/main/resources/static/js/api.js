@@ -1,5 +1,43 @@
+const TOKEN_ACCESS = 'ticketing_accessToken';
+const TOKEN_REFRESH = 'ticketing_refreshToken';
+
+const applyAuthHeaders = (headers) => {
+	const h = new Headers(headers || {});
+	const access = sessionStorage.getItem(TOKEN_ACCESS);
+	const refresh = sessionStorage.getItem(TOKEN_REFRESH);
+	if (access) {
+		h.set('Authorization', `Bearer ${access}`);
+	}
+	if (refresh) {
+		h.set('X-Refresh-Token', refresh);
+	}
+	return h;
+};
+
+const storeNewTokens = (res) => {
+	const na = res.headers.get('X-New-Access-Token');
+	const nr = res.headers.get('X-New-Refresh-Token');
+	if (na) {
+		sessionStorage.setItem(TOKEN_ACCESS, na);
+	}
+	if (nr) {
+		sessionStorage.setItem(TOKEN_REFRESH, nr);
+	}
+};
+
+/** JWT가 필요한 API 호출용 (정적 페이지에서 공통 사용) */
+const apiFetch = async (url, options = {}) => {
+	const opts = { ...options, headers: applyAuthHeaders(options.headers) };
+	const res = await fetch(url, opts);
+	storeNewTokens(res);
+	return res;
+};
+
+window.apiFetch = apiFetch;
+window.ticketingTokenKeys = { TOKEN_ACCESS, TOKEN_REFRESH };
+
 const fetchJson = async (url, options = {}) => {
-	const res = await fetch(url, options);
+	const res = await apiFetch(url, options);
 	const contentType = res.headers.get('content-type') || '';
 	const rawText = await res.text();
 	let payload = null;
@@ -27,12 +65,19 @@ const fetchJson = async (url, options = {}) => {
 		data: unwrap(payload),
 		error: errorObj
 	};
+	if (res.status === 401 && url.includes('/api/') && !url.includes('/api/auth/login')) {
+		sessionStorage.removeItem(TOKEN_ACCESS);
+		sessionStorage.removeItem(TOKEN_REFRESH);
+		const path = window.location.pathname || '';
+		if (path !== '/login.html' && path !== '/signup.html') {
+			window.location.href = '/login.html';
+		}
+	}
 	return result;
 };
 
 window.fetchJson = fetchJson;
 
-/** API에서 오는 날짜/시간을 항상 한국 시간(DB·로컬과 동일)으로 표시 */
 window.formatDateKorea = (value) => {
 	const date = new Date(value);
 	return Number.isNaN(date.getTime()) ? value : date.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });

@@ -7,7 +7,7 @@
 ```
 ┌─────────────┐     ┌─────────────────────────────────┐
 │   Client     │     │         ALB (추후 적용)           │
-│  (Browser)   │────▶│   Sticky Session (JSESSIONID)    │
+│  (Browser)   │────▶│   JWT (Bearer + X-Refresh-Token)│
 └─────────────┘     └───────────┬───────────────────────┘
                                 │
                     ┌───────────┴───────────┐
@@ -46,7 +46,7 @@
 | Language | Java 21 | LTS, Virtual Thread ([decisions §5](decisions.md#adr-virtual-threads)) |
 | Framework | Spring Boot 3.4.1 | Web, Security, Data JPA, Kafka |
 | Database | MySQL 8.0 | 콘서트/좌석/예약/결제 영속 데이터 |
-| Cache/Lock | Redis 7 | 세션, 분산 락, 좌석 홀드, 대기열, 캐시, 알림 |
+| Cache/Lock | Redis 7 | JWT Access 블랙리스트, 분산 락, 좌석 홀드, 대기열, 캐시, 알림 |
 | Message Queue | Kafka | 이벤트 드리븐: 홀드 이벤트, 결제 완료 알림 |
 | Migration | Flyway | DB 스키마 버전 관리 |
 | Monitoring | Prometheus + Grafana | 비즈니스/인프라 메트릭, 대시보드 |
@@ -110,14 +110,13 @@
 | 플로우 | `POST .../request` → `approve` → `complete`(예약 확정). 상세는 [api.md](api.md). |
 | 취소 | 포인트는 환불 처리. 카드는 샌드박스 범위 내 PG 취소 API 미연동 구간 있음. |
 
-<a id="oauth2-google"></a>
+<a id="jwt-auth"></a>
 
-## 인증 (OAuth2 Google)
+## 인증 (JWT)
 
-- **Authorization Code** + Spring Security OAuth2 Client. 토큰 교환·UserInfo는 서버.
-- **Spring Session + Redis** 로 다중 인스턴스 세션 공유.
-- **JIT 가입**: 첫 로그인 시 `users` 행 생성, `oauth_provider` / `oauth_subject` 유니크.
-- 리디렉션 URI: `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`, 콘솔에 `/login/oauth2/code/google` 등록. ALB 배포 시 ALB DNS 기준 URI 추가 필요 → [deployment-ec2.md](deployment-ec2.md).
+- **Access Token**(30분) + **Refresh Token**(14일), HS256. 상세·4가지 재발급 경우 → [jwt-auth.md](jwt-auth.md).
+- Access **jti** 로그아웃 시 **Redis 블랙리스트**, Refresh **jti** 는 DB `refresh_tokens` 에서 revoke.
+- 정적 HTML은 공개, `/api/**`(예외: 로그인·회원가입·대기열 등)는 JWT 필수.
 
 ## 예매 흐름
 

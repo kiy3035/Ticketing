@@ -48,8 +48,19 @@ const initNotifications = () => {
 			eventSource.close();
 		}
 
-		// 새 SSE 연결 생성
-		eventSource = new EventSource('/api/notifications/stream');
+		const access = sessionStorage.getItem('ticketing_accessToken');
+		const refresh = sessionStorage.getItem('ticketing_refreshToken');
+		const qs = new URLSearchParams();
+		if (access) {
+			qs.set('accessToken', access);
+		}
+		if (refresh) {
+			qs.set('refreshToken', refresh);
+		}
+		const q = qs.toString();
+		eventSource = new EventSource(
+			q ? `/api/notifications/stream?${q}` : '/api/notifications/stream',
+		);
 
 		// 알림 수신 시 처리
 		eventSource.addEventListener('notification', (event) => {
@@ -92,7 +103,7 @@ const initNotifications = () => {
 
 	const clearNotifications = async () => {
 		try {
-			await fetch('/api/notifications', { method: 'DELETE' });
+			await window.apiFetch('/api/notifications', { method: 'DELETE' });
 		} catch (error) {
 			// 실패 시 무시한다.
 		}

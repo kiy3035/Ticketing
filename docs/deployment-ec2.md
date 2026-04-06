@@ -59,7 +59,7 @@
 
 1. **동일 JAR/이미지 + 동일** `DB` / `Redis` / `Kafka` 주소(`.env` 동일).
 2. **보안 그룹**: ALB → 타깃 그룹(앱 8080), 앱 SG는 ALB에서만 접근 허용 권장.
-3. **OAuth**: Google 콘솔에 **ALB DNS(또는 도메인)** 기준 리디렉션 URI 등록.
+3. **JWT**: 운영 인스턴스에 `JWT_SECRET`(충분한 길이) 주입. 로드 밸런서 뒤 여러 WAS가 동일 Redis를 보면 Access 블랙리스트가 공유된다.
 4. **SSE**: 필요 시 ALB Sticky session 검토. 세션이 Redis면 일반 API는 스티키 없이도 동작하는 경우가 많다.
 5. **Kafka**: `group-id` 동일 시 **파티션 수 ≥ 소비자 수** 관점 점검.
 6. **@Scheduled**: 앱 N대면 배치 **중복 실행** 가능. 분산 락(ShedLock 등)은 도메인별로 이미 일부 적용(outbox 등); 필요 시 확장.

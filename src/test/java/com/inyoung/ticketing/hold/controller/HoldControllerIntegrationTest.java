@@ -51,7 +51,7 @@ class HoldControllerIntegrationTest {
 	 */
 	@Test
 	void createHold_returns200WithHoldToken_whenSuccess() throws Exception {
-		var auth = new UsernamePasswordAuthenticationToken("user1", null, AuthorityUtils.createAuthorityList("ROLE_USER"));
+		var auth = new UsernamePasswordAuthenticationToken("user1", "x", AuthorityUtils.createAuthorityList("ROLE_USER"));
 		HoldRequest request = new HoldRequest(1L, 10L);
 		HoldResponse response = new HoldResponse("hold-token-123", Instant.now().plusSeconds(600));
 		when(holdService.createHold(any(HoldRequest.class), eq("user1"))).thenReturn(response);

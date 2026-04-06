@@ -14,6 +14,49 @@ public class TicketingProperties {
 	private Toss toss = new Toss();
 	private RateLimitProps rateLimit = new RateLimitProps();
 	private Outbox outbox = new Outbox();
+	private Jwt jwt = new Jwt();
+
+	public Jwt getJwt() {
+		return jwt;
+	}
+
+	public void setJwt(Jwt jwt) {
+		this.jwt = jwt != null ? jwt : new Jwt();
+	}
+
+	/** JWT Access/Refresh 및 서명 키 (HS256). */
+	public static class Jwt {
+		/**
+		 * HS256용 비밀키(UTF-8 기준 32바이트 이상 권장). 운영에서는 {@code JWT_SECRET} 등으로 주입.
+		 */
+		private String secret = "dev-only-change-me-please-use-at-least-32-chars!!";
+		private long accessTtlMinutes = 30;
+		private long refreshTtlDays = 14;
+
+		public String getSecret() {
+			return secret;
+		}
+
+		public void setSecret(String secret) {
+			this.secret = secret != null ? secret : "";
+		}
+
+		public long getAccessTtlMinutes() {
+			return accessTtlMinutes;
+		}
+
+		public void setAccessTtlMinutes(long accessTtlMinutes) {
+			this.accessTtlMinutes = accessTtlMinutes;
+		}
+
+		public long getRefreshTtlDays() {
+			return refreshTtlDays;
+		}
+
+		public void setRefreshTtlDays(long refreshTtlDays) {
+			this.refreshTtlDays = refreshTtlDays;
+		}
+	}
 
 	public Hold getHold() {
 		return hold;

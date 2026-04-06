@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -43,6 +44,16 @@ public class GlobalExceptionHandler {
 		HttpStatus status = HttpStatus.valueOf(ex.getStatusCode().value());
 		return ResponseEntity.status(status)
 			.body(buildError(status, null, ex.getReason(), request));
+	}
+
+	@ExceptionHandler(BadCredentialsException.class)
+	public ResponseEntity<ErrorResponse> handleBadCredentials(
+		BadCredentialsException ex,
+		HttpServletRequest request
+	) {
+		HttpStatus status = HttpStatus.UNAUTHORIZED;
+		return ResponseEntity.status(status)
+			.body(buildError(status, "AUTH_401", "아이디 또는 비밀번호가 올바르지 않습니다.", request));
 	}
 
 	@ExceptionHandler(MethodArgumentNotValidException.class)

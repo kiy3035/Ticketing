@@ -5,7 +5,7 @@
  */
 import http from 'k6/http';
 import { check, sleep } from 'k6';
-import { baseUrl, concertId, formLogin } from './lib/common.js';
+import { authHeaders, baseUrl, concertId, jwtLogin } from './lib/common.js';
 import { buildRampPeakStages, pickThresholds } from './lib/stages.js';
 
 const DEFAULT_PEAK = 120;
@@ -27,19 +27,19 @@ let loggedIn = false;
 
 export default function () {
   if (!loggedIn) {
-    if (!formLogin(BASE, __ENV.TEST_USER || '', __ENV.TEST_PASS || '')) {
+    if (!jwtLogin(BASE, __ENV.TEST_USER || '', __ENV.TEST_PASS || '')) {
       return;
     }
     loggedIn = true;
   }
 
-  const counts = http.get(`${BASE}/api/concerts/counts`);
+  const counts = http.get(`${BASE}/api/concerts/counts`, { headers: authHeaders(false) });
   check(counts, { 'counts 200': (r) => r.status === 200 });
 
-  const list = http.get(`${BASE}/api/concerts?past=false`);
+  const list = http.get(`${BASE}/api/concerts?past=false`, { headers: authHeaders(false) });
   check(list, { 'concerts list 200': (r) => r.status === 200 });
 
-  const seats = http.get(`${BASE}/api/concerts/${CID}/seats`);
+  const seats = http.get(`${BASE}/api/concerts/${CID}/seats`, { headers: authHeaders(false) });
   check(seats, { 'seats 200': (r) => r.status === 200 });
 
   sleep(LOOP_SLEEP_SEC);

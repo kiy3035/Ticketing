@@ -10,7 +10,7 @@
 |-----------|------|
 | `BASE_URL` | 앱 베이스 URL (기본 `http://localhost:8080`) |
 | `CONCERT_ID` | 대상 공연 ID (기본 `1`) |
-| `TEST_USER` / `TEST_PASS` | 세션이 필요한 시나리오용 폼 로그인 계정 |
+| `TEST_USER` / `TEST_PASS` | JWT 로그인(`POST /api/auth/login`)이 필요한 시나리오용 계정 |
 | `K6_PEAK_VU` | **최대 동시 VU**(피크). 미설정 시 스크립트마다 다른 기본값(아래 각 절). |
 | `K6_PROFILE=stress` | **한계(knee) 관측**: threshold를 거의 막지 않아 에러가 나도 시나리오가 끝까지 진행된다. |
 | `K6_WARM_DURATION` / `K6_MID_DURATION` / `K6_CLIMB_DURATION` / `K6_PEAK_HOLD` / `K6_RAMP_DOWN` | 각 단계 지속 시간(예: `30s`, `2m`, `90s`). 미설정 시 스크립트별 기본. |
@@ -27,8 +27,8 @@
 | `K6_EXTRA_QUEUE_COUNT` | `full-flow.js` | 결제 후 `queue/count` 추가 호출 횟수 (기본 `0`) |
 | `K6_QUEUE_MAX_POLL` / `K6_QUEUE_POLL_SLEEP_SEC` | `queue-flow.js`, `full-flow.js` | 큐 폴링 최대 횟수·간격(초) |
 
-- **`lib/common.js`**: `baseUrl()`, `concertId()`, `formLogin()`.
-- **VU당 로그인 1회**: `db-read`·`seats-hold`·`full-flow`는 동일 계정 다중 VU 시 매 요청 로그인하면 세션 충돌 가능.
+- **`lib/common.js`**: `baseUrl()`, `concertId()`, `jwtLogin()`, `authHeaders()`.
+- **VU당 로그인 1회**: `db-read`·`seats-hold`·`full-flow`는 모듈 변수에 토큰을 두고 재사용한다.
 
 실행 예:
 

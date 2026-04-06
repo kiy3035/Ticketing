@@ -43,7 +43,7 @@
 
 ### Q5. 스케일아웃을 어떻게 고려했나요?
 
-**A.** 앱은 **상태를 Redis·DB·Kafka**에 두어 수평 확장 가능하게 했습니다. 스케줄러·outbox 발행은 **`lock:batch:*` 분산 락**으로 멀티 인스턴스에서 단일 실행을 보장합니다. Kafka 컨슈머는 **동일 group-id** 로 파티션 단위 분산. 배포·ALB·OAuth 리디렉션·SSE 스티키 등은 [docs/deployment-ec2.md](../docs/deployment-ec2.md) 와 동일 맥락입니다.
+**A.** 앱은 **상태를 Redis·DB·Kafka**에 두어 수평 확장 가능하게 했습니다. 스케줄러·outbox 발행은 **`lock:batch:*` 분산 락**으로 멀티 인스턴스에서 단일 실행을 보장합니다. Kafka 컨슈머는 **동일 group-id** 로 파티션 단위 분산. 배포·ALB·JWT·SSE 등은 [docs/deployment-ec2.md](../docs/deployment-ec2.md) 와 동일 맥락입니다.
 
 > **Q5-1. SSE 는?**
 > **A.** `SseNotificationService` 가 인스턴스 로컬에 `SseEmitter` 를 들고 있어 **스티키 세션** 또는 **Redis Pub/Sub 브로드캐스트** 같은 다음 단계가 필요합니다. 면접에서는 한계를 인정하고 개선안을 말하는 게 좋습니다.

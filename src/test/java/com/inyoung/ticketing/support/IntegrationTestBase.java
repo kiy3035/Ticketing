@@ -54,7 +54,9 @@ public abstract class IntegrationTestBase {
 		// Kafka
 		registry.add("spring.kafka.bootstrap-servers", kafka::getBootstrapServers);
 
-		// 테스트용 메일/SMS/OAuth 무효화
+		registry.add("ticketing.jwt.secret", () -> "test-jwt-secret-at-least-32-chars-long!!");
+
+		// 테스트용 메일/SMS 무효화
 		registry.add("spring.mail.host", () -> "localhost");
 		registry.add("spring.mail.port", () -> "25");
 		registry.add("MAIL_USERNAME", () -> "test@test.com");

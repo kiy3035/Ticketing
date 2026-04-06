@@ -26,7 +26,7 @@ public class OpenApiConfig {
 					콘서트 예매 시스템의 REST API 명세.
 					대기열 → 좌석 선택 → 홀드 → 결제 → 예약 확정 흐름을 제공한다.
 					
-					**인증**: Spring Security 세션 기반 (폼 로그인 / OAuth2 Google)
+					**인증**: JWT (Authorization: Bearer Access, X-Refresh-Token: Refresh). 로그인: POST /api/auth/login
 					**결제**: 포인트 차감 / 토스페이먼츠 카드 결제(샌드박스)
 					""")
 				.contact(new Contact()

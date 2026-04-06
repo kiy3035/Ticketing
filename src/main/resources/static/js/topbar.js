@@ -20,9 +20,22 @@ const initTopbar = () => {
 	};
 
 	const logout = async () => {
+		const TOKEN_ACCESS = 'ticketing_accessToken';
+		const TOKEN_REFRESH = 'ticketing_refreshToken';
+		const headers = {};
+		const access = sessionStorage.getItem(TOKEN_ACCESS);
+		const refresh = sessionStorage.getItem(TOKEN_REFRESH);
+		if (access) {
+			headers.Authorization = `Bearer ${access}`;
+		}
+		if (refresh) {
+			headers['X-Refresh-Token'] = refresh;
+		}
 		try {
-			await fetch('/logout', { method: 'POST' });
+			await window.apiFetch('/api/auth/logout', { method: 'POST', headers: new Headers(headers) });
 		} finally {
+			sessionStorage.removeItem(TOKEN_ACCESS);
+			sessionStorage.removeItem(TOKEN_REFRESH);
 			window.location.href = '/login.html?logout';
 		}
 	};

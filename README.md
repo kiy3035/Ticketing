@@ -1,6 +1,6 @@
 # 콘서트 예매 시스템 (Concert Ticketing System)
 
-백엔드 중심의 콘서트 예매 시스템입니다. Redis(세션/홀드/락/캐시)와 Kafka(이벤트 스트리밍)를 활용해 **동시성·정합성·확장성**을 고려한 설계를 구현했습니다. 로그인 기반 프론트까지 포함한 MVP이며, 실무 시나리오에 맞춘 흐름을 제공합니다.
+백엔드 중심의 콘서트 예매 시스템입니다. Redis(JWT 블랙리스트/홀드/락/캐시)와 Kafka(이벤트 스트리밍)를 활용해 **동시성·정합성·확장성**을 고려한 설계를 구현했습니다. 로그인 기반 프론트까지 포함한 MVP이며, 실무 시나리오에 맞춘 흐름을 제공합니다.
 
 ## 🎯 프로젝트 개요
 
@@ -10,7 +10,7 @@
 - **공정성**: 대기열 시스템으로 선착순 공정한 순번 관리
 - **정합성**: 분산 락과 Redis TTL로 중복 예약 방지
 - **실시간성**: SSE를 통한 즉각적인 알림 전달
-- **확장성**: Redis 기반 세션/데이터 외부화로 수평 확장 가능
+- **확장성**: Redis 기반 상태 공유(JWT 블랙리스트·홀드 데이터 등)로 수평 확장 가능
 
 ## 🚀 포트폴리오 핵심 요약
 
@@ -44,10 +44,11 @@
 - **폴링 백업**: SSE 연결 실패 시를 대비한 폴링 메커니즘 (30초 주기)
 - **사용자별 연결 관리**: `SseNotificationService`에서 사용자별 SSE 연결 관리
 
-### 5. 세션 외부화 (Session Externalization)
-- **Spring Session + Redis**: 세션 데이터를 Redis에 저장하여 다중 인스턴스 확장 대응
-- **세션 만료**: 30분 TTL로 자동 만료 처리
-- **JSON 직렬화**: JavaTime 모듈 지원으로 Instant 타입 직렬화
+### 5. JWT 인증 (Access / Refresh / 블랙리스트)
+- **Access 30분 / Refresh 14일** (HS256), `Authorization` + `X-Refresh-Token` 헤더
+- **Refresh 메타데이터**: DB `refresh_tokens` 테이블
+- **로그아웃**: Access jti → Redis 블랙리스트, Refresh jti → DB revoke
+- 상세: [docs/jwt-auth.md](docs/jwt-auth.md)
 
 ### 6. 캐시 계층 (Cache Layer)
 - **서버 캐시**: Redis를 활용한 콘서트 목록 캐싱 (5분 TTL)
@@ -129,8 +130,7 @@
 **문제**: 단일 서버로는 대규모 트래픽 처리 불가
 
 **해결**:
-- 세션/홀드/알림/대기열을 Redis로 외부화하여 수평 확장 대비
-- Spring Session으로 세션 공유
+- JWT 블랙리스트·홀드·알림·대기열을 Redis로 외부화하여 수평 확장 대비
 - Redis 연결 풀링으로 연결 관리 최적화
 - Kafka로 이벤트 기반 비동기 처리
 
@@ -141,9 +141,9 @@
 ## 📋 핵심 기능
 
 ### 인증 및 사용자 관리
-- 회원가입/로그인 (Spring Security 기반)
+- 회원가입/로그인 (Spring Security + JWT)
 - 마이페이지 (예매 내역 조회)
-- 세션 관리 (Redis 기반)
+- Access/Refresh 토큰 및 로그아웃 시 블랙리스트
 
 ### 콘서트 관리
 - 콘서트 목록 조회 (Redis 캐싱)
@@ -177,17 +177,16 @@
 
 ### Backend
 - **Spring Boot 3.4.1**: 애플리케이션 프레임워크
-- **Spring Security**: 인증 및 보안
-- **Spring OAuth2 Client**: Google 로그인(Authorization Code, 서버 콜백 후 Redis 세션)
+- **Spring Security**: JWT 인증·인가 (Stateless)
+- **jjwt**: HS256 JWT 생성·검증
 - **Spring Data JPA**: 데이터베이스 접근
 - **Spring Data Redis**: Redis 접근
 - **Spring Kafka**: Kafka 통합
-- **Spring Session**: 세션 관리
 - **Java 21**: 프로그래밍 언어
 
 ### Database & Storage
-- **MySQL**: 영구 데이터 저장 (콘서트, 좌석, 예약)
-- **Redis**: 세션/홀드/락/캐시/대기열 저장
+- **MySQL**: 영구 데이터 저장 (콘서트, 좌석, 예약, Refresh 토큰 메타)
+- **Redis**: JWT 블랙리스트/홀드/락/캐시/대기열 저장
   - Lettuce 클라이언트 (비동기)
   - 연결 풀링 (commons-pool2)
 
@@ -232,14 +231,9 @@ KAFKA_CONSUMER_GROUP=ticketing-notification
 # SOLAPI_API_SECRET=...
 # SOLAPI_FROM_NUMBER=01000000000
 
-# Google OAuth2 (선택, 로그인 화면의「Google로 로그인」)
-# GOOGLE_CLIENT_ID=....apps.googleusercontent.com
-# GOOGLE_CLIENT_SECRET=...
-# Google Cloud Console > OAuth 클라이언트 > 승인된 리디렉션 URI:
-#   http://localhost:8080/login/oauth2/code/google
+# JWT 서명 키 (운영 필수, UTF-8 기준 최소 32바이트)
+# JWT_SECRET=your-256-bit-secret-at-least-32-chars
 ```
-
-최초 Google 로그인 시 DB에 사용자가 자동 생성(JIT)되며, 내부 `username`은 `g{Google sub}` 형태(충돌 시 접미사)입니다. OAuth 계정은 알림 기본값이 이메일이며 전화번호가 없을 수 있습니다.
 
 ### 2. 인프라 실행
 ```bash
@@ -268,7 +262,7 @@ docker compose up -d
 
 1. **회원가입/로그인**
    - `/signup.html`에서 회원가입
-   - `/login.html`에서 ID/비밀번호 로그인 또는 Google OAuth(환경 변수 설정 시)
+   - `/login.html`에서 ID/비밀번호 로그인 (JWT 발급 후 `sessionStorage`에 저장)
 
 2. **콘서트 탐색**
    - `/app.html`에서 카테고리/검색으로 콘서트 탐색
@@ -317,9 +311,8 @@ docker compose up -d
 - **카테고리 전환**: 30초 TTL 메모리 캐시로 즉시 반응
 - **폴링 최적화**: 대기열 2초, 알림 30초로 서버 부하 최소화
 
-### 세션 외부화
-- **Redis 세션**: 다중 인스턴스 확장 대응
-- **세션 TTL**: 30분으로 자동 만료
+### JWT·Redis
+- **Access TTL**: 30분, **Refresh TTL**: 14일 (설정 가능)
 - **대기열 토큰 TTL**: `ticketing.queue.token-ttl-seconds` (기본 30분, 설정 가능)
 
 ### 실시간 알림
@@ -352,7 +345,7 @@ ticketing/
 │   ├── static/            # 정적 리소스 (HTML, JS, CSS)
 │   └── application.properties
 ├── docs/                  # 문서 (포트폴리오/면접관용) — 목차: docs/README.md
-│   ├── architecture.md   # 구성·동시성·결제·OAuth
+│   ├── architecture.md   # 구성·동시성·결제·JWT
 │   ├── decisions.md      # 기술 선택 요약(구 ADR 통합)
 │   ├── sequence-diagrams.md # 시퀀스·정합성 §5
 │   ├── api.md, data.md, infra.md, deployment-ec2.md, …
@@ -380,7 +373,7 @@ ticketing/
 3. **이벤트 기반 아키텍처**: Kafka를 활용한 비동기 이벤트 처리
 4. **실시간 통신**: SSE를 활용한 서버 푸시 구현
 5. **캐싱 전략**: 서버/클라이언트 캐시 하이브리드 전략
-6. **세션 관리**: Redis 기반 세션 외부화로 확장성 확보
+6. **JWT 인증**: Access/Refresh·블랙리스트로 Stateless API 보호
 7. **성능 최적화**: Redis ZSet으로 O(log N) 연산 활용
 8. **운영 관찰성**: 지표 API 및 로깅으로 운영 관찰 가능
 
