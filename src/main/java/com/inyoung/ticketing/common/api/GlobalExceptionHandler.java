@@ -12,6 +12,7 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
@@ -68,6 +69,21 @@ public class GlobalExceptionHandler {
 			.orElse("Validation failed");
 		return ResponseEntity.status(status)
 			.body(buildError(status, null, message, request));
+	}
+
+	/**
+	 * 브라우저가 응답 본문 전송 전에 연결을 끊은 경우(탭 전환·favicon 취소 등).
+	 * Broken pipe 를 COMMON_999 로 쌓지 않도록 분리한다.
+	 */
+	@ExceptionHandler(AsyncRequestNotUsableException.class)
+	public ResponseEntity<Void> handleClientDisconnected(
+		AsyncRequestNotUsableException ex,
+		HttpServletRequest request
+	) {
+		if (logger.isDebugEnabled()) {
+			logger.debug("Client disconnected before response completed: {}", request.getRequestURI(), ex);
+		}
+		return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
 	}
 
 	@ExceptionHandler(Exception.class)

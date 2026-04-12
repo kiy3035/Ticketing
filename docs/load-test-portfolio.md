@@ -148,20 +148,48 @@
 
 | 설정 단계 | K6_PEAK_VU | k6 p95 | k6 에러율 | RPS(대략) | 대기열·커넥션 메모 |
 |-----------|------------|--------|-----------|-----------|-------------------|
-| A | | | | | |
-| B | | | | | |
-| C | | | | | |
+| **A (pool 10)** | 800 | **3.06 s** | **0%** | Grafana 합성 RPS 피크 **~320/s**; k6 `http_reqs` 평균 **~241/s** | Hikari **active=10** 포화, **pending 피크 150+**, 대기열 인원 **~800**, JVM 스레드 **~40 → ~225** |
+| B | | | | | (풀 30 런 후 기입) |
+| C | | | | | (JVM 단계 후 기입) |
 
-**스크린샷**: `docs/images/load-queue-1.png`, `load-queue-2.png`
+### 재현 커맨드 (이 런)
+
+```bash
+k6 run -e BASE_URL=http://172.31.46.152:8080 -e CONCERT_ID=43 \
+  -e K6_PEAK_VU=800 \
+  -e K6_QUEUE_POLL_SLEEP_SEC=0.005 \
+  -e K6_PROFILE=stress \
+  -e K6_WARM_DURATION=5s -e K6_MID_DURATION=5s -e K6_CLIMB_DURATION=10s \
+  -e K6_PEAK_HOLD=35s -e K6_RAMP_DOWN=5s \
+  load-tests/queue-flow.js
+```
+
+### k6 요약 (동일 런)
+
+| 항목 | 값 |
+|------|-----|
+| 실행 시간 | 약 **90 s** |
+| `http_req_duration` p(95) | **3.06 s** |
+| `http_req_failed` | **0%** (0 / 21,720) |
+| `http_reqs` | **21,720** (합성 약 **241 req/s**) |
+| `checks` | **100%** 성공 (진입 201, 순번 200) |
+| iteration | **74** 완료, **776** interrupted (스테이지 종료 시점에 진행 중 이터레이션 다수) |
+| `vus_max` | **800** |
+
+### Grafana 6패널 (Hikari pool 10, 피크 VU 800)
+
+![](../portfolio/images/queue-flow-pool10-800vu-grafana-6panel.png)
+
+**그래프에서 읽은 일치 신호** (약 16:26~16:30 구간): RPS 상승 후 **Hikari active가 10에 고정**되고, 같은 시각대 **pending이 급등(150 초과)**. HTTP P95는 **약 7 s까지 스파이크** 후 완화되는 구간이 보이며, **대기열 인원은 VU 규모(~800)와 함께 상승**. JVM live threads는 **약 225** 수준으로 플랫하게 유지.
 
 ---
 
 ## 11. 한 블록 요약 (실험 끝난 뒤 채움)
 
-- **Knee(대략)**: 스크립트별 VU ___ 근처 / 피크 RPS 약 ___
-- **병목 층**: (HTTP 큐잉 / 풀 / DB / 앱 CPU·연결 / Redis·대기열 로직 등)
-- **튜닝 효과**: 풀 10→30에서 pending·p95가 어떻게 변했는지 한 문장
-- **운영 권고**: (예: 오픈 시 모니터링 알람 임계치, 스케일 트리거)
+- **Knee(대략)**: `queue-flow`에서 **피크 VU 800·폴링 0.005 s** 조합일 때, **커넥션 풀(10) 포화**와 **pending 폭증**이 HTTP 지연·RPS 상한과 **동시에** 나타남 → **풀 포화가 knee 트리거**로 해석 가능.
+- **병목 층**: **HikariCP 대기**(pending) + 그에 따른 **요청 지연**. k6 기준 HTTP 실패율은 0%이나, **지연·큐잉**으로 사용자 체감 품질은 크게 저하.
+- **튜닝 효과**: 풀 10→30 런으로 **pending·p95**가 어떻게 변하는지 비교 표에 채운다.
+- **운영 권고**: `hikaricp_connections_pending`·**HTTP p95**에 알람을 두고, 오픈 직전에는 **풀 크기·최대 연결·타임아웃**을 부하로 한 번 검증한다. **완료 iteration 74 vs interrupted 776**은 “짧은 피크 홀드 + 긴 폴링 루프”에서는 정상적으로 나올 수 있으므로, **SLO는 HTTP p95·에러율·풀 pending**으로 정의하는 편이 안전하다.
 
 ---
 
