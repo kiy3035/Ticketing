@@ -17,6 +17,7 @@ import com.inyoung.ticketing.reservation.repository.ReservationRepository;
 import com.inyoung.ticketing.seat.domain.Seat;
 import com.inyoung.ticketing.seat.domain.SeatStatus;
 import com.inyoung.ticketing.seat.repository.SeatRepository;
+import com.inyoung.ticketing.seat.service.SeatService;
 import com.inyoung.ticketing.cache.CacheNames;
 import com.inyoung.ticketing.seller.dto.*;
 import org.springframework.cache.CacheManager;
@@ -33,6 +34,7 @@ public class SellerService {
 	private final ReservationRepository reservationRepository;
 	private final PaymentRepository paymentRepository;
 	private final CacheManager cacheManager;
+	private final SeatService seatService;
 
 	public SellerService(
 		UsersRepository usersRepository,
@@ -40,7 +42,8 @@ public class SellerService {
 		SeatRepository seatRepository,
 		ReservationRepository reservationRepository,
 		PaymentRepository paymentRepository,
-		CacheManager cacheManager
+		CacheManager cacheManager,
+		SeatService seatService
 	) {
 		this.usersRepository = usersRepository;
 		this.concertRepository = concertRepository;
@@ -48,6 +51,7 @@ public class SellerService {
 		this.reservationRepository = reservationRepository;
 		this.paymentRepository = paymentRepository;
 		this.cacheManager = cacheManager;
+		this.seatService = seatService;
 	}
 
 	private Users getSeller(String username) {
@@ -181,6 +185,7 @@ public class SellerService {
 			seat.setStatus(SeatStatus.AVAILABLE);
 			seatRepository.save(seat);
 		}
+		seatService.evictQueueStatusAvailableSeats(c.getId());
 		return getSeats(username, concertId);
 	}
 

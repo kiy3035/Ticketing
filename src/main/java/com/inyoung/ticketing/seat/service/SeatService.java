@@ -2,11 +2,14 @@ package com.inyoung.ticketing.seat.service;
 
 import java.util.List;
 import java.util.Set;
+import com.inyoung.ticketing.cache.CacheNames;
 import com.inyoung.ticketing.hold.store.HoldStore;
 import com.inyoung.ticketing.seat.domain.Seat;
 import com.inyoung.ticketing.seat.domain.SeatStatus;
 import com.inyoung.ticketing.seat.dto.SeatResponse;
 import com.inyoung.ticketing.seat.repository.SeatRepository;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 // 좌석 조회 서비스.
@@ -53,10 +56,18 @@ public class SeatService {
 	}
 
 	/**
-	 * GET /api/queue/status 폴링용 — 매 요청마다 집계(DB+Redis). (잔여석 Redis 캐시 미사용 시)
+	 * GET /api/queue/status 폴링용 — 잔여석 집계를 Redis 캐시({@link CacheNames#QUEUE_STATUS_AVAILABLE_SEATS})에 둔다.
+	 * TTL은 {@code ticketing.cache.queue-status-available-seats-ttl-seconds}; 홀드/예약/만료 등에서 evict 한다.
 	 */
+	@Cacheable(cacheNames = CacheNames.QUEUE_STATUS_AVAILABLE_SEATS, key = "#concertId")
 	public long countAvailableSeatsForQueueStatus(Long concertId) {
 		return computeAvailableSeats(concertId);
+	}
+
+	/** 잔여석 캐시 무효화 (홀드 생성·해제, 예약 확정·환불, 만료 정리, 좌석 추가 등) */
+	@CacheEvict(cacheNames = CacheNames.QUEUE_STATUS_AVAILABLE_SEATS, key = "#concertId")
+	public void evictQueueStatusAvailableSeats(Long concertId) {
+		// 캐시 aspect만 사용
 	}
 
 	/**

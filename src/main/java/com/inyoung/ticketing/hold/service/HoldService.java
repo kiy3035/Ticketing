@@ -22,6 +22,7 @@ import com.inyoung.ticketing.metrics.HoldReleaseMetrics;
 import com.inyoung.ticketing.seat.domain.Seat;
 import com.inyoung.ticketing.seat.domain.SeatStatus;
 import com.inyoung.ticketing.seat.repository.SeatRepository;
+import com.inyoung.ticketing.seat.service.SeatService;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.http.HttpStatus;
@@ -39,6 +40,7 @@ public class HoldService {
 	private final LockService lockService;
 	private final TicketingProperties properties;
 	private final HoldStore holdStore;
+	private final SeatService seatService;
 	private final SeatHoldEventPublisher eventPublisher;
 	private final HoldReleaseMetrics holdReleaseMetrics;
 	private final Counter holdCreatedCounter;
@@ -51,6 +53,7 @@ public class HoldService {
 		LockService lockService,
 		TicketingProperties properties,
 		HoldStore holdStore,
+		SeatService seatService,
 		SeatHoldEventPublisher eventPublisher,
 		HoldReleaseMetrics holdReleaseMetrics,
 		MeterRegistry meterRegistry
@@ -60,6 +63,7 @@ public class HoldService {
 		this.lockService = lockService;
 		this.properties = properties;
 		this.holdStore = holdStore;
+		this.seatService = seatService;
 		this.eventPublisher = eventPublisher;
 		this.holdReleaseMetrics = holdReleaseMetrics;
 		this.holdCreatedCounter = Counter.builder("ticketing_hold_created_total")
@@ -139,6 +143,7 @@ public class HoldService {
 			}
 			eventPublisher.publish(SeatHoldEventType.HOLD_CREATED, info);
 			holdCreatedCounter.increment();
+			seatService.evictQueueStatusAvailableSeats(concert.getId());
 			return new HoldResponse(holdToken, expiresAt);
 		} finally {
 			lockService.unlock(lockKey, lockToken.get());
@@ -158,6 +163,7 @@ public class HoldService {
 		holdStore.releaseHold(holdToken);
 		holdReleaseMetrics.recordReleased("cancelled");
 		eventPublisher.publish(SeatHoldEventType.HOLD_CANCELED, info);
+		seatService.evictQueueStatusAvailableSeats(info.getConcertId());
 	}
 
 	/** 로그인 사용자의 예약 중인 홀드 목록 (공연·좌석 정보 포함) */

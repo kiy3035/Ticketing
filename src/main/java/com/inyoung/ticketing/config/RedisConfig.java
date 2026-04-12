@@ -4,6 +4,8 @@ import java.time.Duration;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.inyoung.ticketing.cache.CacheNames;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
@@ -18,7 +20,10 @@ import org.springframework.data.redis.serializer.RedisSerializationContext;
 @Configuration
 public class RedisConfig {
 	@Bean
-	public RedisCacheManager redisCacheManager(RedisConnectionFactory connectionFactory) {
+	public RedisCacheManager redisCacheManager(
+		RedisConnectionFactory connectionFactory,
+		@Value("${ticketing.cache.queue-status-available-seats-ttl-seconds:2}") long queueStatusAvailableSeatsTtlSeconds
+	) {
 		ObjectMapper objectMapper = new ObjectMapper()
 			.registerModule(new JavaTimeModule())
 			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -31,8 +36,12 @@ public class RedisConfig {
 			.serializeValuesWith(valueSerializer)
 			.entryTtl(Duration.ofMinutes(5));
 
+		RedisCacheConfiguration queueStatusSeatsConfig = defaultConfig
+			.entryTtl(Duration.ofSeconds(Math.max(1, queueStatusAvailableSeatsTtlSeconds)));
+
 		return RedisCacheManager.builder(connectionFactory)
 			.cacheDefaults(defaultConfig)
+			.withCacheConfiguration(CacheNames.QUEUE_STATUS_AVAILABLE_SEATS, queueStatusSeatsConfig)
 			.build();
 	}
 }
