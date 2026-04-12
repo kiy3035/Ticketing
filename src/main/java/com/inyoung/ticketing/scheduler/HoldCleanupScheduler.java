@@ -12,7 +12,6 @@ import com.inyoung.ticketing.hold.store.HoldPayload;
 import com.inyoung.ticketing.hold.store.HoldStore;
 import com.inyoung.ticketing.lock.LockService;
 import com.inyoung.ticketing.metrics.HoldReleaseMetrics;
-import com.inyoung.ticketing.seat.service.SeatService;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -35,7 +34,6 @@ public class HoldCleanupScheduler {
 	private final HoldReleaseMetrics holdReleaseMetrics;
 	private final LockService lockService;
 	private final TicketingProperties properties;
-	private final SeatService seatService;
 	private final Timer runTimer;
 	private final Counter successCounter;
 	private final Counter failureCounter;
@@ -46,7 +44,6 @@ public class HoldCleanupScheduler {
 		HoldReleaseMetrics holdReleaseMetrics,
 		LockService lockService,
 		TicketingProperties properties,
-		SeatService seatService,
 		MeterRegistry registry
 	) {
 		this.holdStore = holdStore;
@@ -54,7 +51,6 @@ public class HoldCleanupScheduler {
 		this.holdReleaseMetrics = holdReleaseMetrics;
 		this.lockService = lockService;
 		this.properties = properties;
-		this.seatService = seatService;
 		this.runTimer = Timer.builder("ticketing_batch_run_duration_seconds")
 			.tag("batch", BATCH_NAME)
 			.description("Hold cleanup batch run duration")
@@ -104,7 +100,6 @@ public class HoldCleanupScheduler {
 					holdStore.releaseByPayload(payload.info(), payload.payload());
 					holdReleaseMetrics.recordReleased("timeout");
 					eventPublisher.publish(SeatHoldEventType.HOLD_EXPIRED, payload.info());
-					seatService.evictAvailableSeatCount(payload.info().getConcertId());
 				});
 			}
 		}

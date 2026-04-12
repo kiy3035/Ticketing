@@ -20,7 +20,6 @@ import com.inyoung.ticketing.metrics.HoldReleaseMetrics;
 import com.inyoung.ticketing.seat.domain.Seat;
 import com.inyoung.ticketing.seat.domain.SeatStatus;
 import com.inyoung.ticketing.seat.repository.SeatRepository;
-import com.inyoung.ticketing.seat.service.SeatService;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -49,8 +48,6 @@ class HoldServiceTest {
 	private SeatHoldEventPublisher eventPublisher;
 	@Mock
 	private HoldReleaseMetrics holdReleaseMetrics;
-	@Mock
-	private SeatService seatService;
 
 	private TicketingProperties properties;
 	private HoldService holdService;
@@ -72,7 +69,6 @@ class HoldServiceTest {
 			holdStore,
 			eventPublisher,
 			holdReleaseMetrics,
-			seatService,
 			new SimpleMeterRegistry()
 		);
 	}
@@ -138,7 +134,6 @@ class HoldServiceTest {
 		assertThat(response.holdToken()).isNotBlank();
 		assertThat(response.expiresAt()).isAfter(Instant.now());
 		verify(lockService).unlock(eq("lock:seat:" + SEAT_ID), eq("lock-token"));
-		verify(seatService).evictAvailableSeatCount(CONCERT_ID);
 	}
 
 	private Seat seat() {

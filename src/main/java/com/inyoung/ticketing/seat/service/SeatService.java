@@ -2,14 +2,11 @@ package com.inyoung.ticketing.seat.service;
 
 import java.util.List;
 import java.util.Set;
-import com.inyoung.ticketing.cache.CacheNames;
 import com.inyoung.ticketing.hold.store.HoldStore;
 import com.inyoung.ticketing.seat.domain.Seat;
 import com.inyoung.ticketing.seat.domain.SeatStatus;
 import com.inyoung.ticketing.seat.dto.SeatResponse;
 import com.inyoung.ticketing.seat.repository.SeatRepository;
-import org.springframework.cache.CacheManager;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 // 좌석 조회 서비스.
@@ -19,12 +16,10 @@ import org.springframework.stereotype.Service;
 public class SeatService {
 	private final SeatRepository seatRepository;
 	private final HoldStore holdStore;
-	private final CacheManager cacheManager;
 
-	public SeatService(SeatRepository seatRepository, HoldStore holdStore, CacheManager cacheManager) {
+	public SeatService(SeatRepository seatRepository, HoldStore holdStore) {
 		this.seatRepository = seatRepository;
 		this.holdStore = holdStore;
-		this.cacheManager = cacheManager;
 	}
 
 	// DB 좌석 목록을 조회한 뒤, Redis에서 현재 홀드 중인 좌석 ID를 가져와 상태를 오버레이한다.
@@ -58,28 +53,16 @@ public class SeatService {
 	}
 
 	/**
-	 * GET /api/queue/status 폴링용 — 짧은 TTL Redis 캐시(RedisConfig)로 DB 왕복을 줄인다.
+	 * GET /api/queue/status 폴링용 — 매 요청마다 집계(DB+Redis). (잔여석 Redis 캐시 미사용 시)
 	 */
-	@Cacheable(cacheNames = CacheNames.AVAILABLE_SEAT_COUNT, key = "#concertId")
 	public long countAvailableSeatsForQueueStatus(Long concertId) {
 		return computeAvailableSeats(concertId);
 	}
 
 	/**
-	 * POST /api/queue/enter 의 즉시 입장 판단 등 — 캐시 없이 최신 값.
+	 * POST /api/queue/enter 의 즉시 입장 판단 등 — 최신 값.
 	 */
 	public long countAvailableSeatsForDecision(Long concertId) {
 		return computeAvailableSeats(concertId);
-	}
-
-	/** 홀드/예약/만료 등 잔여석이 바뀔 때 캐시 무효화 */
-	public void evictAvailableSeatCount(Long concertId) {
-		if (concertId == null) {
-			return;
-		}
-		var cache = cacheManager.getCache(CacheNames.AVAILABLE_SEAT_COUNT);
-		if (cache != null) {
-			cache.evict(concertId);
-		}
 	}
 }
