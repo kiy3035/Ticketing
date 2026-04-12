@@ -22,6 +22,7 @@ import com.inyoung.ticketing.metrics.HoldReleaseMetrics;
 import com.inyoung.ticketing.seat.domain.Seat;
 import com.inyoung.ticketing.seat.domain.SeatStatus;
 import com.inyoung.ticketing.seat.repository.SeatRepository;
+import com.inyoung.ticketing.seat.service.SeatService;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.http.HttpStatus;
@@ -41,6 +42,7 @@ public class HoldService {
 	private final HoldStore holdStore;
 	private final SeatHoldEventPublisher eventPublisher;
 	private final HoldReleaseMetrics holdReleaseMetrics;
+	private final SeatService seatService;
 	private final Counter holdCreatedCounter;
 	private final Counter lockFailureCounter;
 	private final Counter holdConflictCounter;
@@ -53,6 +55,7 @@ public class HoldService {
 		HoldStore holdStore,
 		SeatHoldEventPublisher eventPublisher,
 		HoldReleaseMetrics holdReleaseMetrics,
+		SeatService seatService,
 		MeterRegistry meterRegistry
 	) {
 		this.seatRepository = seatRepository;
@@ -62,6 +65,7 @@ public class HoldService {
 		this.holdStore = holdStore;
 		this.eventPublisher = eventPublisher;
 		this.holdReleaseMetrics = holdReleaseMetrics;
+		this.seatService = seatService;
 		this.holdCreatedCounter = Counter.builder("ticketing_hold_created_total")
 			.tag("status", "success")
 			.description("Number of seat holds created successfully")
@@ -139,6 +143,7 @@ public class HoldService {
 			}
 			eventPublisher.publish(SeatHoldEventType.HOLD_CREATED, info);
 			holdCreatedCounter.increment();
+			seatService.evictAvailableSeatCount(concert.getId());
 			return new HoldResponse(holdToken, expiresAt);
 		} finally {
 			lockService.unlock(lockKey, lockToken.get());
@@ -158,6 +163,7 @@ public class HoldService {
 		holdStore.releaseHold(holdToken);
 		holdReleaseMetrics.recordReleased("cancelled");
 		eventPublisher.publish(SeatHoldEventType.HOLD_CANCELED, info);
+		seatService.evictAvailableSeatCount(info.getConcertId());
 	}
 
 	/** 로그인 사용자의 예약 중인 홀드 목록 (공연·좌석 정보 포함) */

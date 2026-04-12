@@ -7,6 +7,8 @@ import com.inyoung.ticketing.seat.domain.Seat;
 import com.inyoung.ticketing.seat.domain.SeatStatus;
 import com.inyoung.ticketing.seat.dto.SeatResponse;
 import com.inyoung.ticketing.seat.repository.SeatRepository;
+import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 // 좌석 조회 서비스.
@@ -14,12 +16,16 @@ import org.springframework.stereotype.Service;
 // 프론트에 AVAILABLE / HELD / RESERVED 3가지 상태로 반환한다.
 @Service
 public class SeatService {
+	public static final String AVAILABLE_SEAT_COUNT_CACHE = "availableSeatCount";
+
 	private final SeatRepository seatRepository;
 	private final HoldStore holdStore;
+	private final CacheManager cacheManager;
 
-	public SeatService(SeatRepository seatRepository, HoldStore holdStore) {
+	public SeatService(SeatRepository seatRepository, HoldStore holdStore, CacheManager cacheManager) {
 		this.seatRepository = seatRepository;
 		this.holdStore = holdStore;
+		this.cacheManager = cacheManager;
 	}
 
 	// DB 좌석 목록을 조회한 뒤, Redis에서 현재 홀드 중인 좌석 ID를 가져와 상태를 오버레이한다.
@@ -44,11 +50,37 @@ public class SeatService {
 	 * 대기열 UI용: 예매 가능 좌석 수 (전체 − DB 예약 − Redis 홀드).
 	 * 컨트롤러가 Repository 를 직접 들지 않게 해 레이어 규칙(ArchUnit)과 응집도를 맞춘다.
 	 */
-	public long countAvailableSeats(Long concertId) {
+	private long computeAvailableSeats(Long concertId) {
 		long totalSeats = seatRepository.countByConcertId(concertId);
 		long reserved = seatRepository.countByConcertIdAndStatus(concertId, SeatStatus.RESERVED);
 		List<Long> seatIds = seatRepository.findSeatIdsByConcertId(concertId);
 		int heldCount = holdStore.findHeldSeatIds(seatIds).size();
 		return Math.max(0, totalSeats - reserved - heldCount);
+	}
+
+	/**
+	 * GET /api/queue/status 폴링용 — 짧은 TTL 캐시(Caffeine, application.properties)로 DB 왕복을 줄인다.
+	 */
+	@Cacheable(cacheNames = AVAILABLE_SEAT_COUNT_CACHE, key = "#concertId")
+	public long countAvailableSeatsForQueueStatus(Long concertId) {
+		return computeAvailableSeats(concertId);
+	}
+
+	/**
+	 * POST /api/queue/enter 의 즉시 입장 판단 등 — 캐시 없이 최신 값.
+	 */
+	public long countAvailableSeatsForDecision(Long concertId) {
+		return computeAvailableSeats(concertId);
+	}
+
+	/** 홀드/예약/만료 등 잔여석이 바뀔 때 캐시 무효화 */
+	public void evictAvailableSeatCount(Long concertId) {
+		if (concertId == null) {
+			return;
+		}
+		var cache = cacheManager.getCache(AVAILABLE_SEAT_COUNT_CACHE);
+		if (cache != null) {
+			cache.evict(concertId);
+		}
 	}
 }

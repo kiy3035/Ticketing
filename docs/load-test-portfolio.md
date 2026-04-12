@@ -36,13 +36,7 @@
 | Stage | `5s + 5s + 10s + 35s + 5s` (합 ~60s 램프·피크 구간) |
 | 앱 변경 | **Hikari max pool만** 10 → 30 (그 외 동일 가정) |
 
-**1대 기준 “안전 구간” 문서화**를 할 때는 `queue-flow.js` **스크립트 기본값**(피크 **200** VU, 폴링 **0.08s**, 피크 유지 **45s** 등)으로 먼저 계단 올리기 → `K6_PEAK_VU`만 100·150·200… 으로 바꿔 **에러·p95·`pending`이 받을 만한 상한**을 적는다.
-
 ```bash
-# 기본(스크립트 내장): 단일 서버 용량 봉투 — env 최소만
-k6 run -e BASE_URL=<앱>:8080 -e CONCERT_ID=<id> -e K6_PROFILE=stress load-tests/queue-flow.js
-
-# 이전 pool/VT 스트레스와 동일(800·0.005·짧은 stage)
 k6 run -e BASE_URL=<앱>:8080 -e CONCERT_ID=<id> \
   -e K6_PEAK_VU=800 \
   -e K6_QUEUE_POLL_SLEEP_SEC=0.005 \
@@ -211,6 +205,29 @@ k6 run -e BASE_URL=<앱>:8080 -e CONCERT_ID=<id> \
 
 - **같은 커밋·같은 데이터**에서 **VT OFF ↔ ON**을 **연속**으로 돌려 표를 맞춘다.  
 - **MySQL `Threads_running` / CPU** 스크랩을 같은 대시보드에 올린다.
+
+---
+
+## 11. 코드 변경 — `queue/status` 잔여석 집계 캐시 (측정 전)
+
+**문제**: `GET /api/queue/status`가 폴링마다 `SeatService`로 **DB 3회 + Redis** 잔여석 집계를 반복해, k6 고빈도 폴링 시 **Hikari `pending`**이 커지는 직접 원인이었다.
+
+**조치** (동일 부하 k6로 **전·후** 비교 예정):
+
+| 구분 | 내용 |
+|------|------|
+| 캐시 | **Caffeine** `availableSeatCount`, `expireAfterWrite=2s`, `maximumSize=10000` (`application.properties`) |
+| 적용 경로 | `countAvailableSeatsForQueueStatus(concertId)` — **`QueueController.status`만** |
+| 비적용 | `POST /api/queue/enter`의 즉시 입장 판단은 **`countAvailableSeatsForDecision`** (캐시 없음) |
+| 무효화 | 홀드 생성/취소(`HoldService`), 예약 확정 커밋 후(`ReservationConfirmedEventListener`), 홀드 만료 배치(`HoldCleanupScheduler`), 환불로 좌석 복구(`ReservationService.cancelReservationForRefund`)에서 `evictAvailableSeatCount(concertId)` |
+
+**기록할 것** (같은 §2 k6 명령으로 재실행 후 채움):
+
+| 지표 | 변경 전 (기존 문서 수치) | 변경 후 |
+|------|---------------------------|---------|
+| k6 p95 / 에러% | (pool·VT 조합별로) | |
+| Hikari pending 피크 | | |
+| Grafana 캡처 | 기존 파일 유지 | `portfolio/images/` 에 새 파일명 |
 
 ---
 

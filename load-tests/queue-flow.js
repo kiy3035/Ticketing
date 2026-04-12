@@ -1,32 +1,24 @@
 /**
  * 대기열: 진입 → 순번 폴링(입장 허용까지). 좌석 API는 인증 필요라 제외.
  *
- * --- 기본값(이 파일) — 단일 앱 서버 스펙에 맞춘 "용량 봉투" 탐색용 ---
- * - 피크 VU **200**, 폴링 **0.08s**, 피크 유지 **45s** → Grafana/Prometheus에 피크 구간이 남기 쉬움.
- * - 더 세게(한계/knee) 보던 기존 실험은 **env로만** 올린다 (스크립트 기본은 과부하 아님).
- *
- * --- 기존 pool 10→30→30+VT 스트레스 런과 동일하게 재현하려면 ---
- *   -e K6_PEAK_VU=800 -e K6_QUEUE_POLL_SLEEP_SEC=0.005 \
- *   -e K6_WARM_DURATION=5s -e K6_MID_DURATION=5s -e K6_CLIMB_DURATION=10s \
- *   -e K6_PEAK_HOLD=35s -e K6_RAMP_DOWN=5s
- *
- * 단계·피크는 K6_* env로 덮어쓴다 (lib/stages.js).
+ * 기본 곡선: 약 1분(짧게 램프업 → 피크 유지) + 폴링 간격 짧게 해 RPS를 크게 만든다.
+ * 단계 시간은 K6_WARM_DURATION 등 env로 덮어쓴다 (lib/stages.js).
  */
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { baseUrl, concertId } from './lib/common.js';
 import { buildRampPeakStages, pickThresholds } from './lib/stages.js';
 
-/** 미설정 시 피크 VU. 계단 실험은 100→150→200 처럼 K6_PEAK_VU만 바꿔도 됨. */
-const DEFAULT_PEAK = 200;
+// 미설정 시 피크 VU. 부하가 과하면 K6_PEAK_VU로 낮춘다.
+const DEFAULT_PEAK = 400;
 
 export const options = {
   stages: buildRampPeakStages(DEFAULT_PEAK, {
-    warmDur: '10s',
-    midDur: '10s',
-    climbDur: '15s',
-    peakHold: '45s',
-    rampDown: '10s',
+    warmDur: '5s',
+    midDur: '5s',
+    climbDur: '10s',
+    peakHold: '35s',
+    rampDown: '5s',
   }),
   thresholds: pickThresholds({
     http_req_duration: ['p(95)<5000'],
@@ -38,8 +30,8 @@ const BASE = baseUrl();
 const CID = concertId();
 
 const MAX_STATUS_POLLS = parseInt(__ENV.K6_QUEUE_MAX_POLL || '50', 10) || 50;
-/** 기본 0.08s: 1대 기준에서 RPS 폭주 완화. 스트레스는 0.005 등으로 env 지정. */
-const POLL_SLEEP_SEC = parseFloat(__ENV.K6_QUEUE_POLL_SLEEP_SEC || '0.08') || 0.08;
+// 기본 0.1s: 폴링 RPS↑. 더 세게는 0.05 또는 0 (서버·Redis 주의)
+const POLL_SLEEP_SEC = parseFloat(__ENV.K6_QUEUE_POLL_SLEEP_SEC || '0.1') || 0.1;
 
 export default function () {
   const enterRes = http.post(`${BASE}/api/queue/enter?concertId=${CID}`, null, {

@@ -2,6 +2,7 @@ package com.inyoung.ticketing.reservation.event;
 
 import com.inyoung.ticketing.hold.store.HoldStore;
 import com.inyoung.ticketing.metrics.HoldReleaseMetrics;
+import com.inyoung.ticketing.seat.service.SeatService;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
@@ -20,10 +21,16 @@ public class ReservationConfirmedEventListener {
 
 	private final HoldStore holdStore;
 	private final HoldReleaseMetrics holdReleaseMetrics;
+	private final SeatService seatService;
 
-	public ReservationConfirmedEventListener(HoldStore holdStore, HoldReleaseMetrics holdReleaseMetrics) {
+	public ReservationConfirmedEventListener(
+		HoldStore holdStore,
+		HoldReleaseMetrics holdReleaseMetrics,
+		SeatService seatService
+	) {
 		this.holdStore = holdStore;
 		this.holdReleaseMetrics = holdReleaseMetrics;
+		this.seatService = seatService;
 	}
 
 	/** 트랜잭션 커밋 성공 후 단일 스레드에서 호출된다(동기 이벤트 디스패치 기본). */
@@ -31,5 +38,6 @@ public class ReservationConfirmedEventListener {
 	public void onReservationConfirmed(ReservationConfirmedEvent event) {
 		holdStore.releaseHold(event.holdToken());
 		holdReleaseMetrics.recordReleased("confirmed");
+		seatService.evictAvailableSeatCount(event.holdInfo().getConcertId());
 	}
 }

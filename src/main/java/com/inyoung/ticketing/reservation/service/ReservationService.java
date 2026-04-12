@@ -23,6 +23,7 @@ import com.inyoung.ticketing.reservation.repository.ReservationRepository;
 import com.inyoung.ticketing.seat.domain.Seat;
 import com.inyoung.ticketing.seat.domain.SeatStatus;
 import com.inyoung.ticketing.seat.repository.SeatRepository;
+import com.inyoung.ticketing.seat.service.SeatService;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.context.ApplicationEventPublisher;
@@ -44,6 +45,7 @@ public class ReservationService {
 	private final ApplicationEventPublisher applicationEventPublisher;
 	private final KafkaOutboxService kafkaOutboxService;
 	private final PaymentRepository paymentRepository;
+	private final SeatService seatService;
 	private final Counter lockFailureCounter;
 	private final MeterRegistry meterRegistry;
 
@@ -56,6 +58,7 @@ public class ReservationService {
 		ApplicationEventPublisher applicationEventPublisher,
 		KafkaOutboxService kafkaOutboxService,
 		PaymentRepository paymentRepository,
+		SeatService seatService,
 		MeterRegistry meterRegistry
 	) {
 		this.seatRepository = seatRepository;
@@ -66,6 +69,7 @@ public class ReservationService {
 		this.applicationEventPublisher = applicationEventPublisher;
 		this.kafkaOutboxService = kafkaOutboxService;
 		this.paymentRepository = paymentRepository;
+		this.seatService = seatService;
 		this.lockFailureCounter = Counter.builder("ticketing_lock_acquire_failures_total")
 			.tag("operation", "reservation")
 			.description("Number of lock acquire failures when confirming reservation")
@@ -201,5 +205,6 @@ public class ReservationService {
 		Seat seat = reservation.getSeat();
 		seat.setStatus(SeatStatus.AVAILABLE);
 		seatRepository.save(seat);
+		seatService.evictAvailableSeatCount(reservation.getConcert().getId());
 	}
 }

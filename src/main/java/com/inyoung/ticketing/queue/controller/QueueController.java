@@ -60,7 +60,7 @@ public class QueueController {
 		int threshold = properties.getQueue().getImmediateAllowThreshold();
 		if (threshold > 0 && tokenInfo.getTotalWaiting() <= threshold) {
 			// Redis 홀드 + DB RESERVED 를 반영한 "남은 좌석" (SeatService 에 캡슐화)
-			long availableSeats = seatService.countAvailableSeats(concertId);
+			long availableSeats = seatService.countAvailableSeatsForDecision(concertId);
 			if (tokenInfo.getTotalWaiting() <= availableSeats) {
 				queueService.allowEntry(tokenInfo.getToken(), concertId);
 				immediatelyAllowed = true;
@@ -89,7 +89,7 @@ public class QueueController {
 		Optional<Long> allowedConcertId = queueService.isAllowed(token);
 		Boolean isAllowed = allowedConcertId.isPresent() && allowedConcertId.get().equals(concertId);
 		// 프론트 대기열 화면에 표시할 남은 좌석 수
-		long availableSeats = seatService.countAvailableSeats(concertId);
+		long availableSeats = seatService.countAvailableSeatsForQueueStatus(concertId);
 
 		// 예상 대기 시간 = ceil(순번 / 분당입장인원)
 		// 분당입장인원 = batchSize × (60_000 / processingIntervalMs)

@@ -35,4 +35,8 @@ out/
 
 ### VS Code ###
 .vscode/
+
+### Obsidian ###
+**/.obsidian/
+
 .env
