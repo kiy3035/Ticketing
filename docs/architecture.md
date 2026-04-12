@@ -1,6 +1,6 @@
 # 아키텍처 개요
 
-**면접·포트폴리오 읽는 순서 제안**: 본 문서 → [시퀀스·정합성 §5](sequence-diagrams.md#consistency-failure-scenarios) → [기술 결정 요약](decisions.md) → [API](api.md).
+권장 읽기 순서: 본 문서 → [시퀀스·정합성 §5](sequence-diagrams.md#consistency-failure-scenarios) → [기술 결정 요약](decisions.md) → [API](api.md).
 
 ## 시스템 구성
 

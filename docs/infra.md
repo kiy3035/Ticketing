@@ -36,11 +36,11 @@ Redis 옵션: `--maxmemory 400mb --maxmemory-policy allkeys-lru --save ""`
 
 DB·Redis·Kafka 가 어긋날 때 남는 상태, 재시도, 사용자 오류 응답은 [sequence-diagrams.md §5](sequence-diagrams.md#consistency-failure-scenarios) 표·시퀀스를 참고한다.
 
-## Actuator 헬스·JVM (면접용 한 줄)
+## Actuator 헬스·JVM 요약
 
 - **`ticketingDatastores`**: `GET /actuator/health` 의 `components.ticketingDatastores` — Redis `PING` + JDBC `isValid(2)` 모두 성공 시만 `UP`. readiness 기준으로 쓰기 좋다.
 - **Kafka 헬스**: `management.health.kafka.enabled=false` 로 기본 헬스 전체 타임아웃을 피함. 브로커는 Kafka UI·메트릭·DLT로 별도 관측.
-- **부하 테스트 후 (권장)**: GC 로그(`-Xlog:gc*`) 또는 `jcmd Thread.print` / async-profiler CPU 샘플 **한 가지**만 캡처해 README·면접에서 “병목이 DB인지 Redis인지” 설명할 수 있으면 충분하다.
+- **부하 테스트 후 (권장)**: GC 로그(`-Xlog:gc*`), `jcmd Thread.print`, async-profiler CPU 샘플 중 **한 가지**만 캡처해도 병목이 DB인지 Redis인지 설명할 근거가 된다.
 
 ## 주요 설정
 

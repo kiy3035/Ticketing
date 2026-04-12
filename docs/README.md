@@ -1,6 +1,6 @@
-# 프로젝트 문서 (포트폴리오용)
+# 프로젝트 문서
 
-`docs/` 는 **이력서·면접관이 10~20분 안에 훑을 수 있는 분량**을 목표로 한다. 깊은 공부용 노트는 저장소 루트의 `my-docs/` 를 사용한다.
+`docs/`는 외부 독자가 짧은 시간에 훑을 수 있는 분량을 목표로 한다. 상세 노트는 저장소 루트의 `my-docs/`를 사용한다.
 
 ## 문서 목차
 
@@ -14,6 +14,6 @@
 | [data.md](data.md) | Redis 키, Kafka 토픽·이벤트 참조표 |
 | [infra.md](infra.md) | Docker Compose, 스케줄러, 설정, 헬스·JVM 한 페이지 |
 | [deployment-ec2.md](deployment-ec2.md) | 목표 EC2 구성, ALB, 수평 확장 체크리스트 |
-| [load-test-portfolio.md](load-test-portfolio.md) | 부하·용량 검증 **단일 문서** (방법, PromQL, 실측 표, Grafana+k6 **해석**) |
+| [load-test-portfolio.md](load-test-portfolio.md) | 부하·용량 검증 단일 문서. 방법, PromQL, 실측 표, Grafana와 k6 해석 |
 | [monitoring.md](monitoring.md) | Prometheus / Grafana |
 | [admin-setup.md](admin-setup.md) | 관리자·판매자 역할 및 API |
