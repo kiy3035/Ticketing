@@ -216,7 +216,7 @@ k6 run -e BASE_URL=<앱>:8080 -e CONCERT_ID=<id> \
 
 | 구분 | 내용 |
 |------|------|
-| 캐시 | **Caffeine** `availableSeatCount`, `expireAfterWrite=2s`, `maximumSize=10000` (`application.properties`) |
+| 캐시 | **Redis** `availableSeatCount`, TTL **2초** (`RedisConfig` + `spring.cache.type=redis`) |
 | 적용 경로 | `countAvailableSeatsForQueueStatus(concertId)` — **`QueueController.status`만** |
 | 비적용 | `POST /api/queue/enter`의 즉시 입장 판단은 **`countAvailableSeatsForDecision`** (캐시 없음) |
 | 무효화 | 홀드 생성/취소(`HoldService`), 예약 확정 커밋 후(`ReservationConfirmedEventListener`), 홀드 만료 배치(`HoldCleanupScheduler`), 환불로 좌석 복구(`ReservationService.cancelReservationForRefund`)에서 `evictAvailableSeatCount(concertId)` |

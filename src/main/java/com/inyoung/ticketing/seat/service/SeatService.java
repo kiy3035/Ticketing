@@ -2,6 +2,7 @@ package com.inyoung.ticketing.seat.service;
 
 import java.util.List;
 import java.util.Set;
+import com.inyoung.ticketing.cache.CacheNames;
 import com.inyoung.ticketing.hold.store.HoldStore;
 import com.inyoung.ticketing.seat.domain.Seat;
 import com.inyoung.ticketing.seat.domain.SeatStatus;
@@ -16,8 +17,6 @@ import org.springframework.stereotype.Service;
 // 프론트에 AVAILABLE / HELD / RESERVED 3가지 상태로 반환한다.
 @Service
 public class SeatService {
-	public static final String AVAILABLE_SEAT_COUNT_CACHE = "availableSeatCount";
-
 	private final SeatRepository seatRepository;
 	private final HoldStore holdStore;
 	private final CacheManager cacheManager;
@@ -59,9 +58,9 @@ public class SeatService {
 	}
 
 	/**
-	 * GET /api/queue/status 폴링용 — 짧은 TTL 캐시(Caffeine, application.properties)로 DB 왕복을 줄인다.
+	 * GET /api/queue/status 폴링용 — 짧은 TTL Redis 캐시(RedisConfig)로 DB 왕복을 줄인다.
 	 */
-	@Cacheable(cacheNames = AVAILABLE_SEAT_COUNT_CACHE, key = "#concertId")
+	@Cacheable(cacheNames = CacheNames.AVAILABLE_SEAT_COUNT, key = "#concertId")
 	public long countAvailableSeatsForQueueStatus(Long concertId) {
 		return computeAvailableSeats(concertId);
 	}
@@ -78,7 +77,7 @@ public class SeatService {
 		if (concertId == null) {
 			return;
 		}
-		var cache = cacheManager.getCache(AVAILABLE_SEAT_COUNT_CACHE);
+		var cache = cacheManager.getCache(CacheNames.AVAILABLE_SEAT_COUNT);
 		if (cache != null) {
 			cache.evict(concertId);
 		}
