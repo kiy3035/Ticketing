@@ -36,7 +36,13 @@
 | Stage | `5s + 5s + 10s + 35s + 5s` (합 ~60s 램프·피크 구간) |
 | 앱 변경 | **Hikari max pool만** 10 → 30 (그 외 동일 가정) |
 
+**1대 기준 “안전 구간” 문서화**를 할 때는 `queue-flow.js` **스크립트 기본값**(피크 **200** VU, 폴링 **0.08s**, 피크 유지 **45s** 등)으로 먼저 계단 올리기 → `K6_PEAK_VU`만 100·150·200… 으로 바꿔 **에러·p95·`pending`이 받을 만한 상한**을 적는다.
+
 ```bash
+# 기본(스크립트 내장): 단일 서버 용량 봉투 — env 최소만
+k6 run -e BASE_URL=<앱>:8080 -e CONCERT_ID=<id> -e K6_PROFILE=stress load-tests/queue-flow.js
+
+# 이전 pool/VT 스트레스와 동일(800·0.005·짧은 stage)
 k6 run -e BASE_URL=<앱>:8080 -e CONCERT_ID=<id> \
   -e K6_PEAK_VU=800 \
   -e K6_QUEUE_POLL_SLEEP_SEC=0.005 \
