@@ -14,6 +14,7 @@
 | [data.md](data.md) | Redis 키, Kafka 토픽·이벤트 참조표 |
 | [infra.md](infra.md) | Docker Compose, 스케줄러, 설정, 헬스·JVM 한 페이지 |
 | [deployment-ec2.md](deployment-ec2.md) | 목표 EC2 구성, ALB, 수평 확장 체크리스트 |
-| [load-test-results.md](load-test-results.md) | k6 부하 테스트 결과 |
+| [load-test-portfolio.md](load-test-portfolio.md) | 부하·용량 검증 프레임 (목적, 범위, 런북, 6패널, knee 판정) |
+| [load-test-results.md](load-test-results.md) | 당일 런 메모·수치 (짧은 기록) |
 | [monitoring.md](monitoring.md) | Prometheus / Grafana |
 | [admin-setup.md](admin-setup.md) | 관리자·판매자 역할 및 API |
