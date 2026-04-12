@@ -27,6 +27,8 @@ const paySeatInfo = document.getElementById('paySeatInfo');
 const paySeatPrice = document.getElementById('paySeatPrice');
 const payBtn = document.getElementById('payBtn');
 const payResult = document.getElementById('payResult');
+const payUserPoints = document.getElementById('payUserPoints');
+const payPointHint = document.getElementById('payPointHint');
 const backToSeat = document.getElementById('backToSeat');
 const payOverlay = document.getElementById('payOverlay');
 const overlayTitle = document.getElementById('overlayTitle');
@@ -39,6 +41,8 @@ const cardPaymentClose = document.getElementById('cardPaymentClose');
 
 /** 좌석 금액(원). loadPaymentInfo 에서 설정. 주문서형 위젯 setAmount 에 사용 */
 let paymentAmount = 0;
+/** GET /api/auth/me/profile 의 point. 포인트 결제 UI·부족 시 버튼 비활성화에 사용 */
+let userPointBalance = null;
 /** 토스 주문서형 위젯 인스턴스. 카드 선택 후 한 번만 초기화 */
 let tossWidgets = null;
 
@@ -98,6 +102,67 @@ const setError = (message) => {
 	payBtn.disabled = true;
 };
 
+/** 보유 포인트·결제 금액 기준 안내(부족/결제 후 잔액). 결제 버튼은 서버 검증에 맡김 */
+const syncPointPaymentUi = () => {
+	if (!payPointHint) {
+		return;
+	}
+	if (getPaymentMethod() === 'CARD') {
+		payPointHint.classList.add('hidden');
+		payPointHint.textContent = '';
+		return;
+	}
+	if (userPointBalance == null || Number.isNaN(userPointBalance)) {
+		payPointHint.classList.add('hidden');
+		payPointHint.textContent = '';
+		return;
+	}
+	if (!paymentAmount || paymentAmount <= 0) {
+		payPointHint.classList.add('hidden');
+		payPointHint.textContent = '';
+		return;
+	}
+	const diff = userPointBalance - paymentAmount;
+	if (diff < 0) {
+		payPointHint.textContent = `이 금액 결제 시 포인트가 ${Math.abs(diff).toLocaleString()}원 부족합니다. 카드 결제를 선택하세요.`;
+		payPointHint.className = 'helper point-hint warn';
+		payPointHint.classList.remove('hidden');
+	} else {
+		payPointHint.textContent = `포인트 결제 후 예상 잔액 ${diff.toLocaleString()}원`;
+		payPointHint.className = 'helper point-hint ok';
+		payPointHint.classList.remove('hidden');
+	}
+};
+
+const loadUserPoints = async () => {
+	if (!payUserPoints) {
+		return;
+	}
+	try {
+		const res = await window.fetchJson('/api/auth/me/profile');
+		if (!res.ok) {
+			payUserPoints.textContent = res.status === 401 ? '로그인 필요' : '확인 불가';
+			userPointBalance = null;
+			syncPointPaymentUi();
+			return;
+		}
+		const raw = res.data && res.data.point;
+		const n = raw == null ? NaN : Number(raw);
+		if (Number.isNaN(n)) {
+			payUserPoints.textContent = '—';
+			userPointBalance = null;
+		} else {
+			userPointBalance = n;
+			payUserPoints.textContent = `${n.toLocaleString()}원`;
+		}
+		syncPointPaymentUi();
+	} catch {
+		payUserPoints.textContent = '불러오지 못함';
+		userPointBalance = null;
+		syncPointPaymentUi();
+	}
+};
+
 const loadPaymentInfo = async () => {
 	if (!concertId || !seatId || !holdToken) {
 		setError('결제 정보를 불러오지 못했습니다.');
@@ -125,6 +190,7 @@ const loadPaymentInfo = async () => {
 			paySeatInfo.textContent = `구역 ${seat.section} - ${seat.seatNo}`;
 			paySeatPrice.textContent = `${seat.price.toLocaleString()}원`;
 			paymentAmount = Number(seat.price) || 0;
+			syncPointPaymentUi();
 		} else {
 			setError('좌석 정보를 찾지 못했습니다.');
 		}
@@ -331,6 +397,7 @@ document.querySelectorAll('input[name="paymentMethod"]').forEach((radio) => {
 		if (getPaymentMethod() === 'POINT') {
 			closeCardPaymentModal();
 		}
+		syncPointPaymentUi();
 	});
 });
 
@@ -371,7 +438,7 @@ const handleTossReturn = async () => {
 };
 
 (async () => {
-	await loadPaymentInfo();
+	await Promise.all([loadPaymentInfo(), loadUserPoints()]);
 	const handled = await handleTossReturn();
 	if (!handled) {
 		// 일반 로드 시 추가 처리 없음

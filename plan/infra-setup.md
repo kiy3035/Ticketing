@@ -201,11 +201,18 @@
    - `CONCERT_ID`, `TEST_USER`, `TEST_PASS` 등을 환경 변수로 주입
 
 4. **결과 기록**
-   - `docs/load-test-results.md` 템플릿에 VU / RPS / p95 / 에러율 / knee point 기록
+   - `docs/load-test-portfolio.md` 템플릿에 VU / RPS / p95 / 에러율 / knee point 기록
    - Prometheus/Grafana 스크린샷과 함께 포트폴리오에 활용
 
 ---
 
 ## 9. 체크리스트 요약
 
-- [ ] VPC / 서브넷 / 보안 그룹 설계 완료\n- [ ] RDS 인스턴스 생성 및 앱에서 접속 테스트\n- [ ] Infra Server(t3a.medium) + Docker Compose로 Redis/Kafka/Prometheus/Grafana 구성\n- [ ] App Server 2대(t3.small) 생성, Docker/Java 설치, `/actuator/health` 동작 확인\n- [ ] ALB + Target Group 구성, 헬스체크 및 Sticky Session 설정\n- [ ] GitHub Actions에서 두 App Server로 배포 자동화\n- [ ] (선택) k6 전용 서버 생성 및 ALB 대상 부하 테스트 실행\n- [ ] docs/ 하위 문서(architecture.md, infra.md, load-test-results.md)에 실제 구성/수치 반영\n+
+- [ ] VPC / 서브넷 / 보안 그룹 설계 완료
+- [ ] RDS 인스턴스 생성 및 앱에서 접속 테스트
+- [ ] Infra Server(t3a.medium) + Docker Compose로 Redis/Kafka/Prometheus/Grafana 구성
+- [ ] App Server 2대(t3.small) 생성, Docker/Java 설치, `/actuator/health` 동작 확인
+- [ ] ALB + Target Group 구성, 헬스체크 및 Sticky Session 설정
+- [ ] GitHub Actions에서 두 App Server로 배포 자동화
+- [ ] (선택) k6 전용 서버 생성 및 ALB 대상 부하 테스트 실행
+- [ ] `docs/architecture.md`, `docs/infra.md`, `docs/load-test-portfolio.md`에 실제 구성/수치 반영

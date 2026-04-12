@@ -136,7 +136,7 @@
 
 ### 7. 부하 테스트·수용 인원 (Knee point)
 - **k6 스크립트**: [load-tests/](load-tests/) 에 API 건강·대기열·좌석/홀드·DB 읽기·캐시 핫리드(5축) 및 E2E `full-flow.js` 제공 ([load-tests/README.md](load-tests/README.md))
-- **목표 인프라**: t3a.medium 1대(Redis/Kafka/Prometheus/Grafana) + t3.small 2대(앱) 구성 시 동시 사용자 수·RPS를 단계적으로 올려 **knee point** 측정. 결과는 “동시 N명(또는 RPS)까지 검증”으로 문서화 ([docs/deployment-ec2.md](docs/deployment-ec2.md), [docs/load-test-results.md](docs/load-test-results.md)). 동시성·대기열·홀드 단위/통합 테스트, Redis·Kafka·DB 헬스, 비즈니스 메트릭·락 재시도 설정으로 검증·운영 보강.
+- **목표 인프라**: t3a.medium 1대(Redis/Kafka/Prometheus/Grafana) + t3.small 2대(앱) 구성 시 동시 사용자 수·RPS를 단계적으로 올려 **knee point** 측정. 결과는 “동시 N명(또는 RPS)까지 검증”으로 문서화 ([docs/deployment-ec2.md](docs/deployment-ec2.md), [docs/load-test-portfolio.md](docs/load-test-portfolio.md)). 동시성·대기열·홀드 단위/통합 테스트, Redis·Kafka·DB 헬스, 비즈니스 메트릭·락 재시도 설정으로 검증·운영 보강.
 
 ## 📋 핵심 기능
 
@@ -362,7 +362,7 @@ ticketing/
 - **상세/공부용**: [my-docs/](my-docs/README.md) — 전체 워크플로우, 소스 구조, 홀드·결제·스케줄러·Redis/Kafka 정리. 코드와 흐름 이해용.
 
 요약 링크:
-- [아키텍처](docs/architecture.md) | [기술결정](docs/decisions.md) | [시퀀스·정합성](docs/sequence-diagrams.md) | [API](docs/api.md) | [데이터](docs/data.md) | [인프라](docs/infra.md) | [배포](docs/deployment-ec2.md) | [부하테스트](docs/load-test-results.md) | [모니터링](docs/monitoring.md) | [관리자](docs/admin-setup.md)
+- [아키텍처](docs/architecture.md) | [기술결정](docs/decisions.md) | [시퀀스·정합성](docs/sequence-diagrams.md) | [API](docs/api.md) | [데이터](docs/data.md) | [인프라](docs/infra.md) | [배포](docs/deployment-ec2.md) | [부하테스트](docs/load-test-portfolio.md) | [모니터링](docs/monitoring.md) | [관리자](docs/admin-setup.md)
 
 ## 🎓 학습 포인트
 

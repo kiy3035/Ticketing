@@ -12,6 +12,16 @@
 		.method-option:hover { border-color: var(--primary-2); background: rgba(49, 130, 246, 0.04); }
 		.method-option input { margin-top: 2px; }
 		.method-option small { display: block; width: 100%; margin-left: 24px; color: var(--muted); font-size: 12px; }
+		.point-balance-line {
+			display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+			margin: 0 0 14px; padding: 12px 14px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; font-size: 14px;
+		}
+		.point-balance-line .label { color: var(--muted); font-weight: 500; }
+		.point-balance-line strong { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }
+		.point-hint { margin: -6px 0 14px; font-size: 13px; line-height: 1.45; }
+		.point-hint.warn { color: var(--danger); }
+		.point-hint.ok { color: var(--success); }
+		.point-hint.hidden { display: none; }
 	</style>
 </head>
 <body>
@@ -102,6 +112,11 @@
 			</div>
 			<aside class="panel payment-side">
 				<h3>결제 수단</h3>
+				<p id="payPointBalanceRow" class="point-balance-line" aria-live="polite">
+					<span class="label">보유 포인트</span>
+					<strong id="payUserPoints">불러오는 중…</strong>
+				</p>
+				<p id="payPointHint" class="helper point-hint hidden" role="status"></p>
 				<!-- POINT: 서버에서 포인트 차감. CARD: 토스 결제창(샌드박스 시 실제 출금 없음) -->
 				<div class="payment-method-choice" role="radiogroup" aria-label="결제 수단 선택">
 					<label class="method-option">
