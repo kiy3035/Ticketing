@@ -13,7 +13,11 @@
 | 풀 10에서 본 것? | **active=10 고정 + pending 150+** → **커넥션 풀 포화**가 지연과 맞물림 |
 | 풀 30에서 본 것? | **pending ~25로 급감** → “풀에서 기다리는 병목”은 완화. 그러나 **HTTP p95는 악화** → 병목이 **DB/처리량/큐** 쪽으로 이동했을 가능성 |
 | “성능 개선?” | **연결 대기(pending) 관점에서는 개선**. **종단 p95만 놓고 보면 이번 A/B에서는 개선 아님** — 풀만 키우면 끝이 아님을 보여 주는 사례 |
-| **Virtual Thread 적용 후?** | **Hikari 30 + VT ON**: JVM 스레드 **~32**로 유지되나 **pending ~700**·**p95 ~16 s**·**에러 2.62%** → **스레드가 아니라 DB 풀**이 벽. **§10** 참고. |
+| **Virtual Thread (캐시 없이)?** | **Hikari 30 + VT ON**만 적용 시: JVM **~32**인데 **pending ~700**·**p95 ~16 s**·**에러 2.62%** → **스레드가 아니라 DB 풀 큐**가 벽. **§9** 참고. |
+| **VT + 잔여석 Redis 캐시?** | 최신 런: k6 **p(95)=453 ms**, **에러 0%**, **~853 req/s**, Grafana **pending 0**, **active 피크 ~13**, RPS **~1000/s** 근방, **JVM ~31**. **§4·§10**·`queue-flow-pool30-vt-cache-run-grafana-6panel.png`. |
+| **stress+ PEAK 1500?** | 동일 앱(풀30·**batch 50**·VT·캐시)에서 **VU 1500**: k6 **p(95)=781 ms**, **에러 0%**, **~808/s**, **pending·active(30) 재등장**, 대기열 **~2250** 누적, **max ~60 s** tail. **§4.1**·`queue-flow-stress-plus-1500vu-grafana-6panel.png`. |
+| **stress+ + batch 100?** | 풀30 유지·**`queue.batch-size=100`** 만 변경: k6 **p(95)=2.79 s**, **에러 0.14%**, **enter 타임아웃**, **pending 피크 ~250**, RPS **~590/s** — **§4.1 대비 악화**. **§4.4**·`queue-flow-pool30-batch100-1500vu-grafana-6panel.png`. |
+| **풀 50 + stress+ 1500?** | **의도**는 Hikari **50**이나 Grafana **active는 30 한계** — 배포·설정 검증 필요. k6 **p(95)=9.86 s**, **에러 0.05%**, **pending 피크 ~500**, 대기열 **1000+**. **§4.3**·`queue-flow-pool50-1500vu-grafana-6panel.png`. |
 
 ---
 
@@ -30,16 +34,18 @@
 | 항목 | 값 |
 |------|-----|
 | 스크립트 | `load-tests/queue-flow.js` |
-| `K6_PEAK_VU` | 800 |
-| `K6_QUEUE_POLL_SLEEP_SEC` | 0.005 |
+| `K6_PEAK_VU` | **1200** (`stress+`: 피크 VU ↑. §4 과거 표와 맞출 때는 **800**) |
+| `K6_QUEUE_POLL_SLEEP_SEC` | **0.002** (`stress+`: 폴링 간격 ↓ → status RPS ↑. §4 과거 표와 맞출 때는 **0.005**) |
 | `K6_PROFILE` | stress |
 | Stage | `5s + 5s + 10s + 35s + 5s` (합 ~60s 램프·피크 구간) |
 | 앱 변경 | **Hikari max pool만** 10 → 30 (그 외 동일 가정) |
 
+*참고*: **§4** pool 10/30·VT·캐시 표 숫자는 **PEAK 800 · poll 0.005** 런이다. 새로 돌린 **stress+** 결과와 섞어 쓰지 말고, 표에 적을 때는 env를 한 줄로 명시한다. **§4.1** 1500 VU 런은 아래 명령과 동일하되 **`K6_PEAK_VU=1500`** 만 교체한 실측이다.
+
 ```bash
 k6 run -e BASE_URL=<앱>:8080 -e CONCERT_ID=<id> \
-  -e K6_PEAK_VU=800 \
-  -e K6_QUEUE_POLL_SLEEP_SEC=0.005 \
+  -e K6_PEAK_VU=1200 \
+  -e K6_QUEUE_POLL_SLEEP_SEC=0.002 \
   -e K6_PROFILE=stress \
   -e K6_WARM_DURATION=5s -e K6_MID_DURATION=5s -e K6_CLIMB_DURATION=10s \
   -e K6_PEAK_HOLD=35s -e K6_RAMP_DOWN=5s \
@@ -67,22 +73,158 @@ k6 run -e BASE_URL=<앱>:8080 -e CONCERT_ID=<id> \
 
 ## 4. 기록 표 — `queue-flow.js` (실측)
 
+**Grafana 캡처 PNG**는 `docs/` 기준 **`../portfolio/images/`** 아래 **다음 파일**을 쓴다(경로·이름 고정).
+
+| 파일 | 쓰는 곳 |
+|------|---------|
+| `queue-flow-pool10-800vu-grafana-6panel.png` | §5 Run A |
+| `queue-flow-pool30-800vu-grafana-6panel.png` | §6 Run B |
+| `queue-flow-pool30-vt-on-grafana-6panel.png` | §9 Virtual Thread 런 (**캐시 없음**) |
+| `queue-flow-pool30-vt-cache-run-grafana-6panel.png` | §10 **잔여석 캐시 적용** 런 (pool 30 + VT + Redis `availableSeatCount`) |
+| `queue-flow-stress-plus-1500vu-grafana-6panel.png` | §4.1 **stress+ PEAK 1500 VU** (풀 30·**batch 50**·VT·캐시, k6만 강화) |
+| `queue-flow-pool30-batch100-1500vu-grafana-6panel.png` | §4.4 **stress+ 1500 + `queue.batch-size=100`** (풀 30·§4.1과 동일 k6) |
+| `queue-flow-pool50-1500vu-grafana-6panel.png` | §4.3 **Hikari 풀 50(의도) + stress+ 1500 VU** (§4.1과 동일 k6. **메트릭상 active 30** → 설정 반영 여부 확인) |
+
 | 설정 | VU | k6 p95 | 에러 | RPS(참고) | 커넥션·큐 요약 |
 |------|-----|--------|------|-----------|----------------|
 | **pool 10** | 800 | **3.06 s** | **0%** | Grafana 피크 **~320/s**, k6 합성 **~241/s** | active **10** 포화, **pending 150+**, 대기열 **~800**, JVM **~225** |
 | **pool 30** | 800 | **5.37 s** | **0%** | Grafana 피크 **~300/s**, k6 **~187/s** | active **30** 포화 구간, **pending 피크 ~25**, Grafana p95 **~10.5 s**, 대기열 **~850** 피크·이후 **700~800** 잔존, JVM **~230** |
 | **pool 30 + VT ON** | 800 | **16.02 s** | **2.62%** | Grafana 피크 **~200/s**, k6 **~145/s** | active **30** 고정, **pending ~700** 근방, Grafana HTTP p95 **~19 s** 구간, 대기열 **~800**, JVM **~30–32** |
+| **pool 30 + VT ON + status 잔여석 캐시** | 800 | **453 ms** (k6 p95) | **0%** | Grafana 피크 **~1000/s**, k6 **~853/s** | **pending 0**, active **피크 ~13**, Grafana HTTP p95 **~0.55 s** 피크, 대기열 **~1500**, JVM **~31** |
+| **stress+ PEAK 1500** (풀30·**batch 50**·캐시) | **1500** | **781 ms** (k6 p95) | **0%** | Grafana **~800–900/s**, k6 **~808/s** | active **30** 포화, **pending 피크 ~35**, Grafana HTTP p95 **종료 직전 스파이크(~30 s 구간)**, 대기열 **~2250**까지 상승, JVM **~30–31** |
+| **stress+ PEAK 1500** (풀30·**batch 100**·캐시) | **1500** | **2.79 s** (k6 p95) | **0.14%** | Grafana **~800/s**, k6 **~590/s** | active **30** 포화, **pending 피크 ~250**·**~180**, Grafana HTTP p95 **~5 s** 근방, 대기열 **~1750**, **`/api/queue/enter` 타임아웃** 다수, JVM **~31** |
+| **stress+ PEAK 1500 + Hikari 풀 50(의도)** | **1500** | **9.86 s** (k6 p95) | **0.05%** | Grafana 피크 **~550/s**, k6 **~430/s** | Grafana **active 피크 30**(설정 50과 불일치 시 배포 확인), **pending 피크 ~500**, HTTP p95 **~10–18 s** 구간, 대기열 **1000+**, JVM **~30** |
 
-*참고*: 위 **pool 30** 행은 VT 전환 **이전**에 돌린 동일 k6 런(문서상 “VT 미명시”)이다. **pool 30 + VT ON**과 직접 비교할 때는 **커밋·쿨다운·시드**를 맞춘 뒤 한 번 더 돌리면 설득력이 올라간다.
+*참고*: 위 **pool 30** 행은 VT 전환 **이전**에 돌린 동일 k6 런(문서상 “VT 미명시”)이다. **pool 30 + VT ON**과 직접 비교할 때는 **커밋·쿨다운·시드**를 맞춘 뒤 한 번 더 돌리면 설득력이 올라간다. **마지막 행**은 `GET /api/queue/status` 잔여석 집계 **Redis 캐시(TTL 2s) + evict** 적용 후 **최신** 실측이며, Grafana는 **`queue-flow-pool30-vt-cache-run-grafana-6panel.png`** 와 같은 런이다. (이전에 문서에만 적어 두었던 **p95 2.37 s** 런은 중간 측정으로, 동일 조건 재실행 시 **더 유리하게** 나온 것으로 갱신했다.)
 
 ### k6 상세 (동일 스크립트)
 
-| 항목 | pool 10 | pool 30 | pool 30 + VT ON |
-|------|---------|---------|-----------------|
-| `http_reqs` | 21,720 | 16,839 | 13,045 |
-| `checks` | 100% | 100% | **97.37%** (순번 조회 실패 343) |
-| iteration 완료 | 74 (interrupted 776) | 50 | 67 |
-| `vus_max` | 800 | 800 | 800 |
+| 항목 | pool 10 | pool 30 | pool 30 + VT ON | pool 30 + VT + 잔여석 캐시 |
+|------|---------|---------|-----------------|---------------------------|
+| `http_reqs` | 21,720 | 16,839 | 13,045 | **75,303** |
+| `checks` | 100% | 100% | **97.37%** (순번 조회 실패 343) | **100%** |
+| iteration 완료 | 74 (interrupted 776) | 50 | 67 | **1440** (interrupted **158**) |
+| `vus_max` | 800 | 800 | 800 | 800 |
+| `http_req_duration` p(95) | 3.06 s | 5.37 s | 16.02 s | **452.61 ms** |
+
+**stress+ PEAK 1500 VU** (§4.1, 앱은 캐시·풀30·VT 유지 / k6만 `K6_PEAK_VU=1500`, §2 stress+ 폴링·스테이지):
+
+| 항목 | 값 |
+|------|-----|
+| `http_reqs` | **72,657** (합성 **~808/s**) |
+| `checks` | **100%** |
+| iteration | **1377** 완료, **889** interrupted |
+| `vus_max` | **1500** |
+| `http_req_duration` p(95) / max | **781.14 ms** / **~59.6 s** |
+
+**stress+ PEAK 1500 VU, `ticketing.queue.batch-size=100`** (§4.4, §4.1과 동일 k6·풀30·캐시·VT / **배치만 50→100**):
+
+| 항목 | 값 |
+|------|-----|
+| `http_reqs` | **53,125** (합성 **~590/s**) |
+| `checks` | **99.85%** (`대기열 진입 201` 실패 **78**) |
+| iteration | **954** 완료 (k6 출력 기준) |
+| `vus_max` | **1500** |
+| `http_req_duration` p(95) / max | **2.79 s** / **~60 s** |
+| 기타 | k6 **`request timeout`** on `POST /api/queue/enter` (로그 다수) |
+
+**stress+ PEAK 1500 VU, Hikari max-pool 50(의도)** (§4.3, §4.1과 동일 k6·캐시·VT / 앱만 `spring.datasource.hikari.maximum-pool-size=50`으로 올린 실험):
+
+| 항목 | 값 |
+|------|-----|
+| `http_reqs` | **38,665** (합성 **~430/s**) |
+| `checks` | **99.94%** (`대기열 진입 201` 실패 **23**/38665) |
+| iteration | **256** 완료 (k6 출력 기준) |
+| `vus_max` | **1500** |
+| `http_req_duration` p(95) / max | **9.86 s** / **~60 s** |
+
+---
+
+### 4.1 Run stress+ — **PEAK 1500 VU** (`queue-flow`, 캐시·풀30·**batch 50**·VT 동일)
+
+![](../portfolio/images/queue-flow-stress-plus-1500vu-grafana-6panel.png)
+
+**그래프가 말하는 순서**  
+RPS는 **~800–900/s** 부근에서 플래토를 이룬다. **800 VU 캐시 런**에서 보던 **~1000/s**보다 낮거나 비슷한데, **VU는 1500**이므로 “유저 수만 올리면 RPS가 비례해 오른다”는 가설은 **지지되지 않는다** — 이미 **처리 한도**에 가깝다고 읽는 것이 타당하다.
+
+**Hikari active가 30에 붙고 pending이 수십까지 튄다**는 것은, **캐시 런에서 사라졌던 DB 풀 큐잉**이 **부하 강화 후 다시 나타난** 증거다. 즉 **status 캐시로 줄었던 DB 압력**만으로는 **동시 접속을 무한히 흡수**할 수 없고, **다른 경로·스케줄·풀 상한**이 다시 병목으로 드러난 그림이다.
+
+**대기열 인원이 ~2250까지 거의 선형으로 올라간다**는 것은, **입장 허용(스케줄) + HTTP 처리**가 **유입 속도**를 따라가지 못해 **백로그가 쌓이는 구간**이 있다는 뜻이다. “에러 0%”와 동시에 보면 **서비스는 살아 있지만 공정성·체감 대기**는 나빠질 수 있다.
+
+**HTTP p95는 대부분 낮게 유지되다가 종료 직전에 크게 튄다**는 패턴은 k6의 **max ~60 s**와 맞물려, **tail latency**와 **스테이지 종료·램프다운**이 겹친 구간을 의심할 수 있다. 면접에서는 “**p95만 보면 781 ms로 멀쩡해 보이지만, max·pending·큐 길이를 같이 본다**”고 말하면 된다.
+
+**JVM live threads ~30–31**은 **VT 기대치**와 맞고, **스레드 폭주** 그림은 아니다. 병목은 **OS 스레드 수**가 아니라 **DB 풀·처리량** 쪽으로 다시 기운다.
+
+**k6 interrupted 889**는 **피크 홀드가 짧고** 이터레이션이 **폴링 루프로 길어질** 수 있어, **스테이지 끝에서 끊긴 시도**가 많다는 뜻으로 해석한다(§5와 같은 주의).
+
+---
+
+### 4.2 튜닝 메모 — **`ticketing.queue.batch-size`(50)** 과 **Hikari 풀 확대**
+
+**batch-size가 하는 일**  
+`QueueProcessingScheduler`는 `processing-interval-ms`(기본 2초)마다 공연별로 **상위 N명**(`getTopTokens(..., batchSize)`)을 꺼내, `min(batchSize, 예매가능좌석)` 범위에서 `allowEntry`를 호출한다. 입장 허용 자체는 **Redis** 위주이고, 틱마다 공연당 **좌석 COUNT 쿼리 2회**는 **공연 수**에 비례한다.
+
+**50을 키우면 기대되는 것**  
+이론상 **같은 2초 안에 더 많은 사람**에게 입장 허용을 줄 수 있어, **“대기열 ZSET에서 빠져 나가는 속도(허용 레이트)” 상한**은 올라간다. 다만 **실제 체감**은 `status` 폴링·DB·풀·다른 API와 **같은 자원**을 쓰므로, batch만 크게 하면 **스케줄 한 틱이 길어지거나** Redis/락 경합이 늘 수 있다.
+
+**실측(§4.4)**: 동일 **stress+ 1500·풀 30**에서 **batch 50→100**은 **p95·pending·RPS·타임아웃이 악화**됐다. **무조건 키우면 좋아진다**는 가설은 이 데이터로 기각된다.
+
+**50의 “근거”**  
+코드상 **도메인 유도값은 아니고** `TicketingProperties` 기본값·`activation-threshold`(50)와 **숫자만 맞춘 설계 여지**가 있을 뿐이다. **근거는 부하 테스트로 잡는 것**이 맞다.
+
+**Hikari `maximum-pool-size`를 50으로**  
+`pending`이 다시 보이는 런에서는 **풀 확대**가 **연결 대기 완화**에 도움이 될 **가능성**이 있다. 반면 **RDS `max_connections`**, **앱 인스턴스 수 × 풀**, **MySQL CPU/락**을 넘기면 **다음 병목**으로 이동한다(문서 §6·§9 교훈). **한 축만** 올리고 Grafana·슬로우 쿼리를 같이 보라.
+
+---
+
+### 4.3 Run stress+ — **PEAK 1500 VU**, **Hikari 풀 50(의도)** (`queue-flow`)
+
+![](../portfolio/images/queue-flow-pool50-1500vu-grafana-6panel.png)
+
+**한 줄 요약**  
+동일 **stress+ 1500 VU**인데 **§4.1(풀 30)** 대비 **처리량·지연·에러가 크게 악화**됐다. “풀만 키우면 좋아진다”는 가설은 **이 데이터로는 지지되지 않는다**.
+
+**그래프·k6가 말하는 것**  
+- **RPS ~550/s**, k6 **~430/s** — §4.1의 **~800/s**보다 **낮다**. 동시 부하인데 **오히려 덜 처리**됐다고 읽을 수 있다.  
+- **HTTP p95** Grafana **~10–18 s**, k6 **p(95)=9.86 s** — §4.1 **~0.78 s** 대비 **한 자릿수 초**로 악화.  
+- **Hikari pending 피크 ~500** — §4.1의 **~35**보다 **한두 단계 큰 큐잉 재난** 수준이다.  
+- **대기열 인원 1000+** 상승 — 유입 대비 소진이 더 느려진 패턴.  
+- **k6 `대기열 진입 201` 23건 실패**, **http_req_failed 0.05%** — **무결성은 대부분 유지**되나 SLO 관점에서는 **균열**이 보인다.
+
+**가장 중요한 검증 포인트 — active가 여전히 30**  
+Grafana **DB active**가 **30에서 더 올라가지 않는다**면, (1) **실행 중인 앱에 `maximum-pool-size=50`이 반영되지 않았거나**(이전 JAR·다른 프로필·환경변수 덮어쓰기), (2) **다른 DataSource/Hikari 빈**이 30으로 묶여 있거나, (3) **RDS/보안그룹·프록시 단계의 세션 한도** 등 **풀 밖 상한**이 있을 수 있다. **Actuator `hikaricp.connections.max`** 또는 설정 로그로 **실효 풀 상한**을 먼저 확인해야 이 런을 “풀 50 실험”으로 해석할 수 있다. **지금 메트릭만 보면 “풀 50 효과”는 측정되지 않았다**고 쓰는 것이 정직하다.
+
+**§4.1과의 대비(포폴 문장)**  
+같은 k6 곡선인데 **지연·pending·처리량이 모두 나빠진** 경우, 원인 후보는 **풀 숫자 하나**에만 있지 않다. **배포 전제·DB 쪽 경합·캐시 적중률·런 타이밍**을 같이 의심하고, **한 축 변경 후 반드시 “설정이 실제로 적용됐는지”**를 메트릭으로 증명하는 절차를 밟는다는 교훈으로 쓸 수 있다.
+
+---
+
+### 4.4 Run stress+ — **`queue.batch-size=100`** (풀 30·§4.1과 동일 k6)
+
+![](../portfolio/images/queue-flow-pool30-batch100-1500vu-grafana-6panel.png)
+
+**한 줄 요약**  
+**§4.1(batch 50)** 과 **동일 부하·동일 풀 30**인데 **`ticketing.queue.batch-size`만 100**으로 올리면, **지연·pending·처리량·에러가 모두 나빠진다**. “배치를 키우면 대기열이 빨리 비워진다”는 가설은 **이 데이터로는 지지되지 않는다**.
+
+**§4.1 대비 숫자(같은 PEAK 1500)**  
+| 지표 | §4.1 (batch **50**) | §4.4 (batch **100**) |
+|------|---------------------|------------------------|
+| k6 p(95) | **~781 ms** | **~2.79 s** |
+| `http_req_failed` | **0%** | **0.14%** |
+| 합성 RPS | **~808/s** | **~590/s** |
+| Hikari `pending` 피크 | **~35** | **~250** / **~180** |
+| 대기열 인원(그래프) | **~2250** | **~1750** (스테이지 길이·시작 시각에 따라 단순 비교는 제한) |
+
+**그래프가 말하는 것**  
+- **active=30**은 그대로인데 **pending이 한 자릿수에서 세 자릿수로** 튄다 → **풀 슬롯은 그대로**인데 **연결을 기다리는 쪽이 폭증**했다.  
+- **HTTP p95가 ~5 s 근방**까지 올라간 구간은 **전 구간 tail**로 읽히고, k6 **max ~60 s**와 맞물린다.  
+- **RPS가 §4.1보다 낮다** → 배치를 키웠다고 **처리량이 늘지 않았다**.
+
+**k6 `request timeout` on `POST /api/queue/enter`**  
+스케줄러 배치는 **입장 허용 루프**이고 `enter`는 **별 HTTP**이지만, **동일 DB 풀·동일 프로세스**를 공유한다. **한 틱에 `batch`만큼 토큰을 더 처리**하면 `processQueue()` 실행 시간이 길어지고(분산 락 구간 포함), 그 사이 **다른 요청이 커넥션을 오래 잡거나** 대기가 길어져 **`enter`가 타임아웃**까지 갈 수 있다는 **해석 프레임**을 쓸 수 있다(정식 프로파일링 전 가설).
+
+**결론(포폴)**  
+**batch 50 → 100**은 이 환경에서는 **개선이 아니라 악화**였다. **“입장 처리량 상한”만 보지 말고**, **풀 pending·HTTP tail·타임아웃**을 같이 두고 배치를 튜닝해야 한다.
 
 ---
 
@@ -132,37 +274,30 @@ k6 run -e BASE_URL=<앱>:8080 -e CONCERT_ID=<id> \
 
 ---
 
-## 8. `db-read.js` (아직 미실행 시)
-
-| 설정 | VU | k6 p95 | 에러 | 메모 |
-|------|-----|--------|------|------|
-| A/B/C | | | | 동일 프레임으로 채운다 |
-
----
-
-## 9. 런북 체크 (요약)
+## 8. 런북 체크 (요약)
 
 - 한 번에 **한 축**(풀 / JVM 등)만 변경한다.
 - 부하 전후 **쿨다운**을 두고, 가능하면 **Git 커밋·인스턴스 타입**을 표에 적는다.
 - 새 런 결과는 **§4 표 + §5~7 스타일 해석**을 이 파일에 이어 붙인다.
-- **Virtual Thread** 전후 비교는 **§10**에만 추가한다(풀 10/30 표와 **섞지 말고** 비교 전제를 한 줄로 명시).
+- **Virtual Thread** 전후 비교는 **§9**에만 추가한다(풀 10/30 표와 **섞지 말고** 비교 전제를 한 줄로 명시).
+- **`queue/status` 잔여석 캐시** 전후 수치는 **§10** 표에만 적어, §9(VT만)와 **커밋 전제**를 섞지 않는다.
 
 ---
 
-## 10. Virtual Thread — Hikari **pool 30** + **VT ON** (`queue-flow`)
+## 9. Virtual Thread — Hikari **pool 30** + **VT ON** (`queue-flow`)
 
 **전제**: 동일 **`queue-flow.js`**·동일 **VU 800**·동일 stage env. 앱은 **Hikari max pool = 30** + **Virtual Thread 활성화** 상태. (같은 pool 30이나 **VT 이전**에 측정한 런은 §4 표의 **pool 30** 행.)
 
-### 10.1 재현 조건
+### 9.1 재현 조건
 
 | 항목 | 값 |
 |------|-----|
 | VT | **ON** |
 | Hikari max pool | **30** |
-| 스크립트·k6 | §2와 동일 (`queue-flow`, `K6_PEAK_VU=800`, `K6_QUEUE_POLL_SLEEP_SEC=0.005`, stress) |
+| 스크립트·k6 | 본 런: `queue-flow`, **PEAK 800**, **poll 0.005**, stress (§2 stress+와 **다름**) |
 | Grafana 구간(대략) | **16:54~16:56** |
 
-### 10.2 k6 요약 (본 런)
+### 9.2 k6 요약 (본 런)
 
 | 항목 | 값 |
 |------|-----|
@@ -173,7 +308,7 @@ k6 run -e BASE_URL=<앱>:8080 -e CONCERT_ID=<id> \
 | iteration 완료 | **67** |
 | `vus_max` | **800** |
 
-### 10.3 Grafana 6패널
+### 9.3 Grafana 6패널
 
 ![](../portfolio/images/queue-flow-pool30-vt-on-grafana-6panel.png)
 
@@ -185,7 +320,7 @@ k6 run -e BASE_URL=<앱>:8080 -e CONCERT_ID=<id> \
 - **대기열 ~800**: 부하 모델과 맞물린 업무 게이지.  
 - **JVM live threads ~30–32**: **800 VU**에도 플랫폼 스레드가 거의 늘지 않음 → **VT가 “스레드 수” 관점에서는 기대대로 동작**했다고 말할 수 있다.
 
-### 10.4 해석 — 이 런이 **유의미한가?**
+### 9.4 해석 — 이 런이 **유의미한가?**
 
 **유의미하다.** 다만 의미는 “**VT 덕에 더 빨라졌다**”가 아니라, **“한계가 어디로 옮겨졌는지”**가 선명해진다.
 
@@ -201,18 +336,18 @@ k6 run -e BASE_URL=<앱>:8080 -e CONCERT_ID=<id> \
 4. **포폴에서 쓸 한 문장**  
    “**Virtual Thread는 플랫폼 스레드 수를 억제했지만, Hikari max=30인 한 DB 커넥션은 물리 상한이라 `pending`이 폭증했고, 그 결과 p95·에러율이 악화됐다. 따라서 다음 튜닝은 풀 크기만이 아니라 DB/RDS 용량·쿼리·앱 인스턴스 수와 함께 봐야 한다.**”
 
-### 10.5 다음 실험(선택)
+### 9.5 다음 실험(선택)
 
 - **같은 커밋·같은 데이터**에서 **VT OFF ↔ ON**을 **연속**으로 돌려 표를 맞춘다.  
 - **MySQL `Threads_running` / CPU** 스크랩을 같은 대시보드에 올린다.
 
 ---
 
-## 11. 코드 변경 — `queue/status` 잔여석 집계 캐시 (측정 전)
+## 10. 코드 변경 — `queue/status` 잔여석 집계 캐시 (실측)
 
 **문제**: `GET /api/queue/status`가 폴링마다 `SeatService`로 **DB 3회 + Redis** 잔여석 집계를 반복해, k6 고빈도 폴링 시 **Hikari `pending`**이 커지는 직접 원인이었다.
 
-**조치** (동일 부하 k6로 **전·후** 비교 예정):
+**조치** (동일 부하 k6로 **전·후** 비교):
 
 | 구분 | 내용 |
 |------|------|
@@ -221,13 +356,39 @@ k6 run -e BASE_URL=<앱>:8080 -e CONCERT_ID=<id> \
 | 비적용 | `POST /api/queue/enter`의 즉시 입장 판단은 **`countAvailableSeatsForDecision`** (캐시 없음) |
 | 무효화 | 홀드 생성/취소(`HoldService`), 예약 확정 커밋 후(`ReservationConfirmedEventListener`), 홀드 만료 배치(`HoldCleanupScheduler`), 환불로 좌석 복구(`ReservationService.cancelReservationForRefund`)에서 `evictAvailableSeatCount(concertId)` |
 
-**기록할 것** (같은 §2 k6 명령으로 재실행 후 채움):
+**실측 비교** (동일 `queue-flow.js`, **pool 30 + VT ON**, VU 800 — **캐시 적용 커밋 전후**):
 
-| 지표 | 변경 전 (기존 문서 수치) | 변경 후 |
-|------|---------------------------|---------|
-| k6 p95 / 에러% | (pool·VT 조합별로) | |
-| Hikari pending 피크 | | |
-| Grafana 캡처 | 기존 파일 유지 | `portfolio/images/` 에 새 파일명 |
+| 지표 | 변경 전 (§9.2, 캐시 없음) | 변경 후 (최신 런, §4·아래 Grafana) |
+|------|---------------------------|-------------------------------------|
+| k6 `http_req_duration` p(95) | **16.02 s** | **452.61 ms** |
+| k6 `http_req_failed` | **2.62%** | **0.00%** |
+| k6 `http_reqs` 합성 RPS | **~145/s** | **~853/s** |
+| Hikari `pending` 피크 (Grafana) | **~700** 근방 | **0** (구간 전체 0에 가깝게 유지) |
+| Hikari `active` 피크 (Grafana) | **30** (풀 포화) | **~13** 근방 |
+| JVM live threads (Grafana) | **~30–32** | **~31** |
+| Grafana HTTP p95 (서버 히스토그램) | **~19 s** 구간 | **~0.55 s** 피크 근방 |
+| 체크 | 순번 조회 다수 실패 | **대기열 진입 201 / 순번 조회 200**, checks **100%** |
+
+*k6 참고*: 동일 런에서 `http_req_duration` **max ≈ 33 s** tail이 있을 수 있어, **p95·에러율**과 함께 “꼬리”를 면접에서 언급하면 균형 잡힌다.
+
+**한 줄 결론 (포폴용)**  
+소스에서 **status 전용 경로만** 잔여석 집계를 **짧은 TTL Redis 캐시**로 감싸고, 좌석 변동 시 **evict**로 정합성을 맞추면, **동일 풀·동일 VT**에서도 **DB 커넥션 대기(pending)·종단 p95·처리량**이 함께 개선될 수 있다(특히 **캐시 없이 VT만 켰을 때** `pending`이 폭주하던 런 대비).
+
+### Grafana 6패널 (캐시 적용 런)
+
+`../portfolio/images/queue-flow-pool30-vt-cache-run-grafana-6panel.png` — 위 §4 마지막 행·k6 요약과 **동일 런** 캡처.
+
+![](../portfolio/images/queue-flow-pool30-vt-cache-run-grafana-6panel.png)
+
+---
+
+## 11. `db-read.js` (아직 미실행 시)
+
+`queue-flow.js`와 **별도 스크립트**다. 아래 표는 나중에 **동일 표 형식**으로만 채우면 된다.
+
+| 설정 | VU | k6 p95 | 에러 | 메모 |
+|------|-----|--------|------|------|
+| A/B/C | | | | 동일 프레임으로 채운다 |
 
 ---
 
