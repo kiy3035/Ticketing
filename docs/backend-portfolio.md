@@ -9,6 +9,8 @@
 
 1. [프로젝트 개요](#1-프로젝트-개요)
 2. [기술 스택](#2-기술-스택)
+   - [2-1. Flyway 마이그레이션 전략](#2-1-flyway-마이그레이션-전략)
+   - [2-2. DB ERD](#2-2-db-erd)
 3. [시스템 아키텍처](#3-시스템-아키텍처)
 4. [핵심 도메인 흐름](#4-핵심-도메인-흐름)
    - [4-1. 전체 예매 플로우](#4-1-전체-예매-플로우)
@@ -50,6 +52,133 @@
 | API Docs | **SpringDoc (Swagger)** | OpenAPI 3.0 자동 문서화 |
 | Resilience | **Resilience4j** | Redis 장애 시 서킷브레이커 |
 | PG 연동 | **토스페이먼츠** | 주문서형 위젯 샌드박스 |
+
+---
+
+### 2-1. Flyway 마이그레이션 전략
+
+이 프로젝트는 `ddl-auto=validate` + Flyway 조합으로 스키마를 관리합니다.  
+즉, **DDL 변경은 코드가 아니라 버전 SQL로만 반영**하고, 애플리케이션은 실행 시점에 스키마 일치 여부만 검증합니다.
+
+| 버전 | 파일 | 목적 |
+|------|------|------|
+| V1 | `V1__init_schema.sql` | 초기 도메인 테이블(`users`, `concert`, `seat`, `reservation`, `payment`) 생성 |
+| V2 | `V2__add_performance_indexes.sql` | 조회/배치 성능용 복합 인덱스 추가 |
+| V3 | `V3__add_audit_columns.sql` | `created_at`, `updated_at` 누락 보정 |
+| V4 | `V4__kafka_outbox.sql` | Transactional Outbox용 `kafka_outbox` 테이블 추가 |
+| V5 | `V5__jwt_refresh_tokens.sql` | JWT refresh token 저장 테이블 추가 |
+| V6 | `V6__drop_users_oauth_columns.sql` | JWT 전환 이후 미사용 OAuth 컬럼 정리 |
+| V7 | `V7__refresh_token_family.sql` | refresh token family 기반 회전/폐기 지원 |
+
+운영 관점에서 Flyway를 선택한 이유:
+- 스키마 변경 이력을 Git으로 추적 가능
+- 환경별 스키마 드리프트 방지 (로컬/테스트/운영)
+- 롤백/재배포 시 변경 이력 기반으로 원인 추적 용이
+
+---
+
+### 2-2. DB ERD
+
+```mermaid
+%%{init: {'themeVariables': {'fontSize': '11px'}} }%%
+erDiagram
+    USERS ||--o{ CONCERT : "seller_id FK"
+    CONCERT ||--o{ SEAT : "concert_id FK"
+    SEAT ||--o{ RESERVATION : "seat_id FK"
+    CONCERT ||--o{ RESERVATION : "concert_id FK"
+
+    USERS {
+      bigint id PK
+      varchar username UK
+      varchar role
+      bigint point
+    }
+
+    CONCERT {
+      bigint id PK
+      bigint seller_id FK
+      varchar title
+      datetime concert_at
+      varchar status
+    }
+
+    SEAT {
+      bigint id PK
+      bigint concert_id FK
+      varchar section
+      varchar seat_no
+      bigint price
+    }
+
+    RESERVATION {
+      bigint id PK
+      bigint concert_id FK
+      bigint seat_id FK
+      varchar user_id
+      varchar status
+      datetime reserved_at
+    }
+```
+
+핵심 흐름(회원 → 콘서트/좌석 → 예약)에 필요한 **물리 FK만** ERD에 표시해 가독성을 높였습니다.
+
+**보조 테이블(운영/인증/이벤트)**
+- `payment`: 결제 상태 머신(READY → APPROVED → COMPLETED), `reservation_id`/`seat_id` 등은 서비스 계층 논리 참조
+- `kafka_outbox`: 예약 확정 이벤트 발행 보장을 위한 Outbox 저장소
+- `refresh_tokens`: JWT refresh 보관 및 family 단위 폐기
+
+#### 운영/이벤트 보조 ERD
+
+```mermaid
+%%{init: {'themeVariables': {'fontSize': '11px'}} }%%
+erDiagram
+    USERS ||--o{ REFRESH_TOKENS : "user_id FK"
+
+    USERS {
+      bigint id PK
+      varchar username UK
+    }
+
+    REFRESH_TOKENS {
+      bigint id PK
+      bigint user_id FK
+      varchar jti UK
+      varchar family_id
+      boolean revoked
+      datetime expires_at
+    }
+
+    PAYMENT {
+      bigint id PK
+      varchar payment_key UK
+      varchar hold_token UK
+      varchar user_id
+      bigint concert_id
+      bigint seat_id
+      bigint reservation_id
+      varchar status
+      varchar payment_method
+      bigint amount
+    }
+
+    KAFKA_OUTBOX {
+      bigint id PK
+      varchar topic
+      varchar partition_key
+      varchar status
+      int publish_attempts
+      varchar last_error
+      datetime created_at
+    }
+```
+
+> `payment`와 `kafka_outbox`는 도메인 정합성과 이벤트 신뢰성을 위한 운영 테이블이며,  
+> `payment`의 참조 키(`user_id`, `concert_id`, `seat_id`, `reservation_id`)는 DB FK가 아닌 서비스 계층 논리 참조입니다.
+
+**검증 기준**
+- Flyway `V1~V7` SQL
+- JPA 엔티티 `Users`, `Concert`, `Seat`, `Reservation`, `Payment`, `RefreshToken`, `KafkaOutbox`
+- `application.properties`의 `ddl-auto=validate` 정책
 
 ---
 
@@ -373,53 +502,9 @@ sequenceDiagram
 
 ## 6. 부하 테스트 결과 (k6 × Grafana)
 
-**시나리오**: `queue-flow.js` — 대기열 진입 → 순번 폴링까지 전체 흐름 측정
+부하 테스트 상세(k6 시나리오, 환경 변수, 실측 표, Grafana 해석)는 아래 문서로 분리했습니다.
 
-**재현 환경**: k6 `K6_PROFILE=stress`, 스테이지 `5s+5s+10s+35s+5s`
-
-### 핵심 결과 요약
-
-| 설정 | VU(동시 사용자) | k6 p95 | 에러율 | RPS(Grafana 피크) |
-|------|----------------|--------|--------|-------------------|
-| Hikari pool 10 | 800 | 1.93 s | **0%** | ~300–600/s |
-| Hikari pool 30 | 800 | 1.85 s | **0%** | ~270–580/s |
-| pool 30 + Virtual Thread | 800 | 2.06 s | **0%** | ~480/s |
-| **pool 30 + VT + 잔여석 캐시** | **800** | **453 ms** | **0%** | **~1,000/s** |
-| pool 30 + VT + 캐시 (stress+) | **1,500** | 8.28 s | **0%** | ~700/s |
-
-### 잔여석 캐시 전후 비교 (800 VU 기준)
-
-| 지표 | 캐시 없음 | 캐시 적용 (TTL 2초) |
-|------|-----------|---------------------|
-| k6 p95 | ~16 s | **453 ms** |
-| 에러율 | ~2.62% | **0%** |
-| RPS | ~145/s | **~853/s** |
-| Hikari pending 피크 | ~700 | **거의 0** |
-
-> **분석**: `GET /api/queue/status`의 잔여석 집계 쿼리가 폴링마다 실행되어 DB 커넥션 풀이 포화됐습니다.  
-> TTL 2초 + 이벤트 기반 evict(홀드 생성·취소·예약 확정·환불 시)로 정합성을 유지하면서 DB 부하를 대폭 줄였습니다.
-
-### VU 1,500 분석 (pool 30 · batch 50 · VT · 캐시)
-
-```
-VU    │████████████████████░░░░ 1,500
-RPS   │▁▁▃▄▆████████▆▄▂▁ ~700/s (Grafana 피크)
-p95   │▁▂▄█████▆▄▂▁ ~8 s (k6), ~20 s (Grafana 순간 피크)
-에러  │ 0% (HTTP 실패 없음)
-```
-
-- Hikari active **30** 포화, pending **600+** → DB 풀이 병목
-- JVM live threads **~30** — Virtual Thread 정상 동작 확인
-- `batch-size=50`이 `70·100`보다 안정적임을 실측으로 검증 (50 → 0%, 70 → 0.18%, 100 → 0.14%)
-
-### Golden Signals 매핑
-
-| Signal | 지표 | PromQL |
-|--------|------|--------|
-| Traffic | 전체 RPS | `sum(rate(http_server_requests_seconds_count[30s]))` |
-| Latency | HTTP p95 | `histogram_quantile(0.95, ...)` |
-| Errors | 에러율 | k6 `http_req_failed` |
-| Saturation | DB pending | `hikaricp_connections_pending` |
+- 바로가기: [`docs/load-test-portfolio.md`](load-test-portfolio.md)
 
 ---
 
