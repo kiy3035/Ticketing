@@ -53,6 +53,7 @@ public class PaymentService {
 	private final SeatRepository seatRepository;
 	private final UsersRepository usersRepository;
 	private final ReservationService reservationService;
+	private final PaymentCompensationService paymentCompensationService;
 	private final PaymentCompleteEventPublisher paymentCompleteEventPublisher;
 	private final TicketingProperties properties;
 	private final TossPaymentsClient tossPaymentsClient;
@@ -65,6 +66,7 @@ public class PaymentService {
 		SeatRepository seatRepository,
 		UsersRepository usersRepository,
 		ReservationService reservationService,
+		PaymentCompensationService paymentCompensationService,
 		PaymentCompleteEventPublisher paymentCompleteEventPublisher,
 		TicketingProperties properties,
 		TossPaymentsClient tossPaymentsClient,
@@ -75,6 +77,7 @@ public class PaymentService {
 		this.seatRepository = seatRepository;
 		this.usersRepository = usersRepository;
 		this.reservationService = reservationService;
+		this.paymentCompensationService = paymentCompensationService;
 		this.paymentCompleteEventPublisher = paymentCompleteEventPublisher;
 		this.properties = properties;
 		this.tossPaymentsClient = tossPaymentsClient;
@@ -190,6 +193,12 @@ public class PaymentService {
 	 *   <li>CARD: 토스 승인은 외부 PG이므로 별도 취소 API 호출이 필요하지만,
 	 *           현재 샌드박스 환경에서는 DB 상태만 CANCELED로 변경한다</li>
 	 * </ul>
+	 *
+	 * <p><b>트랜잭션 경계 주의</b>:
+	 * 이 메서드는 메인 트랜잭션(결제 완료 플로우)이며, 예약 확정 실패 시 보상은
+	 * {@link PaymentCompensationService#compensateAfterReservationFailure(Long)} 에서
+	 * REQUIRES_NEW 로 분리 커밋한다. 따라서 outer tx 가 롤백되어도
+	 * "포인트 환불 + 결제 CANCELED" 보상 결과는 독립적으로 남는다.</p>
 	 */
 	@Transactional
 	public PaymentResponse completePayment(String paymentKey, String userId) {
@@ -212,8 +221,10 @@ public class PaymentService {
 			try {
 				reservation = reservationService.confirm(reservationRequest, userId);
 			} catch (Exception e) {
+				// Saga 보상: 예약 확정 실패를 감지하면 별도 트랜잭션(REQUIRES_NEW)으로 보상 수행.
+				// 핵심은 "원래 예외를 다시 던져도 보상 커밋이 살아남도록" 트랜잭션을 분리하는 것.
 				log.error("예약 확정 실패 → 보상 트랜잭션 실행: paymentKey={}, reason={}", paymentKey, e.getMessage());
-				compensatePayment(payment);
+				paymentCompensationService.compensateAfterReservationFailure(payment.getId());
 				throw e;
 			}
 
@@ -229,23 +240,6 @@ public class PaymentService {
 			return new PaymentResponse(payment);
 		} finally {
 			sample.stop(paymentCompleteTimer);
-		}
-	}
-
-	/**
-	 * 보상 트랜잭션: 예약 확정 실패 시 결제 승인을 되돌린다.
-	 * POINT 결제는 차감 포인트를 복구하고, 결제 상태를 CANCELED로 변경한다.
-	 */
-	private void compensatePayment(Payment payment) {
-		try {
-			if (payment.getPaymentMethod() == PaymentMethod.POINT) {
-				refundPoints(payment.getUserId(), payment.getAmount());
-				log.info("보상 완료: 포인트 환불 {}원, userId={}", payment.getAmount(), payment.getUserId());
-			}
-			payment.setStatus(PaymentStatus.CANCELED);
-			payment.setCanceledAt(now());
-		} catch (Exception compensationError) {
-			log.error("보상 트랜잭션 실패: paymentKey={}, 수동 확인 필요", payment.getPaymentKey(), compensationError);
 		}
 	}
 

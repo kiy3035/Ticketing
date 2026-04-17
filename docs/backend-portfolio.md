@@ -50,7 +50,7 @@
 | Monitoring | **Prometheus + Grafana** | Golden Signals 기반 커스텀 대시보드 |
 | Load Test | **k6** | Knee Point 측정, 스테이지 기반 시나리오 |
 | API Docs | **SpringDoc (Swagger)** | OpenAPI 3.0 자동 문서화 |
-| Resilience | **Resilience4j** | Redis 장애 시 서킷브레이커 |
+| Resilience | **Resilience4j** | 서킷브레이커 설정/빈 구성 (`redisCircuitBreaker`) |
 | PG 연동 | **토스페이먼츠** | 주문서형 위젯 샌드박스 |
 
 ---
@@ -360,7 +360,7 @@ end
 
 **문제**: 결제 승인 후 예약 확정이 실패하면 돈은 빠졌지만 좌석은 없는 불일치가 발생합니다.
 
-**해결**: Saga 보상 트랜잭션 — 예약 확정 예외 시 승인된 결제를 자동으로 되돌립니다.
+**해결**: Saga 보상 트랜잭션 — 예약 확정 예외 시 보상을 `REQUIRES_NEW`로 분리 커밋해 승인 결제를 되돌립니다.
 
 ```mermaid
 sequenceDiagram
@@ -422,7 +422,7 @@ sequenceDiagram
     PS->>RS: confirm(holdToken, userId)
     RS-->>PS: ❌ 예외 (홀드 만료, 좌석 경합 등)
 
-    Note over PS: compensatePayment() 실행
+    Note over PS: PaymentCompensationService(REQUIRES_NEW) 실행
     alt POINT 결제
         PS->>DB: users.point += amount (환불)
     end
@@ -532,17 +532,21 @@ sequenceDiagram
 
 ### 정합성 실패 시나리오별 처리
 
-| 시나리오 | 처리 방법 |
-|----------|-----------|
-| Kafka 일시 장애 | Outbox PENDING 유지 → 스케줄러 재시도(최대 25회) |
-| Kafka 장기 장애 | Outbox FAILED → 모니터링 알림 + 운영 수동 처리 |
-| Redis `releaseHold` 실패 | DB는 이미 커밋됨, Redis 홀드는 TTL까지만 잔존 후 자동 만료 |
-| 예약 확정 중 예외 | Saga 보상 트랜잭션 실행 (포인트 환불 + 결제 CANCELED) |
-| 결제 API 중복 요청 | `Idempotency-Key` + AOP로 동일 응답 재사용 |
-| Redis 장애 | Resilience4j 서킷브레이커 (10회 실패 시 30초 차단) |
-| 락 경합 과다 | Rate Limit (Sliding Window, 1초당 10 req/user) + 429 응답 |
+| 시나리오                   | 처리 방법                                                 |
+| ---------------------- | ----------------------------------------------------- |
+| Kafka 일시 장애            | Outbox PENDING 유지 → 스케줄러 재시도(최대 25회)                  |
+| Kafka 장기 장애            | Outbox FAILED → 모니터링 알림 + 운영 수동 처리                    |
+| Redis `releaseHold` 실패 | DB는 이미 커밋됨, Redis 홀드는 TTL까지만 잔존 후 자동 만료               |
+| 예약 확정 중 예외             | Saga 보상 트랜잭션(`REQUIRES_NEW`) 실행 (포인트 환불 + 결제 CANCELED) |
+| 결제 API 중복 요청           | `Idempotency-Key` + AOP로 동일 응답 재사용                    |
+| Redis 장애               | Resilience4j `redisCircuitBreaker`로 Queue/Hold Redis 경로 fast-fail + fallback |
+| 락 경합 과다                | Rate Limit (Sliding Window, 1초당 10 req/user) + 429 응답 |
 
 ### 서킷브레이커 설정
+
+> 현재 코드 기준으로 `redisCircuitBreaker`가 `QueueService`, `HoldStore`의
+> 핵심 Redis 호출(대기열 진입/조회, 홀드 생성/조회/해제 등)에 적용되어
+> OPEN 상태에서 fast-fail 후 안전한 fallback(빈 결과/false)로 동작합니다.
 
 ```
 sliding-window-size=10

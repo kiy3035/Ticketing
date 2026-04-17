@@ -11,6 +11,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.inyoung.ticketing.common.resilience.RedisCircuitBreakerExecutor;
 import com.inyoung.ticketing.config.TicketingProperties;
 import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.ScanOptions;
@@ -30,10 +31,16 @@ public class QueueService {
 	private final StringRedisTemplate redisTemplate;
 	private final ObjectMapper objectMapper;
 	private final TicketingProperties properties;
+	private final RedisCircuitBreakerExecutor redisCb;
 
-	public QueueService(StringRedisTemplate redisTemplate, TicketingProperties properties) {
+	public QueueService(
+		StringRedisTemplate redisTemplate,
+		TicketingProperties properties,
+		RedisCircuitBreakerExecutor redisCb
+	) {
 		this.redisTemplate = redisTemplate;
 		this.properties = properties;
+		this.redisCb = redisCb;
 		this.objectMapper = new ObjectMapper()
 			.registerModule(new JavaTimeModule())
 			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -57,8 +64,18 @@ public class QueueService {
 		
 		String tokenKey = tokenKey(token);
 		long tokenTtlSeconds = properties.getQueue().getTokenTtlSeconds();
-		redisTemplate.opsForValue().set(tokenKey, tokenDataJson, Duration.ofSeconds(tokenTtlSeconds));
-		redisTemplate.opsForZSet().add(queueKey, token, now);
+		// Redis 장애 시 fail-open으로 즉시 진입시키지 않기 위해, 진입 실패는 예외로 처리한다.
+		Boolean entered = redisCb.execute(
+			"queue.enterQueue",
+			() -> {
+				redisTemplate.opsForValue().set(tokenKey, tokenDataJson, Duration.ofSeconds(tokenTtlSeconds));
+				return redisTemplate.opsForZSet().add(queueKey, token, now);
+			},
+			() -> false
+		);
+		if (!Boolean.TRUE.equals(entered)) {
+			throw new IllegalStateException("Queue enter failed due to Redis unavailable");
+		}
 		
 		Long rank = getRank(concertId, token);
 		Long totalWaiting = countWaiting(concertId);
@@ -68,19 +85,31 @@ public class QueueService {
 
 	public Long getRank(Long concertId, String token) {
 		String queueKey = queueKey(concertId);
-		Long rank = redisTemplate.opsForZSet().rank(queueKey, token);
+		Long rank = redisCb.execute(
+			"queue.getRank",
+			() -> redisTemplate.opsForZSet().rank(queueKey, token),
+			() -> null
+		);
 		return rank != null ? rank + 1 : null;
 	}
 
 	public Long countWaiting(Long concertId) {
 		String queueKey = queueKey(concertId);
-		Long size = redisTemplate.opsForZSet().size(queueKey);
+		Long size = redisCb.execute(
+			"queue.countWaiting",
+			() -> redisTemplate.opsForZSet().size(queueKey),
+			() -> 0L
+		);
 		return size == null ? 0L : size;
 	}
 
 	public Optional<Long> isAllowed(String token) {
 		String allowedKey = allowedKey(token);
-		String allowedDataJson = redisTemplate.opsForValue().get(allowedKey);
+		String allowedDataJson = redisCb.execute(
+			"queue.isAllowed",
+			() -> redisTemplate.opsForValue().get(allowedKey),
+			() -> null
+		);
 		if (allowedDataJson == null || allowedDataJson.isBlank()) {
 			return Optional.empty();
 		}
@@ -93,12 +122,23 @@ public class QueueService {
 		QueueAllowedData allowedData = new QueueAllowedData(concertId, Instant.now());
 		String allowedDataJson = toJson(allowedData);
 		long tokenTtlSeconds = properties.getQueue().getTokenTtlSeconds();
-		redisTemplate.opsForValue().set(allowedKey, allowedDataJson, Duration.ofSeconds(tokenTtlSeconds));
+		redisCb.execute(
+			"queue.allowEntry",
+			() -> {
+				redisTemplate.opsForValue().set(allowedKey, allowedDataJson, Duration.ofSeconds(tokenTtlSeconds));
+				return 1L;
+			},
+			() -> 0L
+		);
 	}
 
 	public List<String> getTopTokens(Long concertId, int limit) {
 		String queueKey = queueKey(concertId);
-		Set<String> tokens = redisTemplate.opsForZSet().range(queueKey, 0, limit - 1);
+		Set<String> tokens = redisCb.execute(
+			"queue.getTopTokens",
+			() -> redisTemplate.opsForZSet().range(queueKey, 0, limit - 1),
+			Set::of
+		);
 		if (tokens == null) {
 			return List.of();
 		}
@@ -121,7 +161,11 @@ public class QueueService {
 					continue;
 				}
 				String token = tuple.getValue();
-				Boolean exists = redisTemplate.hasKey(tokenKey(token));
+				Boolean exists = redisCb.execute(
+					"queue.pruneExpiredTokens.hasKey",
+					() -> redisTemplate.hasKey(tokenKey(token)),
+					() -> false
+				);
 				if (Boolean.FALSE.equals(exists)) {
 					expiredTokens.add(token);
 				}
@@ -129,14 +173,22 @@ public class QueueService {
 		}
 
 		if (!expiredTokens.isEmpty()) {
-			redisTemplate.opsForZSet().remove(queueKey, expiredTokens.toArray());
+			redisCb.execute(
+				"queue.pruneExpiredTokens.remove",
+				() -> redisTemplate.opsForZSet().remove(queueKey, expiredTokens.toArray()),
+				() -> 0L
+			);
 		}
 		return expiredTokens.size();
 	}
 
 	public Optional<QueueTokenData> getTokenData(String token) {
 		String tokenKey = tokenKey(token);
-		String tokenDataJson = redisTemplate.opsForValue().get(tokenKey);
+		String tokenDataJson = redisCb.execute(
+			"queue.getTokenData",
+			() -> redisTemplate.opsForValue().get(tokenKey),
+			() -> null
+		);
 		if (tokenDataJson == null || tokenDataJson.isBlank()) {
 			return Optional.empty();
 		}
@@ -145,25 +197,43 @@ public class QueueService {
 
 	public void exitQueue(Long concertId, String token) {
 		String queueKey = queueKey(concertId);
-		redisTemplate.opsForZSet().remove(queueKey, token);
-		String tokenKey = tokenKey(token);
-		redisTemplate.delete(tokenKey);
-		String allowedKey = allowedKey(token);
-		redisTemplate.delete(allowedKey);
+		redisCb.execute(
+			"queue.exitQueue",
+			() -> {
+				redisTemplate.opsForZSet().remove(queueKey, token);
+				String tokenKey = tokenKey(token);
+				redisTemplate.delete(tokenKey);
+				String allowedKey = allowedKey(token);
+				redisTemplate.delete(allowedKey);
+				return 1L;
+			},
+			() -> 0L
+		);
 	}
 
 	private void removeExistingTokens(Long concertId, String userId) {
 		String queueKey = queueKey(concertId);
-		Set<String> tokens = redisTemplate.opsForZSet().range(queueKey, 0, -1);
+		Set<String> tokens = redisCb.execute(
+			"queue.removeExistingTokens.range",
+			() -> redisTemplate.opsForZSet().range(queueKey, 0, -1),
+			Set::of
+		);
 		if (tokens == null) {
 			return;
 		}
 		for (String token : tokens) {
 			Optional<QueueTokenData> tokenData = getTokenData(token);
 			if (tokenData.isPresent() && tokenData.get().getUserId().equals(userId)) {
-				redisTemplate.opsForZSet().remove(queueKey, token);
-				redisTemplate.delete(tokenKey(token));
-				redisTemplate.delete(allowedKey(token));
+				redisCb.execute(
+					"queue.removeExistingTokens.remove",
+					() -> {
+						redisTemplate.opsForZSet().remove(queueKey, token);
+						redisTemplate.delete(tokenKey(token));
+						redisTemplate.delete(allowedKey(token));
+						return 1L;
+					},
+					() -> 0L
+				);
 			}
 		}
 	}

@@ -9,6 +9,7 @@ import java.util.Optional;
 import java.util.Set;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.inyoung.ticketing.common.resilience.RedisCircuitBreakerExecutor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
@@ -49,10 +50,16 @@ public class HoldStore {
 
 	private final StringRedisTemplate redisTemplate;
 	private final ObjectMapper objectMapper;
+	private final RedisCircuitBreakerExecutor redisCb;
 
-	public HoldStore(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
+	public HoldStore(
+		StringRedisTemplate redisTemplate,
+		ObjectMapper objectMapper,
+		RedisCircuitBreakerExecutor redisCb
+	) {
 		this.redisTemplate = redisTemplate;
 		this.objectMapper = objectMapper;
+		this.redisCb = redisCb;
 	}
 
 	public boolean createHold(HoldInfo info, Duration ttl) {
@@ -64,23 +71,35 @@ public class HoldStore {
 		String tokenKey = tokenKey(info.getHoldToken());
 		String payload = toPayload(info);
 		List<String> keys = List.of(seatKey, tokenKey, EXPIRY_ZSET_KEY);
-		Long result = redisTemplate.execute(
-			CREATE_SCRIPT,
-			keys,
-			info.getHoldToken(),
-			String.valueOf(ttl.toSeconds()),
-			payload,
-			String.valueOf(info.getExpiresAt().toEpochMilli())
+		Long result = redisCb.execute(
+			"hold.createHold",
+			() -> redisTemplate.execute(
+				CREATE_SCRIPT,
+				keys,
+				info.getHoldToken(),
+				String.valueOf(ttl.toSeconds()),
+				payload,
+				String.valueOf(info.getExpiresAt().toEpochMilli())
+			),
+			() -> 0L
 		);
 		if (result != null && result == 1L) {
-			redisTemplate.opsForSet().add(userHoldsKey(info.getUserId()), info.getHoldToken());
+			redisCb.execute(
+				"hold.createHold.userSetAdd",
+				() -> redisTemplate.opsForSet().add(userHoldsKey(info.getUserId()), info.getHoldToken()),
+				() -> 0L
+			);
 			return true;
 		}
 		return false;
 	}
 
 	public Optional<HoldInfo> getHold(String holdToken) {
-		String payload = redisTemplate.opsForValue().get(tokenKey(holdToken));
+		String payload = redisCb.execute(
+			"hold.getHold",
+			() -> redisTemplate.opsForValue().get(tokenKey(holdToken)),
+			() -> null
+		);
 		if (payload == null || payload.isBlank()) {
 			return Optional.empty();
 		}
@@ -88,7 +107,11 @@ public class HoldStore {
 	}
 
 	public boolean isSeatHeldByToken(Long seatId, String holdToken) {
-		String token = redisTemplate.opsForValue().get(seatKey(seatId));
+		String token = redisCb.execute(
+			"hold.isSeatHeldByToken",
+			() -> redisTemplate.opsForValue().get(seatKey(seatId)),
+			() -> null
+		);
 		return holdToken.equals(token);
 	}
 
@@ -102,7 +125,11 @@ public class HoldStore {
 	 * @return 연장 성공 시 true, 홀드가 없으면 false
 	 */
 	public boolean extendHoldTtl(String holdToken, Duration newTtl) {
-		String payload = redisTemplate.opsForValue().get(tokenKey(holdToken));
+		String payload = redisCb.execute(
+			"hold.extendHoldTtl.read",
+			() -> redisTemplate.opsForValue().get(tokenKey(holdToken)),
+			() -> null
+		);
 		if (payload == null || payload.isBlank()) {
 			return false;
 		}
@@ -120,16 +147,26 @@ public class HoldStore {
 
 		String seatKey = seatKey(info.getSeatId());
 		String tokenKey = tokenKey(holdToken);
-		redisTemplate.opsForValue().set(seatKey, holdToken, Duration.ofSeconds(ttlSeconds));
-		redisTemplate.opsForValue().set(tokenKey, newPayload, Duration.ofSeconds(ttlSeconds));
-		// ZSET: 기존 payload 제거 후 새 만료 시각으로 추가
-		redisTemplate.opsForZSet().remove(EXPIRY_ZSET_KEY, payload);
-		redisTemplate.opsForZSet().add(EXPIRY_ZSET_KEY, newPayload, newExpiresAt.toEpochMilli());
-		return true;
+		// 결제 단계에서 Redis 장애 시 잘못된 확정으로 넘어가지 않도록 연장 실패는 false 반환.
+		return redisCb.execute(
+			"hold.extendHoldTtl.write",
+			() -> {
+				redisTemplate.opsForValue().set(seatKey, holdToken, Duration.ofSeconds(ttlSeconds));
+				redisTemplate.opsForValue().set(tokenKey, newPayload, Duration.ofSeconds(ttlSeconds));
+				redisTemplate.opsForZSet().remove(EXPIRY_ZSET_KEY, payload);
+				redisTemplate.opsForZSet().add(EXPIRY_ZSET_KEY, newPayload, newExpiresAt.toEpochMilli());
+				return true;
+			},
+			() -> false
+		);
 	}
 
 	public Optional<HoldInfo> releaseHold(String holdToken) {
-		String payload = redisTemplate.opsForValue().get(tokenKey(holdToken));
+		String payload = redisCb.execute(
+			"hold.releaseHold.read",
+			() -> redisTemplate.opsForValue().get(tokenKey(holdToken)),
+			() -> null
+		);
 		if (payload == null || payload.isBlank()) {
 			return Optional.empty();
 		}
@@ -140,8 +177,15 @@ public class HoldStore {
 
 	public void releaseByPayload(HoldInfo info, String payload) {
 		List<String> keys = List.of(seatKey(info.getSeatId()), tokenKey(info.getHoldToken()), EXPIRY_ZSET_KEY);
-		redisTemplate.execute(RELEASE_SCRIPT, keys, info.getHoldToken(), payload);
-		redisTemplate.opsForSet().remove(userHoldsKey(info.getUserId()), info.getHoldToken());
+		redisCb.execute(
+			"hold.releaseByPayload",
+			() -> {
+				redisTemplate.execute(RELEASE_SCRIPT, keys, info.getHoldToken(), payload);
+				redisTemplate.opsForSet().remove(userHoldsKey(info.getUserId()), info.getHoldToken());
+				return 1L;
+			},
+			() -> 0L
+		);
 	}
 
 	public Set<Long> findHeldSeatIds(List<Long> seatIds) {
@@ -149,7 +193,11 @@ public class HoldStore {
 			return Set.of();
 		}
 		List<String> keys = seatIds.stream().map(this::seatKey).toList();
-		List<String> values = redisTemplate.opsForValue().multiGet(keys);
+		List<String> values = redisCb.execute(
+			"hold.findHeldSeatIds",
+			() -> redisTemplate.opsForValue().multiGet(keys),
+			List::of
+		);
 		if (values == null) {
 			return Set.of();
 		}
@@ -166,16 +214,28 @@ public class HoldStore {
 	 * 사용자별 유효한 홀드 목록 (만료 전인 것만). 토큰이 이미 만료되어 없으면 Set에서 제거(정리).
 	 */
 	public List<HoldInfo> getHoldsByUser(String userId) {
-		Set<String> tokens = redisTemplate.opsForSet().members(userHoldsKey(userId));
+		Set<String> tokens = redisCb.execute(
+			"hold.getHoldsByUser.members",
+			() -> redisTemplate.opsForSet().members(userHoldsKey(userId)),
+			Set::of
+		);
 		if (tokens == null || tokens.isEmpty()) {
 			return List.of();
 		}
 		Instant now = Instant.now();
 		List<HoldInfo> result = new ArrayList<>();
 		for (String token : tokens) {
-			String payload = redisTemplate.opsForValue().get(tokenKey(token));
+			String payload = redisCb.execute(
+				"hold.getHoldsByUser.tokenGet",
+				() -> redisTemplate.opsForValue().get(tokenKey(token)),
+				() -> null
+			);
 			if (payload == null || payload.isBlank()) {
-				redisTemplate.opsForSet().remove(userHoldsKey(userId), token);
+				redisCb.execute(
+					"hold.getHoldsByUser.cleanup",
+					() -> redisTemplate.opsForSet().remove(userHoldsKey(userId), token),
+					() -> 0L
+				);
 				continue;
 			}
 			HoldInfo info = fromPayload(payload);
@@ -193,15 +253,25 @@ public class HoldStore {
 	 */
 	public long countActiveHolds() {
 		long now = Instant.now().toEpochMilli();
-		Long count = redisTemplate.opsForZSet().count(EXPIRY_ZSET_KEY, (double) now, Double.POSITIVE_INFINITY);
+		Long count = redisCb.execute(
+			"hold.countActiveHolds",
+			() -> redisTemplate.opsForZSet().count(EXPIRY_ZSET_KEY, (double) now, Double.POSITIVE_INFINITY),
+			() -> 0L
+		);
 		return count != null ? count : 0L;
 	}
 
 	public List<HoldPayload> findExpiredHolds(Instant now, int limit) {
 		// hold:expires ZSET에서 만료 시각이 지난 항목을 조회한다.
 		// 조회 결과는 스케줄러가 Redis에서 제거하고 Kafka 이벤트 발행에 사용한다.
-		ZSetOperations<String, String> zset = redisTemplate.opsForZSet();
-		Set<String> payloads = zset.rangeByScore(EXPIRY_ZSET_KEY, 0, now.toEpochMilli(), 0, limit);
+		Set<String> payloads = redisCb.execute(
+			"hold.findExpiredHolds",
+			() -> {
+				ZSetOperations<String, String> zset = redisTemplate.opsForZSet();
+				return zset.rangeByScore(EXPIRY_ZSET_KEY, 0, now.toEpochMilli(), 0, limit);
+			},
+			Set::of
+		);
 		if (payloads == null || payloads.isEmpty()) {
 			return List.of();
 		}
