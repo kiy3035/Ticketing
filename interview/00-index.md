@@ -13,3 +13,4 @@
 | [05-transaction-and-consistency.md](05-transaction-and-consistency.md) | 결제·예약 경계, outbox, 멱등, 환불 배치, 강한/최종 일관성 |
 | [06-infra-and-operations.md](06-infra-and-operations.md) | EC2·Docker, 스케줄러·락, 메트릭, 배포 |
 | [07-testing-and-quality.md](07-testing-and-quality.md) | Testcontainers, 동시성 테스트, ArchUnit, 멱등 AOP |
+| [09-my-level-answer-guide.md](09-my-level-answer-guide.md) | 내 수준 맞춤 답변 템플릿, Saga/CB 실전 답변 |
