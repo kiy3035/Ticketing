@@ -83,7 +83,8 @@ jobs:
           chmod 600 ec2_key.pem
           for i in $(seq 1 18); do
             STATUS=$(ssh -o StrictHostKeyChecking=no -i ec2_key.pem "ubuntu@$EC2_HOST" \
-              "curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/actuator/health" 2>/dev/null)
+              "curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/actuator/health" \
+              2>/dev/null) || STATUS="000"
             if [ "$STATUS" = "200" ]; then
               echo "App1 healthy (attempt $i)"
               exit 0
@@ -134,7 +135,8 @@ jobs:
           chmod 600 ec2_key.pem
           for i in $(seq 1 18); do
             STATUS=$(ssh -o StrictHostKeyChecking=no -i ec2_key.pem "ubuntu@$EC2_HOST" \
-              "curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/actuator/health" 2>/dev/null)
+              "curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/actuator/health" \
+              2>/dev/null) || STATUS="000"
             if [ "$STATUS" = "200" ]; then
               echo "App2 healthy (attempt $i)"
               exit 0
