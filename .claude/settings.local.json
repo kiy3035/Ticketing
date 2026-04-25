@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(npm list *)",
-      "Bash(grep -E '\\\\.\\(md|gradle|yml|yaml|dockerfile|gitignore\\)$')",
-      "Bash(xargs wc *)"
-    ]
-  }
-}
