@@ -36,7 +36,7 @@
 
 > 대표 결과: 2회차 (JVM warm-up 이후 안정화된 수치)
 
-![pool=10 Grafana 2회차](../portfolio/1. 캐시전_poolsize10_vu800_0.005/2회차.png)
+![pool=10 Grafana 2회차](../portfolio/1.%20캐시전_poolsize10_vu800_0.005/2회차.png)
 *DB active=10 포화 + pending 적체가 선명하게 나타남*
 
 #### 해석
@@ -70,7 +70,7 @@ Grafana에서 `hikaricp_connections_active`가 10에서 플랫하게 유지되�
 
 > 대표 결과: 2회차
 
-![pool=30 Grafana 2회차](../portfolio/2. 캐시전_poolsize30_vu800_0.005/2회차.png)
+![pool=30 Grafana 2회차](../portfolio/2.%20캐시전_poolsize30_vu800_0.005/2회차.png)
 *pending이 pool=10보다 줄었으나 p95·RPS 개선은 미미 — 커넥션 수가 병목이 아님을 시각적으로 확인*
 
 #### 해석
@@ -104,7 +104,7 @@ Grafana에서 `hikaricp_connections_active`가 10에서 플랫하게 유지되�
 
 > 대표 결과: 2회차 — JVM threads 패널이 핵심
 
-![pool=30+VT Grafana 2회차](../portfolio/3. 캐시전_poolsize30_VT_vu800_0.005/2회차.png)
+![pool=30+VT Grafana 2회차](../portfolio/3.%20캐시전_poolsize30_VT_vu800_0.005/2회차.png)
 *우측 하단 JVM threads: ~225개 → ~30개로 급감. DB active/pending 패턴은 pool=30과 동일하여 처리량 개선 없음을 함께 확인*
 
 #### 해석
