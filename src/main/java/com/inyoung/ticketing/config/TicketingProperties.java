@@ -374,6 +374,8 @@ public class TicketingProperties {
 		private int batchSize = 50;
 		/** 초과 시 FAILED 로 표시해 무한 재시도·로그 폭주를 막음 */
 		private int maxPublishAttempts = 25;
+		/** Kafka send 완료 대기 타임아웃(초). Broker 응답이 없을 때 무한 대기 방지 */
+		private long publishTimeoutSeconds = 15;
 
 		public long getPublishIntervalMs() {
 			return publishIntervalMs;
@@ -397,6 +399,14 @@ public class TicketingProperties {
 
 		public void setMaxPublishAttempts(int maxPublishAttempts) {
 			this.maxPublishAttempts = maxPublishAttempts;
+		}
+
+		public long getPublishTimeoutSeconds() {
+			return publishTimeoutSeconds;
+		}
+
+		public void setPublishTimeoutSeconds(long publishTimeoutSeconds) {
+			this.publishTimeoutSeconds = publishTimeoutSeconds;
 		}
 	}
 }
