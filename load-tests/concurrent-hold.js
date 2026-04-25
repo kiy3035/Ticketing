@@ -55,7 +55,7 @@ export const options = {
     },
   },
   thresholds: {
-    'http_req_failed': ['rate<0.01'],                       // 5xx < 1%
+    // http_req_failed는 사용 안 함: 이 테스트는 409/429가 99%여야 정상이므로 비2xx 비율로 판단 불가
     'checks{check:5xx 없음}': ['rate>0.99'],               // 서버 에러 없어야
     'checks{check:201 선점 성공}': ['rate<=0.02'],          // 성공률 ≤ 2% (100명 중 1~2건만 성공해야)
   },
