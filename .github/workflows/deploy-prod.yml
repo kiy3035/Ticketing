@@ -133,9 +133,9 @@ jobs:
           done
           echo "App1 health check timed out" && exit 1
 
-  # ── 4. App2 배포 (App1 완료 후 순차 실행) ────────────────────────────────
+  # ── 4. App2 배포 (App1과 병렬 실행) ────────────────────────────────────
   deploy-app2:
-    needs: deploy-app1
+    needs: deploy-infra
     runs-on: ubuntu-latest
     steps:
       - name: Download artifact
