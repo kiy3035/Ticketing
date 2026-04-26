@@ -49,6 +49,7 @@ jobs:
   # ── 2. Infra 배포 (nginx 설정) ────────────────────────────────────────
   deploy-infra:
     needs: build
+    if: contains(github.event.head_commit.modified, 'nginx/nginx.conf')
     runs-on: ubuntu-latest
     steps:
       - name: Download nginx config
@@ -81,7 +82,7 @@ jobs:
   # ALB 헬스체크(10s × 2회 = 20s)가 app1을 unhealthy로 감지하면
   # 자동으로 app2로만 트래픽을 보낸다. 별도 AWS CLI 없이 무중단 효과.
   deploy-app1:
-    needs: build
+    needs: deploy-infra
     runs-on: ubuntu-latest
     steps:
       - name: Download artifact
