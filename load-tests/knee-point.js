@@ -45,7 +45,12 @@ export default function () {
     headers: { 'Content-Type': 'application/json' },
   });
   check(enterRes, { '대기열 진입 201': (r) => r.status === 201 });
-  if (enterRes.status !== 201) return;
+  if (enterRes.status !== 201) {
+    // 실패 시 즉시 재시도하면 수천 req/s 폭격으로 연쇄 실패 발생
+    // 실제 사용자 재시도 패턴과 동일하게 1초 대기
+    sleep(1);
+    return;
+  }
 
   const token = enterRes.json('data.token');
   for (let i = 0; i < MAX_POLLS; i++) {
