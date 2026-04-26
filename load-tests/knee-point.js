@@ -38,8 +38,8 @@ const BASE = baseUrl();
 const CID  = concertId();
 
 const POLL_SLEEP_SEC = parseFloat(__ENV.K6_QUEUE_POLL_SLEEP_SEC || '0.1');
-// VU=1500 기준 큐 드레인 60초. 서버 빠를 때(~70ms/poll) 기준 800+ polls 필요
-const MAX_POLLS      = parseInt(__ENV.K6_QUEUE_MAX_POLL || '1000', 10);
+// VU=1500 큐 드레인 60초 / poll 1회 ~235ms(5ms sleep + 응답) = 255회 필요 → 여유 포함 300
+const MAX_POLLS      = parseInt(__ENV.K6_QUEUE_MAX_POLL || '300', 10);
 
 export default function () {
   const enterRes = http.post(`${BASE}/api/queue/enter?concertId=${CID}`, null, {

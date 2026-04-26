@@ -2,57 +2,86 @@
 
 ---
 
-### Q1. 이 프로젝트의 전체 아키텍처를 간단히 설명해 주세요.
+### 🟢 Q1. 이 프로젝트가 어떤 서비스인지 한 줄로 설명해주세요.
 
-**A.** 클라이언트 → Spring Boot API → MySQL / Redis / Kafka 로 나뉜 **레이어드 + 이벤트 주변부** 구조입니다. 내부는 `Controller → Service → (JPA)Repository` 와 Redis 전용 `HoldStore`, `RedisLockService` 로 분리하고, Spring Security + **Spring Session Redis** 로 인증·세션을 다중 인스턴스에 맞췄습니다. 비동기는 `SeatHoldEventPublisher` / `PaymentCompleteEventPublisher` 와 컨슈머, 그리고 `QueueProcessingScheduler`, `HoldCleanupScheduler`, `RefundForCancelledConcertScheduler`, **`KafkaOutboxPublishScheduler`** 등 스케줄러로 나뉩니다. MySQL은 예약·결제·좌석 등 **감사 가능한 진실**, Redis는 대기열·홀드·락·세션 등 **고속·휘발성** 데이터를 담당합니다.
-
-> **Q1-1. Store 레이어를 둔 이유는요?**
-> **A.** `HoldStore` 처럼 Lua·ZSET·여러 키를 다루는 코드를 서비스에 풀어두면 비즈니스 규칙과 Redis 명령이 뒤섞입니다. 서비스는 `holdStore.createHold(info, ttl)` 같은 도메인 언어만 쓰고, 키 패턴·스크립트는 Store 에 캡슐화했습니다.
-
-> **Q1-2. Controller 가 Repository 를 직접 안 쓰나요?**
-> **A.** 레이어 규칙을 **ArchUnit** 테스트로 고정해 두었습니다. 예를 들어 대기열에서 “남은 좌석 수”는 `QueueController` → `SeatService.countAvailableSeats()` 로만 계산하고, JPA Repository 는 서비스 이하에 둡니다.
+**A.** 콘서트 좌석 예매 백엔드입니다. 오픈 시점 트래픽 폭증에 대비해 **대기열·좌석 동시 선점·결제 정합성**을 다루는 게 핵심입니다. Spring Boot 3.4 + Java 21 + MySQL/Redis/Kafka 로 구성했고, EC2 위 Docker 로 운영합니다.
 
 ---
 
-### Q2. Kafka 를 왜 썼고, 동기 호출과 뭐가 다른가요?
+### 🟢 Q2. 전체 아키텍처를 간단히 설명해 주세요.
 
-**A.** 결제 완료 후 이메일·SMS 는 **응답 시간과 분리**해야 해서 `PaymentCompleteEvent` 를 Kafka 로 보내고, 컨슈머에서 알림을 처리합니다. 홀드 관련 이벤트(`HOLD_CREATED` 등)도 동일하게 비동기 확장·DLT 연계가 쉽습니다. **`RESERVATION_CONFIRMED` 만** 예약 **DB 커밋과 같은 트랜잭션**에 `kafka_outbox` 행으로 적재하고, `KafkaOutboxPublishScheduler` 가 주기적으로 Kafka 로 밀어 넣습니다. 직접 `send` 만 하면 “DB 는 커밋됐는데 브로커 장애로 메시지가 영원히 안 나가는” 구간이 생기기 쉬운데, outbox 는 **재시도·FAILED 표기**까지 같은 테이블로 추적할 수 있습니다.
+**A.** 클라이언트 → nginx → Spring Boot API → MySQL/Redis/Kafka 로 나뉜 **레이어드 + 이벤트 주변부** 구조입니다.
+- **레이어**: `Controller → Service → (JPA)Repository` + Redis 전용 `HoldStore`, `RedisLockService`
+- **인증**: Spring Security + **JWT (Access/Refresh)** — 세션 미사용
+- **비동기**: `SeatHoldEventPublisher` / `PaymentCompleteEventPublisher` + Kafka Consumer
+- **배치**: 5종 스케줄러 (`Queue Process/Cleanup`, `Hold Cleanup`, `Refund`, `Kafka Outbox Publish`)
+- **저장소 역할 분담**: MySQL = 감사 가능한 진실 (예약·결제·좌석), Redis = 고속·휘발성 (대기열·홀드·락·캐시·블랙리스트)
 
-> **Q2-1. Kafka 가 죽으면 결제가 실패하나요?**
-> **A.** 결제·예약 **커밋은 Kafka 와 무관**합니다. `PaymentComplete` 직접 send 가 실패해도 DB 는 이미 반영된 상태일 수 있고, 그때는 알림만 지연·유실 가능 구간이 됩니다(프로듀서 `retries`, `acks=all` 로 완화). `RESERVATION_CONFIRMED` 는 outbox 가 남으므로 브로커가 살아나면 스케줄러가 다시 보냅니다.
+> **🟢 Q2-1. Store 레이어를 둔 이유는요?**
+> **A.** `HoldStore` 처럼 Lua·ZSet·여러 키를 다루는 코드가 서비스에 풀려있으면 비즈니스 규칙과 Redis 명령이 뒤섞입니다. 서비스는 `holdStore.createHold(info, ttl)` 같은 도메인 언어만 쓰고, 키 패턴·스크립트는 Store 에 캡슐화했습니다.
 
----
-
-### Q3. `ReservationConfirmedEventListener` 의 `AFTER_COMMIT` 은 왜 쓰나요? Kafka 도 여기서내나요?
-
-**A.** `ReservationService.confirm()` 안에서 좌석 `RESERVED`·예약·**outbox INSERT** 까지 한 트랜잭션으로 묶입니다. **`publishEvent(ReservationConfirmedEvent)`** 는 리스너를 **커밋 이후**에만 돌리기 위해 쓰고, 리스너는 **`holdStore.releaseHold()`** 만 수행합니다. 예전처럼 트랜잭션 안에서 Redis 를 풀면 롤백 시 “DB 는 없는데 홀드만 풀린” 상태가 될 수 있습니다. **`RESERVATION_CONFIRMED` Kafka 발행은 리스너가 아니라 outbox 스케줄러**가 담당합니다.
-
-> **Q3-1. AFTER_COMMIT 에서 Redis 해제만 실패하면?**
-> **A.** DB 예약은 이미 확정입니다. 홀드 키가 잠시 남을 수 있으나 좌석은 DB 상 판매 완료라 이중 판매로 이어지지 않습니다. TTL·`HoldCleanupScheduler` 로 정리됩니다. 상세 표는 [docs/sequence-diagrams §5](../docs/sequence-diagrams.md#consistency-failure-scenarios) 참고.
-
----
-
-### Q4. MySQL 과 Redis 를 같이 쓸 때 역할 분리 기준은?
-
-**A.** **감사·정산·법적 추적**이 필요하면 MySQL. **순위·선점·세션**처럼 지연·TTL 이 핵심이면 Redis. 두 저장소가 엮이는 지점(예약 확정)은 **DB 커밋 후 Redis 정리(AFTER_COMMIT)** 와 **outbox 로 Kafka** 로 경계를 나눕니다.
-
-> **Q4-1. Redis 장애 시?**
-> **A.** 대기열·홀드·락이 막히므로 **오픈 예매 플로우는 사실상 중단**에 가깝습니다. 이미 적재된 예약·결제 조회는 DB 로 가능합니다. 다운스트림으로는 Sentinel/Cluster·캐시 우회 읽기 전략을 논의할 수 있습니다.
+> **🟡 Q2-2. Controller 가 Repository 를 직접 안 쓰나요?**
+> **A.** ArchUnit 으로 강제했습니다 (`ArchitectureTest`). 예: 대기열에서 "남은 좌석 수"는 `QueueController` → `SeatService.countAvailableSeatsForQueueStatus()` 로만 계산하고, JPA Repository 는 서비스 이하에만. 도메인 패키지가 Spring 에 의존하지 않게 하는 규칙도 있습니다.
 
 ---
 
-### Q5. 스케일아웃을 어떻게 고려했나요?
+### 🟡 Q3. Kafka 를 왜 썼고, 동기 호출과 뭐가 다른가요?
 
-**A.** 앱은 **상태를 Redis·DB·Kafka**에 두어 수평 확장 가능하게 했습니다. 스케줄러·outbox 발행은 **`lock:batch:*` 분산 락**으로 멀티 인스턴스에서 단일 실행을 보장합니다. Kafka 컨슈머는 **동일 group-id** 로 파티션 단위 분산. 배포·ALB·JWT·SSE 등은 [docs/deployment-ec2.md](../docs/deployment-ec2.md) 와 동일 맥락입니다.
+**A.** 결제 완료 후 이메일·SMS 는 **응답 시간과 분리**해야 해서 `PaymentCompleteEvent` 를 Kafka 로 보내고 컨슈머에서 처리합니다. 홀드 관련 이벤트(`HOLD_CREATED`, `HOLD_CANCELED`, `HOLD_EXPIRED`)도 동일하게 비동기로 다운스트림이 받아 SSE/알림 처리합니다. **`RESERVATION_CONFIRMED` 만** 예약 **DB 커밋과 같은 트랜잭션** 에 `kafka_outbox` 행으로 적재하고, `KafkaOutboxPublishScheduler` 가 주기(500ms) 로 Kafka 로 밀어 넣습니다.
 
-> **Q5-1. SSE 는?**
-> **A.** `SseNotificationService` 가 인스턴스 로컬에 `SseEmitter` 를 들고 있어 **스티키 세션** 또는 **Redis Pub/Sub 브로드캐스트** 같은 다음 단계가 필요합니다. 면접에서는 한계를 인정하고 개선안을 말하는 게 좋습니다.
+> **🟡 Q3-1. Kafka 가 죽으면 결제가 실패하나요?**
+> **A.** 결제·예약 **커밋은 Kafka 와 무관**합니다.
+> - `PaymentComplete` 직접 send 가 실패해도 DB는 이미 반영. 알림만 지연·유실 가능 (프로듀서 `acks=all`, `retries=3`, `enable.idempotence=true` 로 완화).
+> - `RESERVATION_CONFIRMED` 는 outbox 가 남으므로 브로커 복구 후 스케줄러가 다시 보냅니다.
+
+> **🔴 Q3-2. 왜 모든 이벤트를 outbox로 보내지 않았나요?**
+> **A.** outbox 는 추가 INSERT + 스케줄러 + 모니터링 비용을 동반합니다. **DB 커밋과 반드시 묶여야 하는 발행** 만 outbox 로 보내고 (=`RESERVATION_CONFIRMED`), 나머지는 직접 send 로 두는 트레이드오프입니다. 운영하면서 `HOLD_*` 알림 누락이 비즈니스에 치명적이라고 판단되면 같은 패턴으로 확장 가능하다는 걸 코드 구조상 보장해 두었습니다.
 
 ---
 
-### Q6. 지금 구조에서 아쉬운 점·개선하고 싶은 점은?
+### 🔴 Q4. `ReservationConfirmedEventListener` 의 `AFTER_COMMIT` 은 왜 쓰나요? Kafka 도 여기서 내나요?
 
-**A.** (1) **SSE 다중 인스턴스** (2) **직접 Kafka send 경로**(`HOLD_CREATED`, `PaymentComplete` 등)의 운영 재처리·모니터링을 outbox 수준으로 끌어올릴지 (3) 대기열 `removeExistingTokens` 의 ZSet 전체 스캔 (4) **홀드 TTL 연장**이 Lua 가 아닌 다중 명령인 점 — 를 코드 레벨에서 인지하고 있습니다.
+**A.** `ReservationService.confirm()` 안에서 좌석 `RESERVED`·예약 INSERT·**outbox INSERT** 까지 한 트랜잭션으로 묶입니다. **`publishEvent(ReservationConfirmedEvent)`** 는 리스너를 **커밋 이후**에만 돌리기 위해 쓰고, 리스너는 **`holdStore.releaseHold()` + 잔여석 캐시 evict** 만 수행합니다. 트랜잭션 안에서 Redis 를 풀면 롤백 시 "DB 는 없는데 홀드만 풀린" 상태가 될 수 있습니다.
 
-> **Q6-1. 처음부터 다시 짠다면?**
-> **A.** 트래픽 도메인(대기열·좌석 조회)을 **별도 서비스 또는 읽기 전용 API** 로 분리해 스케일 단위를 나누는 걸 검토합니다. 단일 모듈은 포트폴리오·온보딩에는 유리합니다.
+**`RESERVATION_CONFIRMED` Kafka 발행은 리스너가 아니라 outbox 스케줄러**가 담당합니다. 이렇게 분리한 이유는 (a) 발행이 실패해도 DB 트랜잭션이 영향받지 않게 (b) 재시도/FAILED 추적이 가능하게 하려고요.
+
+> **🔴 Q4-1. AFTER_COMMIT 에서 Redis 해제만 실패하면?**
+> **A.** DB 예약은 이미 확정입니다. 홀드 키가 잠시 남을 수 있으나 좌석은 DB 상 판매 완료라 **이중 판매로 이어지지 않습니다** (홀드 생성 시 `seat.status = RESERVED` 검증). TTL과 `HoldCleanupScheduler`가 마저 정리합니다.
+
+---
+
+### 🟡 Q5. MySQL 과 Redis 를 같이 쓸 때 역할 분리 기준은?
+
+**A.** **감사·정산·법적 추적**이 필요하면 MySQL. **순위·선점·캐시·휘발성**이 핵심이면 Redis. 두 저장소가 엮이는 지점(예약 확정)은 **DB 커밋 후 Redis 정리(AFTER_COMMIT)** 와 **outbox 로 Kafka** 로 경계를 나눕니다.
+
+> **🟡 Q5-1. Redis 장애 시?**
+> **A.** 대기열·홀드·락이 막히므로 **오픈 예매 플로우는 사실상 중단**에 가깝습니다. `RedisCircuitBreakerExecutor` 가 OPEN 상태에서 fast-fail 로 응답 시간만큼은 보호하고, `ticketingDatastores` 헬스가 DOWN 으로 떨어져 ALB 가 트래픽을 빼게 됩니다. 이미 적재된 예약·결제 조회는 DB 로 가능. 다음 단계로는 Sentinel/Cluster 도입 가능.
+
+---
+
+### 🟡 Q6. 스케일아웃을 어떻게 고려했나요?
+
+**A.** 앱은 **상태를 Redis·DB·Kafka** 에 두어 수평 확장 가능합니다.
+- **세션 없음** (JWT) → 스티키 불필요
+- **스케줄러·outbox 발행**: `lock:batch:*` Redis 분산 락 으로 멀티 인스턴스 중 한 노드만 실행
+- **Kafka 컨슈머**: 동일 group-id 로 파티션 단위 분산
+- **DB 커넥션**: HikariCP `maximum-pool-size=30`, `minimum-idle=5` — 인스턴스 수 × max-pool 합이 RDS `max_connections` 한계 안쪽이 되도록 설계
+
+현재 t3a.small 1대로 운영 중이고, ALB 도입 후 2대 스케일아웃 예정입니다.
+
+> **🟡 Q6-1. SSE 는 다중 인스턴스에서 어떻게?**
+> **A.** `SseNotificationService` 가 인스턴스 로컬에 `SseEmitter` 를 들고 있어 다음 단계가 필요합니다. **스티키 세션** 또는 **Redis Pub/Sub 브로드캐스트** 를 후보로 생각하고 있고, 면접에서는 한계를 인정하고 개선안을 말합니다.
+
+---
+
+### 🔴 Q7. 지금 구조에서 아쉬운 점·개선하고 싶은 점은?
+
+**A.** 코드 레벨에서 다음을 인지하고 있습니다.
+1. **SSE 다중 인스턴스 미해결** — Redis Pub/Sub 으로 브로드캐스트 필요
+2. **직접 Kafka send 경로**(`HOLD_CREATED`, `PaymentComplete`) 의 운영 재처리·모니터링 — outbox 수준으로 끌어올릴지 트레이드오프
+3. **`QueueProcessingScheduler` 가 `findAll()` 로 전 공연 순회** — 대기열 활성 공연만 추리는 인덱싱 필요
+4. **`HoldStore.extendHoldTtl` 가 Lua 가 아닌 다중 명령** — 결제 단계라 경합은 적지만 원자성 보강 가능
+5. **`QueueService.removeExistingTokens` 가 ZSet 전체 스캔** — `queue:user:{concertId}:{userId}` 역인덱스로 O(1) 화 가능
+
+> **🔴 Q7-1. 처음부터 다시 짠다면?**
+> **A.** **읽기 전용 트래픽(공연 목록·좌석 조회)** 을 별도 서비스로 분리해 스케일 단위를 나누는 걸 검토합니다. 현재 단일 모듈 구조는 포트폴리오·온보딩 비용 면에서는 유리한 선택이었습니다.
