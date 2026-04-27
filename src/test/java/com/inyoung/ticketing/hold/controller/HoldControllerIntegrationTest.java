@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.inyoung.ticketing.auth.jwt.JwtAuthenticationService;
 import com.inyoung.ticketing.hold.dto.HoldRequest;
 import com.inyoung.ticketing.hold.dto.HoldResponse;
 import com.inyoung.ticketing.hold.service.HoldService;
@@ -37,6 +38,8 @@ class HoldControllerIntegrationTest {
 	@Autowired
 	private ObjectMapper objectMapper;
 
+	@MockitoBean
+	private JwtAuthenticationService jwtAuthenticationService;
 	@MockitoBean
 	private ActiveUserTracker activeUserTracker;
 	@MockitoBean
