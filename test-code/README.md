@@ -20,6 +20,8 @@
 | [09-saga-compensation-test.md](09-saga-compensation-test.md) | **Saga 보상 트랜잭션 통합 테스트** — 결제 실패 시 포인트 복원·멱등성 검증 4 시나리오 |
 | [10-kafka-idempotency-test.md](10-kafka-idempotency-test.md) | **Kafka 컨슈머 멱등성 통합 테스트** — at-least-once 중복 처리 차단 검증 4 시나리오 |
 | [11-seat-hold-consumer-idempotency-test.md](11-seat-hold-consumer-idempotency-test.md) | **SeatHoldEventConsumer 멱등성** — 동일 결함 연쇄 발견·holdToken+type 키 설계 |
+| [12-hold-store-lua-test.md](12-hold-store-lua-test.md) | **HoldStore Lua 스크립트 원자성** — Redis 레이어에서 중복 홀드 방어 직접 검증 |
+| [13-payment-service-unit-test.md](13-payment-service-unit-test.md) | **PaymentService 단위 테스트** — 결제 분기 7가지 + Saga 보상 호출 verify |
 
 ## 산출물 (evidence/)
 
