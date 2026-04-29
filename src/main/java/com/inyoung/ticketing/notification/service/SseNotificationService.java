@@ -119,8 +119,6 @@ public class SseNotificationService implements MessageListener {
 	 *   2) Redis 채널 "sse:notify:{userId}"에 발행
 	 *   3) 해당 채널을 구독 중인 모든 인스턴스가 onMessage()를 통해 수신
 	 *   4) 에미터를 실제로 보유한 인스턴스만 emitter.send()를 실행
-<<<<<<< HEAD
-=======
 	 *
 	 * DataAccessException(Redis 장애) 처리:
 	 *   catch하지 않으면 Kafka 컨슈머(SeatHoldEventConsumer)까지 전파되어
