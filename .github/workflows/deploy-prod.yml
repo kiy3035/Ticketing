@@ -6,9 +6,9 @@ on:
       - prod
 
 jobs:
-  deploy:
+  # ── 1. 빌드 ──────────────────────────────────────────────────────────────
+  build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,12 +26,72 @@ jobs:
         run: |
           chmod +x ./gradlew
           ./gradlew clean build -x test --no-daemon
+          cp build/libs/ticketing-*-SNAPSHOT.jar ticketing-app.jar
 
-      - name: Package JAR for Docker
-        run: cp build/libs/ticketing-*-SNAPSHOT.jar ticketing-app.jar
+      # 두 서버에 동일한 artifact 배포 — 빌드는 1회만 수행
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-bundle
+          path: |
+            ticketing-app.jar
+            Dockerfile.runtime
+            docker-compose.app.yml
+          retention-days: 1
 
-      # 앱 서버에는 JAR·Docker 정의만 전송 (소스·*.md·문서 디렉터리 없음)
-      - name: Copy bundle to EC2
+      - name: Upload nginx config
+        uses: actions/upload-artifact@v4
+        with:
+          name: nginx-config
+          path: nginx/nginx.conf
+          retention-days: 1
+
+  # ── 2. Infra 배포 (nginx 설정) ────────────────────────────────────────
+  deploy-infra:
+    needs: build
+    if: contains(github.event.head_commit.modified, 'nginx/nginx.conf')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download nginx config
+        uses: actions/download-artifact@v4
+        with:
+          name: nginx-config
+
+      - name: Deploy nginx.conf to Infra
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST_INFRA }}
+          EC2_KEY: ${{ secrets.EC2_SSH_KEY_INFRA }}
+        run: |
+          echo "$EC2_KEY" > ec2_key.pem
+          chmod 600 ec2_key.pem
+          scp -o StrictHostKeyChecking=no -i ec2_key.pem \
+            nginx.conf \
+            "ubuntu@$EC2_HOST:/home/ubuntu/infra/nginx/"
+
+      - name: Reload nginx
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST_INFRA }}
+          EC2_KEY: ${{ secrets.EC2_SSH_KEY_INFRA }}
+        run: |
+          echo "$EC2_KEY" > ec2_key.pem
+          chmod 600 ec2_key.pem
+          ssh -o StrictHostKeyChecking=no -i ec2_key.pem "ubuntu@$EC2_HOST" \
+            "docker exec nginx nginx -t && docker exec nginx nginx -s reload"
+
+  # ── 3. App1 배포 ──────────────────────────────────────────────────────────
+  # ALB 헬스체크(10s × 2회 = 20s)가 app1을 unhealthy로 감지하면
+  # 자동으로 app2로만 트래픽을 보낸다. 별도 AWS CLI 없이 무중단 효과.
+  deploy-app1:
+    needs: [build, deploy-infra]
+    if: always() && needs.build.result == 'success' && (needs.deploy-infra.result == 'success' || needs.deploy-infra.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: deploy-bundle
+
+      - name: Copy bundle to App1
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_KEY: ${{ secrets.EC2_SSH_KEY }}
@@ -43,7 +103,7 @@ jobs:
             ticketing-app.jar Dockerfile.runtime docker-compose.app.yml \
             "ubuntu@$EC2_HOST:~/ticketing/"
 
-      - name: Rebuild image and run on EC2
+      - name: Rebuild and run on App1
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_KEY: ${{ secrets.EC2_SSH_KEY }}
@@ -52,3 +112,77 @@ jobs:
           chmod 600 ec2_key.pem
           ssh -o StrictHostKeyChecking=no -i ec2_key.pem "ubuntu@$EC2_HOST" \
             "cd ~/ticketing && sudo docker compose -f docker-compose.app.yml up -d --build"
+
+      # 헬스체크 통과 확인 후 app2 배포 진행 (최대 3분 대기)
+      - name: Wait for App1 health check
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          echo "$EC2_KEY" > ec2_key.pem
+          chmod 600 ec2_key.pem
+          for i in $(seq 1 18); do
+            STATUS=$(ssh -o StrictHostKeyChecking=no -i ec2_key.pem "ubuntu@$EC2_HOST" \
+              "curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/actuator/health" \
+              2>/dev/null) || STATUS="000"
+            if [ "$STATUS" = "200" ]; then
+              echo "App1 healthy (attempt $i)"
+              exit 0
+            fi
+            echo "Attempt $i: status=$STATUS — waiting 10s..."
+            sleep 10
+          done
+          echo "App1 health check timed out" && exit 1
+
+  # ── 4. App2 배포 (App1과 병렬 실행) ────────────────────────────────────
+  deploy-app2:
+    needs: [build, deploy-infra]
+    if: always() && needs.build.result == 'success' && (needs.deploy-infra.result == 'success' || needs.deploy-infra.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: deploy-bundle
+
+      - name: Copy bundle to App2
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST_2 }}
+          EC2_KEY: ${{ secrets.EC2_SSH_KEY_2 }}
+        run: |
+          echo "$EC2_KEY" > ec2_key.pem
+          chmod 600 ec2_key.pem
+          ssh -o StrictHostKeyChecking=no -i ec2_key.pem "ubuntu@$EC2_HOST" "mkdir -p ~/ticketing"
+          scp -o StrictHostKeyChecking=no -i ec2_key.pem \
+            ticketing-app.jar Dockerfile.runtime docker-compose.app.yml \
+            "ubuntu@$EC2_HOST:~/ticketing/"
+
+      - name: Rebuild and run on App2
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST_2 }}
+          EC2_KEY: ${{ secrets.EC2_SSH_KEY_2 }}
+        run: |
+          echo "$EC2_KEY" > ec2_key.pem
+          chmod 600 ec2_key.pem
+          ssh -o StrictHostKeyChecking=no -i ec2_key.pem "ubuntu@$EC2_HOST" \
+            "cd ~/ticketing && sudo docker compose -f docker-compose.app.yml up -d --build"
+
+      - name: Wait for App2 health check
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST_2 }}
+          EC2_KEY: ${{ secrets.EC2_SSH_KEY_2 }}
+        run: |
+          echo "$EC2_KEY" > ec2_key.pem
+          chmod 600 ec2_key.pem
+          for i in $(seq 1 18); do
+            STATUS=$(ssh -o StrictHostKeyChecking=no -i ec2_key.pem "ubuntu@$EC2_HOST" \
+              "curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/actuator/health" \
+              2>/dev/null) || STATUS="000"
+            if [ "$STATUS" = "200" ]; then
+              echo "App2 healthy (attempt $i)"
+              exit 0
+            fi
+            echo "Attempt $i: status=$STATUS — waiting 10s..."
+            sleep 10
+          done
+          echo "App2 health check timed out" && exit 1

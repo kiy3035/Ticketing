@@ -7,36 +7,41 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.KafkaContainer;
 import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 /**
  * Testcontainers 기반 통합 테스트 베이스 클래스.
  *
- * <p>MySQL, Redis, Kafka 컨테이너를 자동으로 띄우고
- * Spring 프로퍼티에 동적 바인딩한다.
- * CI 환경에서도 로컬 인프라 없이 테스트가 가능하다.</p>
+ * <p>컨테이너를 static 초기화 블록에서 한 번만 시작하고 JVM 종료 시까지 유지한다.
+ * @Testcontainers + @Container 조합은 테스트 클래스마다 컨테이너를 재시작해
+ * Spring Context Cache가 이전 포트를 참조하는 mismatch 문제가 생긴다.
+ * static 싱글턴 방식으로 모든 테스트 클래스가 동일한 컨테이너 인스턴스·포트를 공유한다.</p>
  *
  * <p>사용법: 테스트 클래스에서 {@code extends IntegrationTestBase}만 하면 된다.</p>
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Testcontainers
 @ActiveProfiles("test")
 public abstract class IntegrationTestBase {
 
-	@Container
-	static final MySQLContainer<?> mysql = new MySQLContainer<>(DockerImageName.parse("mysql:8.0"))
-		.withDatabaseName("ticketing_test")
-		.withUsername("test")
-		.withPassword("test");
+	static final MySQLContainer<?> mysql;
+	static final GenericContainer<?> redis;
+	static final KafkaContainer kafka;
 
-	@Container
-	static final GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
-		.withExposedPorts(6379);
+	static {
+		mysql = new MySQLContainer<>(DockerImageName.parse("mysql:8.0"))
+			.withDatabaseName("ticketing_test")
+			.withUsername("test")
+			.withPassword("test");
 
-	@Container
-	static final KafkaContainer kafka = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.5.0"));
+		redis = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
+			.withExposedPorts(6379);
+
+		kafka = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.5.0"));
+
+		mysql.start();
+		redis.start();
+		kafka.start();
+	}
 
 	@DynamicPropertySource
 	static void configureProperties(DynamicPropertyRegistry registry) {
@@ -46,6 +51,11 @@ public abstract class IntegrationTestBase {
 		registry.add("spring.datasource.password", mysql::getPassword);
 		registry.add("spring.jpa.hibernate.ddl-auto", () -> "create-drop");
 		registry.add("spring.flyway.enabled", () -> "false");
+
+		// 동시성 테스트(100 스레드)에서 Hikari 기본 풀 크기(10)로는 connection timeout 발생.
+		// 최대 풀을 스레드 수만큼 확보한다.
+		registry.add("spring.datasource.hikari.maximum-pool-size", () -> "120");
+		registry.add("spring.datasource.hikari.connection-timeout", () -> "10000");
 
 		// Redis
 		registry.add("spring.data.redis.host", redis::getHost);

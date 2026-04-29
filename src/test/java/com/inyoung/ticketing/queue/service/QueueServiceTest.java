@@ -2,14 +2,14 @@ package com.inyoung.ticketing.queue.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
-import java.time.Duration;
 import java.util.Collections;
-import java.util.Set;
+import java.util.function.Supplier;
+import com.inyoung.ticketing.common.resilience.RedisCircuitBreakerExecutor;
 import com.inyoung.ticketing.config.TicketingProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,6 +34,8 @@ class QueueServiceTest {
 	private ValueOperations<String, String> valueOperations;
 	@Mock
 	private ZSetOperations<String, String> zSetOperations;
+	@Mock
+	private RedisCircuitBreakerExecutor redisCb;
 
 	private TicketingProperties properties;
 	private QueueService queueService;
@@ -43,10 +45,15 @@ class QueueServiceTest {
 
 	@BeforeEach
 	void setUp() {
+		// redisCb.execute()가 호출되면 action 람다를 그대로 실행한다.
+		// 이렇게 해야 내부의 redisTemplate 호출(Mock stub)이 실제로 실행된다.
+		when(redisCb.execute(anyString(), any(), any()))
+			.thenAnswer(inv -> ((Supplier<?>) inv.getArgument(1)).get());
+
 		when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
 		properties = new TicketingProperties();
 		properties.getQueue().setTokenTtlSeconds(60);
-		queueService = new QueueService(redisTemplate, properties);
+		queueService = new QueueService(redisTemplate, properties, redisCb);
 	}
 
 	/**
@@ -60,6 +67,7 @@ class QueueServiceTest {
 		when(redisTemplate.opsForValue()).thenReturn(valueOperations);
 		when(zSetOperations.range(eq("queue:concert:" + CONCERT_ID), eq(0L), eq(-1L)))
 			.thenReturn(Collections.emptySet());
+		when(zSetOperations.add(anyString(), anyString(), anyDouble())).thenReturn(true);
 		when(zSetOperations.rank(anyString(), anyString())).thenReturn(0L);
 		when(zSetOperations.size(eq("queue:concert:" + CONCERT_ID))).thenReturn(1L);
 

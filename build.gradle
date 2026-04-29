@@ -85,6 +85,10 @@ tasks.withType(JavaCompile) {
 
 tasks.named('test') {
 	useJUnitPlatform()
+	testLogging {
+		events 'passed', 'failed', 'skipped'
+		showStandardStreams = false
+	}
 }
 
 // Spring Boot 실행 시 JVM 메모리 설정 (8GB RAM 환경에 맞춤)

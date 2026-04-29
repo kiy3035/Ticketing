@@ -2,54 +2,110 @@
 
 ---
 
-### Q1. 좌석 동시 선점을 어떻게 막았는지 설명해 주세요.
+### 🟢 Q1. 좌석 동시 선점을 어떻게 막았는지 설명해 주세요.
 
-**A.** 동일 좌석에 여러 사용자가 동시에 홀드나 예약을 시도하는 것을 막기 위해 **Redis 분산 락 + Lua 스크립트 원자적 상태 변경**을 조합했습니다. `HoldService.createHold()`에서는 먼저 `lockService.tryLock("lock:seat:" + seatId, ttl)`로 좌석 단위 락을 잡고, 락 내부에서 DB의 `seat.getStatus() == RESERVED`를 확인한 뒤 `holdStore.createHold(info, ttl)`의 Lua 스크립트로 `hold:seat:{seatId}`·`hold:token:{token}`·`hold:expires` ZSet을 원자적으로 갱신합니다. 마지막으로 `finally` 블록에서 `lockService.unlock(lockKey, lockToken.get())`으로 반드시 락을 해제합니다.
+**A.** 동일 좌석에 여러 사용자가 동시에 홀드/예약을 시도하는 것을 막기 위해 **Redis 분산 락 + Lua 스크립트 원자적 상태 변경 + DB 검증**의 3중 방어를 사용합니다.
 
-> **Q1-1. `finally`에서 unlock하는 이유가 뭔가요? 어차피 TTL로 풀리지 않나요?**
-> **A.** TTL(기본 5초)로 자동 해제되긴 하지만, 정상 흐름에서 5초간 다른 사용자가 해당 좌석을 홀드하지 못하게 됩니다. `finally`에서 즉시 해제하면 락 점유 시간을 최소화해서 다음 사용자의 요청을 빠르게 처리할 수 있습니다. `RedisLockService.unlock()`은 Lua 스크립트(`GET → 토큰 비교 → DEL`)로 구현되어 있어, 자신의 토큰이 아닌 락을 실수로 해제하는 것도 방지합니다.
+`HoldService.createHold()` 흐름:
+1. `Seat` 조회·검증 (concertId 일치, CANCELLED/과거공연 아님, DB 상 RESERVED 아님)
+2. `lockService.tryLock("lock:seat:" + seatId, ttl)` — Redis 분산 락
+3. 락 안에서 다시 `seat.getStatus() == RESERVED` 검증
+4. `holdStore.createHold(info, ttl)` — Lua 스크립트로 `hold:seat:{seatId}`·`hold:token:{token}`·`hold:expires` ZSet 원자 갱신 (`EXISTS` 0이면 생성, 1이면 0 반환→409)
+5. `finally` 에서 `lockService.unlock(lockKey, lockToken)` (Lua: 본인 토큰일 때만 DEL)
 
----
-
-### Q2. 좌석 락을 왜 DB 행 락 대신 Redis로 구현했나요?
-
-**A.** 이 프로젝트의 핵심이 "동시 접속이 매우 많은 상황에서 좌석 선점 제어"이기 때문에, DB 트랜잭션 락에만 의존하면 DB 커넥션과 락 경합이 병목이 됩니다. Redis는 단일 스레드 기반으로 명령을 순차 처리하고 in-memory 특성상 짧은 TTL의 락을 매우 빠르게 처리할 수 있습니다. 또한 `RedisLockService`는 `setIfAbsent(key, token, ttl)` 한 줄로 전역 분산 락을 잡기 때문에, 애플리케이션 인스턴스 수와 무관하게 좌석 단위로 동시 선점을 제어할 수 있습니다.
-
-> **Q2-1. 그럼에도 DB 트랜잭션 락이 필요한 부분은 없나요?**
-> **A.** 있습니다. 환불 배치(`RefundForCancelledConcertScheduler`)에서 `PaymentService.refundCompletedPaymentForCancelledConcert()`는 `paymentRepository.findWithLockById(paymentId)`로 Payment 행을 비관적 잠금(PESSIMISTIC_WRITE)으로 조회합니다. `ReservationService.cancelReservationForRefund()`에서도 `reservationRepository.findWithLockById(reservationId)`를 사용합니다. Redis 락은 TTL 기반이라 장애로 예상보다 빨리 풀릴 수 있기 때문에, 돈과 좌석 최종 상태를 변경하는 구간에서는 DB가 마지막 방어선 역할을 합니다.
+> **🟡 Q1-1. `finally` 에서 unlock 하는 이유? 어차피 TTL 로 풀리지 않나요?**
+> **A.** TTL(기본 5초)로 자동 해제되긴 하지만, 정상 흐름에서 5초간 다른 사용자가 같은 좌석을 홀드하지 못하게 됩니다. `finally` 에서 즉시 해제하면 락 점유 시간을 최소화해 다음 요청 처리 속도가 빨라집니다. unlock 도 Lua (`GET → 토큰 비교 → DEL`) 로 자기 토큰일 때만 풀어 다른 락을 실수로 해제하지 않게 했습니다.
 
 ---
 
-### Q3. Lua 스크립트까지 써서 원자성을 보장한 이유는 무엇인가요?
+### 🟡 Q2. 좌석 락을 왜 DB 행 락 대신 Redis 로 구현했나요?
 
-**A.** 좌석 홀드 생성은 최소 3개의 Redis 키를 동시에 갱신해야 합니다. `HoldStore.CREATE_SCRIPT`는 먼저 `EXISTS KEYS[1]`(= `hold:seat:{seatId}`)로 이미 홀드된 좌석인지 확인하고, 아니면 `SET KEYS[1]`(좌석→토큰), `SET KEYS[2]`(토큰→홀드 정보 JSON), `ZADD KEYS[3]`(`hold:expires` ZSet에 만료 시각)을 한 번에 수행합니다. 이걸 명령어 여러 개로 나누면 중간에 다른 요청이 끼어들어 부분만 반영된 상태가 남을 수 있는데, Lua 스크립트는 Redis 서버에서 원자적으로 실행되므로 이런 문제가 발생하지 않습니다.
+**A.** 핵심이 "동시 접속이 매우 많은 상황에서 좌석 선점 제어" 라서 DB 트랜잭션 락에만 의존하면 DB 커넥션과 락 경합이 병목이 됩니다. Redis 는 단일 스레드 기반이라 `setIfAbsent(key, token, ttl)` 한 줄로 매우 빠른 분산 락이 가능합니다 (~0.1ms). 또 in-memory 라 짧은 TTL 회전이 자유롭고, 애플리케이션 인스턴스 수와 무관하게 좌석 단위 동시 선점을 제어할 수 있습니다.
 
-> **Q3-1. RELEASE_SCRIPT는 어떻게 동작하나요?**
-> **A.** `RELEASE_SCRIPT`는 먼저 `GET KEYS[1]`(= `hold:seat:{seatId}`)이 해당 홀드 토큰과 일치하는지 확인한 후 `DEL`합니다. 토큰이 불일치하면 다른 사용자의 홀드를 삭제하지 않습니다. 이어서 `DEL KEYS[2]`(토큰 키)와 `ZREM KEYS[3]`(만료 ZSet에서 payload 제거)를 수행합니다. 이 검증 로직이 없으면, 만료된 홀드의 cleanup과 새 홀드 생성이 겹칠 때 새 홀드가 삭제되는 사고가 날 수 있습니다.
-
----
-
-### Q4. 락 TTL을 5초로 설정한 근거와, TTL이 짧아서 문제되는 경우는 없나요?
-
-**A.** `TicketingProperties.Lock`에서 기본 TTL 5초, 재시도 횟수 0으로 시작했습니다. 사용자 입장에서 5초 이내에 홀드 생성 응답이 오지 않으면 이미 느끼기엔 너무 오래 걸리는 것이고, Redis에 불필요하게 긴 락을 남기지 않으려는 운영 관점의 절충입니다. 재시도 없음(retryCount=0)으로 설정한 이유는, 락 경합이 심한 구간에서 무의미한 재시도가 Redis/스레드 부하를 늘리기 때문입니다.
-
-> **Q4-1. 5초 안에 처리가 안 끝나면 데이터가 꼬이지 않나요?**
-> **A.** 락 TTL이 만료되더라도 곧바로 데이터가 꼬이진 않습니다. `HoldStore.CREATE_SCRIPT`의 `EXISTS` 검증이 이미 홀드된 좌석을 차단하고, `ReservationService.confirm()`에서도 `seat.getStatus() == RESERVED` 검증과 `holdStore.isSeatHeldByToken()` 확인을 합니다. 즉, 락은 "경쟁 완화" 역할이고, 최종 정합성은 Lua 스크립트의 원자적 검증과 DB 트랜잭션이 책임집니다. 부하 테스트에서 특정 구간의 TTL이 부족하다고 판단되면 `ticketing.lock.ttl-seconds`를 환경 변수로 조정합니다.
+> **🟡 Q2-1. 그럼에도 DB 트랜잭션 락이 필요한 부분은?**
+> **A.** 있습니다. **돈과 좌석 최종 상태 변경 구간**은 DB 가 마지막 방어선입니다.
+> - `paymentRepository.findWithLockByPaymentKey` — 결제 상태 변경 (PESSIMISTIC_WRITE)
+> - `paymentRepository.findWithLockByHoldToken` — 같은 holdToken 재요청 차단
+> - `usersRepository.findWithLockByUsername` — 포인트 차감/환불
+> - `reservationRepository.findWithLockById` — 환불 시 예약 취소
+>
+> Redis 락은 TTL 기반이라 장애로 예상보다 빨리 풀릴 수 있어, 돈이 움직이는 곳은 명시적 PESSIMISTIC_WRITE 로 직렬화합니다.
 
 ---
 
-### Q5. 홀드 만료와 예약 확정이 동시에 일어나는 레이스 컨디션은 어떻게 처리했나요?
+### 🟡 Q3. Lua 스크립트까지 써서 원자성을 보장한 이유?
 
-**A.** 세 단계로 방어합니다. 첫째, `ReservationService.confirm()`에서 `hold.getExpiresAt().isBefore(Instant.now())`로 이미 만료된 홀드이면 바로 실패 처리합니다. 둘째, 좌석 단위 락(`lock:seat:{seatId}`)을 잡기 때문에 `HoldCleanupScheduler`와 동시에 같은 좌석을 조작하려 하면 락 경합에서 한쪽이 실패합니다. 셋째, DB 트랜잭션 안에서 `seat.setStatus(RESERVED)`를 하므로 동일 좌석에 대해 두 개의 예약이 CONFIRMED 상태로 커밋되는 것은 불가능합니다.
+**A.** 좌석 홀드 생성은 최소 3개 키를 동시에 갱신해야 합니다. `HoldStore.CREATE_SCRIPT`:
+```lua
+if redis.call('EXISTS', KEYS[1]) == 1 then return 0 end
+redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])  -- seat→token
+redis.call('SET', KEYS[2], ARGV[3], 'EX', ARGV[2])  -- token→info
+redis.call('ZADD', KEYS[3], ARGV[4], ARGV[3])       -- expires ZSet
+return 1
+```
+명령어 여러 개로 나누면 EXISTS 와 SET 사이에 다른 요청이 끼어들어 부분 반영 상태가 남을 수 있는데, Lua 는 Redis 서버에서 원자적으로 실행되므로 차단됩니다.
 
-> **Q5-1. `HoldCleanupScheduler`는 좌석 락을 안 잡고 홀드를 삭제하는 것 같은데, 괜찮나요?**
-> **A.** 네, `HoldCleanupScheduler`는 `holdStore.releaseByPayload()`를 호출하는데, `RELEASE_SCRIPT`에서 `GET hold:seat:{seatId}`가 해당 토큰과 일치할 때만 `DEL`합니다. 만약 예약 확정 쪽에서 이미 `AFTER_COMMIT` 리스너로 홀드를 해제했다면 seat 키가 없거나 토큰이 불일치하므로 cleanup이 아무 동작을 하지 않습니다. 반대로 cleanup이 먼저 홀드를 지웠다면, 예약 확정 쪽에서 `holdStore.isSeatHeldByToken()`이 false를 반환해 CONFLICT를 던집니다.
+> **🟡 Q3-1. RELEASE_SCRIPT 는 어떻게 동작하나요?**
+> **A.**
+> ```lua
+> if redis.call('GET', KEYS[1]) == ARGV[1] then
+>     redis.call('DEL', KEYS[1])  -- 본인 토큰일 때만 hold:seat 삭제
+> end
+> redis.call('DEL', KEYS[2])      -- hold:token 삭제
+> redis.call('ZREM', KEYS[3], ARGV[2])  -- hold:expires 멤버 제거
+> ```
+> seat 키 삭제만 토큰 검증을 하는 이유: cleanup 과 새 홀드 생성이 겹칠 때 새 홀드가 실수로 삭제되지 않게. token/zset 은 어차피 토큰별이라 무조건 삭제 안전.
 
 ---
 
-### Q6. 이 프로젝트에서 "이중 방어(Redis 락 + DB 트랜잭션)"라고 할 수 있는 부분을 정리해 주세요.
+### 🟡 Q4. 락 TTL 을 5초로 설정한 근거와, TTL 이 짧아서 문제되는 경우는?
 
-**A.** 홀드 생성 시 `HoldService.createHold()`에서 Redis 분산 락 → DB `SeatStatus.RESERVED` 검증 → Lua `EXISTS` 검증이 3중으로 동시 선점을 차단합니다. 예약 확정 시 `ReservationService.confirm()`에서 Redis 분산 락 → `isSeatHeldByToken()` 검증 → DB에서 `seat.getStatus() == RESERVED` 확인 후 `seat.setStatus(RESERVED)` + `reservationRepository.save()`로 트랜잭션 커밋합니다. 이 구조에서 Redis 락은 "빠른 경쟁 완화", Lua는 "Redis 레벨 원자적 검증", DB 트랜잭션은 "최종 정합성 보장"이라는 세 가지 역할을 각각 담당합니다.
+**A.** `TicketingProperties.Lock.ttlSeconds = 5`, `retryCount = 0` 이 디폴트입니다. 5초 안에 홀드 생성 응답이 오지 않으면 사용자 입장에서도 너무 느린 거고, Redis 에 불필요하게 긴 락을 남기지 않으려는 운영 절충입니다.
 
-> **Q6-1. 이중 방어가 성능에 오버헤드를 주지 않나요?**
-> **A.** Redis 락 획득은 `setIfAbsent` 한 번(~0.1ms), Lua 스크립트도 Redis 내부에서 수 마이크로초 이내에 끝납니다. DB 트랜잭션은 어차피 예약 생성 시 필수이므로 추가 비용이 아닙니다. 오히려 Redis 락이 없으면 모든 경쟁 요청이 DB까지 도달해 커넥션 풀이 빠르게 소진되는데, Redis에서 먼저 걸러주기 때문에 DB 부하를 줄이는 효과가 있습니다.
+> **🟡 Q4-1. 5초 안에 처리가 안 끝나면 데이터가 꼬이지 않나요?**
+> **A.** 락 TTL 만료 ≠ 데이터 꼬임입니다. 3중 방어로:
+> - `HoldStore.CREATE_SCRIPT` 의 `EXISTS` 가 이미 홀드된 좌석 차단
+> - `ReservationService.confirm()` 에서 `seat.getStatus() == RESERVED` 검증
+> - `holdStore.isSeatHeldByToken()` 재확인
+>
+> 즉, 락은 "경쟁 완화" 역할이고, 최종 정합성은 Lua 원자 검증과 DB 트랜잭션이 책임집니다. 부하 테스트에서 TTL 부족이 보이면 `ticketing.lock.ttl-seconds` 환경변수로 조정합니다.
+
+---
+
+### 🔴 Q5. 홀드 만료와 예약 확정이 동시에 일어나는 레이스는 어떻게?
+
+**A.** 세 단계로 방어합니다.
+1. `ReservationService.confirm()` 진입 시 `hold.getExpiresAt().isBefore(Instant.now())` → 이미 만료면 즉시 409
+2. `lock:seat:{seatId}` 좌석 락으로 `HoldCleanupScheduler` 와 동시에 같은 좌석을 조작하려 하면 한쪽이 실패
+3. 락 안에서 `holdStore.isSeatHeldByToken(seatId, holdToken)` 재확인 → cleanup 이 먼저 지웠으면 false → 409
+4. DB 트랜잭션에서 `seat.setStatus(RESERVED)` → 동일 좌석 두 번 RESERVED 커밋 불가
+
+> **🔴 Q5-1. `HoldCleanupScheduler` 는 좌석 락을 안 잡고 홀드를 삭제하는데 괜찮나요?**
+> **A.** 네. `HoldStore.RELEASE_SCRIPT` 에서 `GET hold:seat:{seatId}` 가 해당 토큰과 일치할 때만 `DEL` 합니다. 예약 확정이 먼저 AFTER_COMMIT 으로 홀드를 해제했다면 cleanup 은 토큰 불일치로 noop. 반대로 cleanup 이 먼저 지웠다면 confirm 이 `isSeatHeldByToken()` false 로 409. 결국 **마지막에 확정한 쪽만 살아남는** 구조입니다.
+
+---
+
+### 🔴 Q6. 이 프로젝트의 "이중 방어" 를 정리해 주세요.
+
+**A.** 좌석 경합은 4개 레이어로 막습니다:
+
+| 레이어 | 역할 | 비용 |
+|--------|------|------|
+| Redis 락 (`lock:seat:{id}`) | 빠른 경쟁 완화 | ~0.1ms |
+| Lua `EXISTS` 검증 | Redis 레벨 원자적 검증 | 수 μs |
+| DB `seat.status` 검증 | 비즈니스 진실 검사 | DB 쿼리 1회 |
+| DB 트랜잭션 + UNIQUE | 최종 정합성 | 트랜잭션 비용 |
+
+> **🔴 Q6-1. 이중 방어가 성능에 오버헤드를 주지 않나요?**
+> **A.** Redis 호출은 합쳐도 1ms 미만. DB 검증은 어차피 예약 생성 시 필수입니다. 오히려 Redis 락이 없으면 모든 경쟁 요청이 DB까지 도달해 커넥션 풀이 빠르게 소진됩니다 — Redis 에서 먼저 걸러주기 때문에 **DB 부하를 줄이는 효과**가 큽니다.
+
+---
+
+### 🔴 Q7. Saga 보상에 `REQUIRES_NEW` 를 쓴 이유는?
+
+**A.** 결제 완료 (`PaymentService.completePayment`) 가 outer `@Transactional` 인 상태에서 `ReservationService.confirm()` 이 실패하면, 보상 코드(포인트 환불 + 결제 CANCELED)가 같은 트랜잭션이면 outer 롤백과 함께 사라집니다.
+
+`PaymentCompensationService.compensateAfterReservationFailure` 를 `@Transactional(propagation = REQUIRES_NEW)` 로 분리해 outer 와 독립 커밋 → outer 가 롤백되어도 보상은 DB 에 남습니다. 이 후 원래 예외를 다시 던져 클라이언트에는 실패 응답.
+
+> **🔴 Q7-1. 멱등은 어떻게 보장하나요?**
+> **A.** `compensateAfterReservationFailure` 가 `payment.getStatus() == CANCELED` 면 즉시 return, `APPROVED` 가 아닌 다른 상태도 return — 이미 보상된 결제에 다시 호출돼도 안전합니다. PESSIMISTIC_WRITE 로 동시 보상 호출도 직렬화.

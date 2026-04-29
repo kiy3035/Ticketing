@@ -31,7 +31,7 @@
 |------|------|
 | **목적** | 대규모 트래픽 처리·좌석 동시 선점 제어·인프라 운영 경험을 포트폴리오로 증명 |
 | **핵심 문제** | ① 동시 수천 명 접속 시 서버 포화 방지 ② 같은 좌석을 두 명이 동시에 잡는 경쟁 조건 제거 ③ 결제·예약 정합성 보장 |
-| **인프라** | t3a.medium 1대(Redis/Kafka/Prometheus/Grafana) + t3.small 앱 서버 + t3.small k6 서버 |
+| **인프라** | t3a.medium 1대(nginx/Redis/Kafka/Prometheus/Grafana) + t3.small 앱 서버 **2대** + t3.small k6 서버 |
 | **부하 검증** | 동시 1,500 VU HTTP 에러율 0% (pool=30 + VT + 잔여석 캐시 + batch=50 구성) |
 
 ### 주요 구현 기능
@@ -74,10 +74,10 @@
 ┌──────────────────────────────────────────────────────────────────┐
 │                          Client (Browser)                        │
 └──────────────────────────┬───────────────────────────────────────┘
-                           │  HTTPS  (JWT Bearer + X-Refresh-Token)
+                           │  HTTP  (JWT Bearer + X-Refresh-Token)
                            ▼
                ┌───────────────────────┐
-               │    ALB  (예정)         │
+               │  nginx (인프라 서버)    │  ← :80, round-robin
                └──────────┬────────────┘
               ┌───────────┴────────────┐
               ▼                        ▼
@@ -103,7 +103,7 @@
           ┌──────────────┐  ┌──────────────┐
           │  Prometheus  │  │   Grafana    │
           └──────────────┘  └──────────────┘
-          ※ 인프라 서버 (t3a.medium) 1대에서 운영
+          ※ 인프라 서버 (t3a.medium) 1대에서 운영 (nginx 포함)
 ```
 
 ---
@@ -514,17 +514,18 @@ erDiagram
 ## 9. 인프라 구성
 
 ```
-[사용자] → [ALB (예정)] → [t3.small #1 / #2]
-                                  ↓
-                    [t3a.medium: Redis, Kafka, Prometheus, Grafana]
-                                  ↓
-                              [MySQL]
+[사용자] → [nginx :80 (인프라 서버)] → [t3.small #1 / #2]
+                                              ↓
+                          [t3a.medium: Redis, Kafka, Prometheus, Grafana]
+                                              ↓
+                                          [MySQL]
 ```
 
 | 서버 | 스펙 | 역할 |
 |------|------|------|
-| 인프라 서버 | t3a.medium | Redis 7, Kafka, Prometheus, Grafana |
-| 앱 서버 | t3.small (현재 1대, 2대 예정) | Java 21 Spring Boot 3.4 |
+| 인프라 서버 | t3a.medium | **nginx** (round-robin LB), Redis 7, Kafka, Prometheus, Grafana |
+| 앱 서버 #1 | t3.small | Java 21 Spring Boot 3.4 |
+| 앱 서버 #2 | t3.small | Java 21 Spring Boot 3.4 |
 | k6 서버 | t3.small | 부하 테스트 전용 |
 
 스케일아웃 상세 → [`deployment-ec2.md`](deployment-ec2.md)

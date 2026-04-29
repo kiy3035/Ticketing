@@ -110,6 +110,8 @@ public class JwtAuthenticationService {
 		}
 
 		// Case 3: Refresh 만 만료 — Access 가 살아 있고 블랙리스트가 아니면 새 Refresh 발급·DB 교체
+		// revokeByJti + saveNew 를 replaceRefresh 한 트랜잭션으로 묶어 원자성을 보장한다.
+		// 서버 2대 환경에서 두 트랜잭션 사이 race condition으로 family 전체 무효화가 발생하는 것을 방지한다.
 		if (refreshExpired) {
 			if (tokenBlacklistService.isAccessBlacklisted(accessJti)) {
 				writeUnauthorized(response);
@@ -121,11 +123,8 @@ public class JwtAuthenticationService {
 			}
 			String newJti = jwtTokenService.newJti();
 			String newRefresh = jwtTokenService.createRefreshToken(subR, newJti);
-			String familyId = refreshTokenPersistenceService.findFamilyIdByJti(refreshJti)
-				.orElseGet(() -> jwtTokenService.newJti());
-			refreshTokenPersistenceService.revokeByJti(refreshJti);
-			refreshTokenPersistenceService.saveNew(
-				newJti, subR, jwtTokenService.newRefreshExpiryDateTime(), familyId);
+			refreshTokenPersistenceService.replaceRefresh(
+				refreshJti, newJti, subR, jwtTokenService.newRefreshExpiryDateTime());
 			setSecurityContext(subR, role);
 			response.setHeader("X-New-Refresh-Token", newRefresh);
 			return true;

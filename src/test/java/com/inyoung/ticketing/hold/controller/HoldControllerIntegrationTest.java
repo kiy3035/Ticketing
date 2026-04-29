@@ -1,14 +1,15 @@
 package com.inyoung.ticketing.hold.controller;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.inyoung.ticketing.auth.jwt.JwtAuthenticationService;
 import com.inyoung.ticketing.hold.dto.HoldRequest;
 import com.inyoung.ticketing.hold.dto.HoldResponse;
 import com.inyoung.ticketing.hold.service.HoldService;
@@ -19,15 +20,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
- * 홀드 API 통합 테스트.
- * POST /api/holds (좌석 홀드 생성)에 대한 HTTP 계약을 검증한다.
- * HoldController만 로딩하고 HoldService는 Mock으로 대체하여,
- * 인증된 사용자가 JSON body로 요청 시 200 OK와 응답 body에 holdToken이 포함되는지 확인한다.
+ * 홀드 API 슬라이스 테스트.
+ * POST /api/holds 의 HTTP 계약(상태 코드 201, 응답 body)을 검증한다.
+ *
+ * @WebMvcTest 에서 SecurityConfig 가 의존하는 UsersService(UserDetailsService)가 스캔 범위 밖이라
+ * 기본 Spring Security(CSRF 활성화, 폼 로그인)가 적용된다.
+ * user() PostProcessor 로 SecurityContext 를 세션에 주입하고,
+ * csrf() 로 CSRF 토큰을 함께 보내면 기본 Security 를 정상 통과한다.
  */
 @WebMvcTest(HoldController.class)
 class HoldControllerIntegrationTest {
@@ -38,36 +40,30 @@ class HoldControllerIntegrationTest {
 	private ObjectMapper objectMapper;
 
 	@MockitoBean
+	private JwtAuthenticationService jwtAuthenticationService;
+	@MockitoBean
 	private ActiveUserTracker activeUserTracker;
 	@MockitoBean
 	private HoldService holdService;
 
 	/**
-	 * POST /api/holds (Content-Type: application/json, body: concertId, seatId) 호출 시
-	 * - 인증된 사용자(user1)로 요청하고, HoldService가 성공 응답을 반환하도록 Mock 했을 때
-	 * - HTTP 200 OK 인지
-	 * - 응답 body에 holdToken(hold-token-123)이 포함되는지(래핑 여부와 무관하게)
-	 * 검증. 홀드 생성 API의 성공 경로와 클라이언트가 결제 페이지로 넘길 수 있는 토큰이 오는지 확인한다.
+	 * POST /api/holds 호출 시
+	 * - 인증된 사용자(user1)로 요청하고 HoldService 가 성공 응답을 반환할 때
+	 * - HTTP 201 Created 인지
+	 * - 응답 body(ApiResponse 래핑)에 holdToken 필드가 포함되는지 검증.
 	 */
 	@Test
-	void createHold_returns200WithHoldToken_whenSuccess() throws Exception {
-		var auth = new UsernamePasswordAuthenticationToken("user1", "x", AuthorityUtils.createAuthorityList("ROLE_USER"));
+	void createHold_returns201WithHoldToken_whenSuccess() throws Exception {
 		HoldRequest request = new HoldRequest(1L, 10L);
 		HoldResponse response = new HoldResponse("hold-token-123", Instant.now().plusSeconds(600));
-		when(holdService.createHold(any(HoldRequest.class), eq("user1"))).thenReturn(response);
+		when(holdService.createHold(any(HoldRequest.class), any(String.class))).thenReturn(response);
 
 		mockMvc.perform(post("/api/holds")
-				.with(authentication(auth))
+				.with(user("user1").roles("USER"))
 				.with(csrf())
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(objectMapper.writeValueAsString(request)))
-			.andExpect(status().isOk())
-			.andExpect(result -> {
-				String body = result.getResponse().getContentAsString();
-				if (body.contains("hold-token-123")) {
-					return;
-				}
-				throw new AssertionError("Expected body to contain holdToken: " + body);
-			});
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.data.holdToken").value("hold-token-123"));
 	}
 }

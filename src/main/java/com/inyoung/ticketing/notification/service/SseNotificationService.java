@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.inyoung.ticketing.notification.dto.NotificationItemResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.connection.Message;
 import org.springframework.data.redis.connection.MessageListener;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -46,6 +47,9 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
  *    - 변경: ObjectMapper로 JSON 직렬화 → redisTemplate.convertAndSend()로 Redis 채널에 발행.
  *      실제 emitter.send()는 onMessage() 콜백에서 수행한다.
  *      → 발행 인스턴스가 어디든 상관없이 에미터를 보유한 인스턴스가 수신해서 전달.
+ *    - Redis 장애(DataAccessException)는 여기서 흡수한다.
+ *      catch하지 않으면 Kafka 컨슈머까지 예외가 전파되어 SSE 알림 실패 때문에
+ *      정상 이벤트가 DLT로 이동하는 과잉 반응이 발생한다.
  *
  * 5. onMessage() 메서드 추가 (MessageListener 구현)
  *    - Redis가 구독 채널에 메시지를 전달할 때 호출하는 콜백.
@@ -115,6 +119,12 @@ public class SseNotificationService implements MessageListener {
 	 *   2) Redis 채널 "sse:notify:{userId}"에 발행
 	 *   3) 해당 채널을 구독 중인 모든 인스턴스가 onMessage()를 통해 수신
 	 *   4) 에미터를 실제로 보유한 인스턴스만 emitter.send()를 실행
+<<<<<<< HEAD
+=======
+	 *
+	 * DataAccessException(Redis 장애) 처리:
+	 *   catch하지 않으면 Kafka 컨슈머(SeatHoldEventConsumer)까지 전파되어
+	 *   재시도 3회 후 DLT로 이동한다. SSE 알림은 best-effort이므로 여기서 흡수한다.
 	 */
 	public void sendNotification(String userId, Object data) {
 		try {
@@ -123,6 +133,10 @@ public class SseNotificationService implements MessageListener {
 			redisTemplate.convertAndSend(CHANNEL_PREFIX + userId, json);
 		} catch (JsonProcessingException e) {
 			log.warn("SSE 알림 직렬화 실패: userId={}", userId, e);
+		} catch (DataAccessException e) {
+			// Redis 장애 시 SSE 알림은 포기하고 로그만 남긴다.
+			// 예외를 다시 던지면 Kafka 재시도 → DLT로 이어지므로 여기서 흡수.
+			log.warn("SSE 알림 Redis 발행 실패 (Redis 장애): userId={}, reason={}", userId, e.getMessage());
 		}
 	}
 

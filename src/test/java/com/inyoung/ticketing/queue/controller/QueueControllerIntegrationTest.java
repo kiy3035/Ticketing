@@ -16,7 +16,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.security.test.context.support.WithAnonymousUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -55,7 +54,6 @@ class QueueControllerIntegrationTest {
 	 * 대기열 진입 API의 성공 경로와 JSON 형식이 기대대로인지 확인한다.
 	 */
 	@Test
-	@WithAnonymousUser
 	void enter_returns201WithTokenAndRank_whenQueueEnterSucceeds() throws Exception {
 		var tokenInfo = new QueueService.QueueTokenInfo("token-123", 1L, 1L);
 		when(queueService.enterQueue(anyLong(), anyString())).thenReturn(tokenInfo);
