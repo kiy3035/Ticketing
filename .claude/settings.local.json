@@ -4,7 +4,9 @@
       "Bash(npm list *)",
       "Bash(grep -E '\\\\.\\(md|gradle|yml|yaml|dockerfile|gitignore\\)$')",
       "Bash(xargs wc *)",
-      "Bash(./gradlew compileJava)"
+      "Bash(./gradlew compileJava)",
+      "Bash(./gradlew test *)",
+      "Bash(grep -cE \" PASSED$\")"
     ]
   }
 }

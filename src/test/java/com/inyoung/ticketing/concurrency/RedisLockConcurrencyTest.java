@@ -40,6 +40,7 @@ class RedisLockConcurrencyTest extends IntegrationTestBase {
 		CountDownLatch startLatch = new CountDownLatch(1);
 
 		AtomicInteger successCount = new AtomicInteger(0);
+		AtomicInteger exceptionCount = new AtomicInteger(0);
 		List<Future<?>> futures = new ArrayList<>();
 
 		for (int i = 0; i < threadCount; i++) {
@@ -53,7 +54,8 @@ class RedisLockConcurrencyTest extends IntegrationTestBase {
 						successCount.incrementAndGet();
 					}
 				} catch (Exception e) {
-					// 실패 무시
+					// Redis 연결 실패 시 카운트. successCount=0 이면 race condition이 아닌 인프라 문제.
+					exceptionCount.incrementAndGet();
 				}
 			}));
 		}
@@ -67,7 +69,7 @@ class RedisLockConcurrencyTest extends IntegrationTestBase {
 		executor.shutdown();
 
 		assertThat(successCount.get())
-			.as("동시 락 시도 시 정확히 1개만 획득해야 한다")
+			.as("동시 락 시도 시 정확히 1개만 획득해야 한다 (예외 발생 스레드: %d)", exceptionCount.get())
 			.isEqualTo(1);
 	}
 }

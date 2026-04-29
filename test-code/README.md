@@ -15,6 +15,11 @@
 | [04-capturing-evidence.md](04-capturing-evidence.md) | **결과 캡처** — HTML 리포트, JaCoCo 커버리지, 스크린샷 폴더 운영 |
 | [05-test-catalog.md](05-test-catalog.md) | **테스트 카탈로그** — 현재 작성된 12개 테스트의 시나리오/검증 항목 표 |
 | [06-interview-qa.md](06-interview-qa.md) | **면접 예상 Q&A** — 테스트 관련 질문에 대한 답변 스크립트 |
+| [07-bugs-found-via-testing.md](07-bugs-found-via-testing.md) | **실제 발견·수정한 버그 3건** — 테스트/코드리뷰로 찾은 근거 자료 |
+| [08-k6-vs-junit.md](08-k6-vs-junit.md) | **k6 부하 테스트 vs JUnit** — 차이·역할 분담·포트폴리오 노출 가이드 |
+| [09-saga-compensation-test.md](09-saga-compensation-test.md) | **Saga 보상 트랜잭션 통합 테스트** — 결제 실패 시 포인트 복원·멱등성 검증 4 시나리오 |
+| [10-kafka-idempotency-test.md](10-kafka-idempotency-test.md) | **Kafka 컨슈머 멱등성 통합 테스트** — at-least-once 중복 처리 차단 검증 4 시나리오 |
+| [11-seat-hold-consumer-idempotency-test.md](11-seat-hold-consumer-idempotency-test.md) | **SeatHoldEventConsumer 멱등성** — 동일 결함 연쇄 발견·holdToken+type 키 설계 |
 
 ## 산출물 (evidence/)
 
