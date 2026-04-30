@@ -36,11 +36,10 @@ public class JwtTokenIssueService {
 	@Transactional
 	public TokenPairResponse issueForUsername(String username) {
 		String role = usersService.loadUserRole(username);
-		String familyId = jwtTokenService.newJti();
 		String refreshJti = jwtTokenService.newJti();
 		String access = jwtTokenService.createAccessToken(username, role);
 		String refresh = jwtTokenService.createRefreshToken(username, refreshJti);
-		refreshTokenPersistenceService.saveNew(refreshJti, username, jwtTokenService.newRefreshExpiryDateTime(), familyId);
+		refreshTokenPersistenceService.saveNew(refreshJti, username, jwtTokenService.newRefreshExpiryDateTime());
 		return new TokenPairResponse(access, refresh, "Bearer");
 	}
 }

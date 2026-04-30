@@ -15,10 +15,9 @@ import org.springframework.stereotype.Service;
  * 보호된 요청마다 Access·Refresh 를 검사하고, 네 가지 만료 조합에 따라 재발급 또는 401 을 결정한다.
  * <p>
  * <b>전제</b>: 인증이 필요한 API에는 {@code Authorization: Bearer} 와 {@code X-Refresh-Token} 이 함께 온다(단, SSE 는 쿼리 파라미터 예외).
- * 이미 폐기된 Refresh jti 재사용 시(가족 탈취 탐지) 해당 family의 모든 Refresh를 무효화하고 401 을 반환한다.
  * <b>Case 1</b> 둘 다 만료 → 401<br>
- * <b>Case 2</b> Access 만 만료 → Refresh DB 검증 후 새 Access·Refresh(회전), {@code X-New-Access-Token}·{@code X-New-Refresh-Token}<br>
- * <b>Case 3</b> Refresh 만 만료 → Access 블랙리스트 확인 후 새 Refresh 발급·DB 갱신(동일 family), {@code X-New-Refresh-Token}<br>
+ * <b>Case 2</b> Access 만 만료 → Refresh DB 검증 후 새 Access 발급, {@code X-New-Access-Token} 헤더로 전달<br>
+ * <b>Case 3</b> Refresh 만 만료 → Access 가 살아있으면 정상 통과 (Refresh 자동 재발급은 하지 않음)<br>
  * <b>Case 4</b> 둘 다 유효 → Access 블랙리스트·Refresh DB 검증 후 {@link SecurityContextHolder} 설정<br>
  * </p>
  */
@@ -80,38 +79,27 @@ public class JwtAuthenticationService {
 		String accessJti = ac.getId();
 		String refreshJti = rc.getId();
 
-		if (refreshTokenPersistenceService.detectReuseOfRevokedRefreshAndInvalidateFamily(refreshJti)) {
-			writeUnauthorized(response);
-			return false;
-		}
-
 		// Case 1: 둘 다 만료 → 재로그인
 		if (accessExpired && refreshExpired) {
 			writeUnauthorized(response);
 			return false;
 		}
 
-		// Case 2: Access 만 만료 — Refresh JWT·DB 가 유효하면 Access 재발급 + Refresh 회전(동일 family)
+		// Case 2: Access 만 만료 — Refresh JWT·DB 가 유효하면 새 Access 발급 (Refresh 는 그대로 유지)
 		if (accessExpired) {
 			if (!refreshTokenPersistenceService.isValidStoredRefresh(refreshJti, subR)) {
 				writeUnauthorized(response);
 				return false;
 			}
-			String newRefreshJti = jwtTokenService.newJti();
-			String newRefresh = jwtTokenService.createRefreshToken(subR, newRefreshJti);
-			refreshTokenPersistenceService.rotateRefreshAfterAccessRenewal(
-				refreshJti, subR, newRefreshJti, jwtTokenService.newRefreshExpiryDateTime());
 			String role = usersService.loadUserRole(subR);
 			String newAccess = jwtTokenService.createAccessToken(subR, role);
 			setSecurityContext(subR, role);
 			response.setHeader("X-New-Access-Token", newAccess);
-			response.setHeader("X-New-Refresh-Token", newRefresh);
 			return true;
 		}
 
-		// Case 3: Refresh 만 만료 — Access 가 살아 있고 블랙리스트가 아니면 새 Refresh 발급·DB 교체
-		// revokeByJti + saveNew 를 replaceRefresh 한 트랜잭션으로 묶어 원자성을 보장한다.
-		// 서버 2대 환경에서 두 트랜잭션 사이 race condition으로 family 전체 무효화가 발생하는 것을 방지한다.
+		// Case 3: Refresh 만 만료 — Access 가 살아있으면 정상 통과. Refresh 자동 재발급은 하지 않음.
+		// 다음 Access 만료 시점에 Case 1 (둘 다 만료) 으로 진입해 재로그인 유도.
 		if (refreshExpired) {
 			if (tokenBlacklistService.isAccessBlacklisted(accessJti)) {
 				writeUnauthorized(response);
@@ -121,12 +109,7 @@ public class JwtAuthenticationService {
 			if (role == null || role.isBlank()) {
 				role = usersService.loadUserRole(subR);
 			}
-			String newJti = jwtTokenService.newJti();
-			String newRefresh = jwtTokenService.createRefreshToken(subR, newJti);
-			refreshTokenPersistenceService.replaceRefresh(
-				refreshJti, newJti, subR, jwtTokenService.newRefreshExpiryDateTime());
 			setSecurityContext(subR, role);
-			response.setHeader("X-New-Refresh-Token", newRefresh);
 			return true;
 		}
 
@@ -148,7 +131,7 @@ public class JwtAuthenticationService {
 	}
 
 	/**
-	 * 로그아웃: Refresh jti 는 항상 revoke 시도, Access 는 아직 만료 전이면 jti 를 Redis 블랙리스트에 넣는다.
+	 * 로그아웃: Refresh jti 폐기 + Access 가 만료 전이면 jti 를 Redis 블랙리스트에 등록.
 	 */
 	public void logout(String authorizationHeader, String refreshHeader) {
 		String access = bearerValue(authorizationHeader);
@@ -156,7 +139,7 @@ public class JwtAuthenticationService {
 		if (refresh != null && !refresh.isBlank()) {
 			jwtTokenService.parseSignedClaimsLenient(refresh).ifPresent(rc -> {
 				if (JwtTokenService.TYP_REFRESH.equals(rc.get(JwtTokenService.CLAIM_TYP)) && rc.getId() != null) {
-					refreshTokenPersistenceService.revokeEntireFamilyByRefreshJti(rc.getId());
+					refreshTokenPersistenceService.revokeByJti(rc.getId());
 				}
 			});
 		}

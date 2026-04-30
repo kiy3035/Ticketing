@@ -65,62 +65,7 @@ abstract class IntegrationTestBase {
 
 ---
 
-## Bug 2. JWT Refresh 회전의 비원자 트랜잭션 (코드 리뷰로 발견)
-
-### 위치
-`JwtAuthenticationService.authenticate()` — Case 3 (Access 유효, Refresh 만료)
-
-### 증상
-단일 서버에서는 증상 없음. **서버 2대(스케일아웃) 환경에서만 발생**하는 잠재적 버그.
-
-### 원인
-Refresh 만료 시 "구 Refresh 폐기 → 새 Refresh 저장" 을 **두 개의 별도 트랜잭션**으로 처리하고 있었다.
-
-```java
-// Before: TX1과 TX2 사이에 gap이 존재
-refreshTokenPersistenceService.revokeByJti(oldJti);   // TX1 커밋
-refreshTokenPersistenceService.saveNew(newJti, ...);   // TX2 커밋
-```
-
-**시나리오 A — 서버 장애**:
-TX1 성공(구 토큰 revoked) → TX2 실패(새 토큰 없음) → 사용자 강제 로그아웃
-
-**시나리오 B — 스케일아웃 race condition**:
-```
-서버1: TX1 커밋 (oldJti revoked 상태로 DB에 존재)
-             ↓ gap
-서버2: 같은 oldJti로 요청 수신
-     → detectReuseOfRevokedRefresh() 실행
-     → "이미 revoked된 jti 재사용 = 탈취 의심" 판단
-     → family 전체 무효화 → 정상 사용자 강제 로그아웃
-             ↓
-서버1: TX2 커밋 (이미 family가 무효화된 상태)
-```
-
-### 수정
-두 작업을 `replaceRefresh()` **단일 트랜잭션**으로 묶었다.
-
-```java
-// After: 단일 트랜잭션으로 원자성 보장
-@Transactional
-public void replaceRefresh(String oldJti, String newJti, String username, LocalDateTime newExpiresAt) {
-    String familyId = refreshTokenRepository.findByJti(oldJti)
-        .map(rt -> { rt.setRevoked(true); return rt.getFamilyId(); })
-        .orElseGet(() -> jwtTokenService.newJti());
-    saveNew(newJti, username, newExpiresAt, familyId);
-}
-```
-
-TX1과 TX2 사이의 gap이 사라지므로 서버 간 race condition이 발생하지 않는다.
-
-### 시사점
-- **단일 서버에서 통과하는 테스트가 분산 환경의 안전성을 보장하지 않는다**
-- JWT처럼 상태 변경이 복잡한 도메인은 트랜잭션 경계를 명시적으로 설계해야 한다
-- "2대로 스케일아웃하면 어떻게 되는가?" 라는 질문을 코드 리뷰 단계에서 해야 한다
-
----
-
-## Bug 3. nginx access_log에 JWT 토큰 평문 기록 (코드 리뷰로 발견)
+## Bug 2. nginx access_log에 JWT 토큰 평문 기록 (코드 리뷰로 발견)
 
 ### 위치
 `nginx/nginx.conf` — SSE 경로
@@ -148,9 +93,7 @@ log_format main '... "$request_method $loggable_uri ..."';
 
 ---
 
----
-
-## Bug 4. Kafka 컨슈머 멱등성 누락 (코드 리뷰로 발견)
+## Bug 3. Kafka 컨슈머 멱등성 누락 (코드 리뷰로 발견)
 
 ### 위치
 `PaymentCompleteEventConsumer.handlePaymentComplete()`

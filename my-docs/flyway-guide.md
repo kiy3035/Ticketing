@@ -37,7 +37,8 @@ spring.flyway.baseline-version=0
 | V4 | `V4__kafka_outbox.sql` | Transactional Outbox 테이블 (`RESERVATION_CONFIRMED` 발행용) |
 | V5 | `V5__jwt_refresh_tokens.sql` | JWT 도입 — `refresh_tokens` 테이블 (jti·revoke 관리) |
 | V6 | `V6__drop_users_oauth_columns.sql` | JWT 전환 후 미사용 — `users.oauth_provider`, `oauth_subject` + 유니크 인덱스 제거 |
-| V7 | `V7__refresh_token_family.sql` | Refresh family 도입 — `refresh_tokens.family_id` 컬럼 + 인덱스 추가 (탈취 탐지용) |
+| V7 | `V7__refresh_token_family.sql` | Refresh family 도입 (회전·탈취 탐지용) — V8에서 다시 제거됨 |
+| V8 | `V8__drop_refresh_token_family.sql` | family 기반 회전·탈취 탐지 기능 제거 — `family_id` 컬럼·인덱스 삭제 (단순화) |
 
 ### V2 인덱스 목록 (자주 조회되는 컬럼 조합)
 - `idx_reservation_user_status` — 사용자별 예매 내역

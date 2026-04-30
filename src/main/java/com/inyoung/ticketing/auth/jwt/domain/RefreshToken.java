@@ -15,9 +15,7 @@ import jakarta.persistence.Table;
 
 /**
  * Refresh JWT 의 jti 를 DB 에 보관하는 엔티티.
- * <p>
- * {@link #familyId}: 동일 로그인 세션에서 발급·회전된 Refresh 들이 공유한다. 재사용(탈취) 탐지 시 이 ID 기준으로 전부 폐기한다.
- * </p>
+ * 로그아웃 또는 만료된 Refresh 재발급 시 {@link #revoked} 플래그로 폐기 표시한다.
  */
 @Entity
 @Table(name = "refresh_tokens")
@@ -29,12 +27,6 @@ public class RefreshToken extends BaseEntity {
 	@ManyToOne(fetch = FetchType.LAZY, optional = false)
 	@JoinColumn(name = "user_id", nullable = false)
 	private Users user;
-
-	/**
-	 * 로그인 시 한 번 발급되며, Refresh 회전 시에도 같은 값을 유지해 한 세션의 토큰 끼리 묶는다.
-	 */
-	@Column(name = "family_id", nullable = false, length = 36)
-	private String familyId;
 
 	/** JWT {@code jti} 와 동일하게 저장해 검증 시 조회한다. */
 	@Column(nullable = false, length = 36, unique = true)
@@ -56,14 +48,6 @@ public class RefreshToken extends BaseEntity {
 
 	public void setUser(Users user) {
 		this.user = user;
-	}
-
-	public String getFamilyId() {
-		return familyId;
-	}
-
-	public void setFamilyId(String familyId) {
-		this.familyId = familyId;
 	}
 
 	public String getJti() {
