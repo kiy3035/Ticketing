@@ -6,10 +6,16 @@
 
 **A.** 단위/통합 모두 있습니다 (`src/test/java`):
 - **단위**: `RedisLockServiceTest`, `QueueServiceTest`, `HoldServiceTest`, `IdempotencyServiceTest`, `RateLimitServiceTest`
-- **통합 (Testcontainers)**: `HoldControllerIntegrationTest`, `QueueControllerIntegrationTest`, `IntegrationTestBase`
+- **통합 (Testcontainers)**: `HoldControllerIntegrationTest`, `QueueControllerIntegrationTest`, `JwtAuthenticationIntegrationTest`, `PaymentCompensationIntegrationTest` 등
 - **동시성**: `RedisLockConcurrencyTest`, `SeatHoldConcurrencyTest`
 - **아키텍처**: `ArchitectureTest` (ArchUnit)
 - **부하**: k6 (`load-tests/`)
+
+이 조합을 선택한 이유:
+- **단위** — Mock 기반으로 빠르게 돌아야 할 비즈니스 분기(락 실패 시 예외, 대기열 순번 계산 등)
+- **통합** — Redis Lua 원자성, DB 트랜잭션 경계처럼 실제 인프라 동작이 달라지는 경우는 Testcontainers 로 실물 검증. H2 나 embedded Redis 로 대체하면 방언 차이나 명령 미지원으로 실제와 다른 결과가 나올 수 있음
+- **동시성** — "100명 중 1명만 성공"은 코드 리뷰만으로는 보장 불가. 스레드 100개를 실제로 동시에 출발시켜 카운트 확인
+- **ArchUnit** — 레이어 의존성 규칙 위반은 리뷰 누락 시 돌이키기 비싸서 CI 에서 자동으로 깨지게 고정
 
 ---
 
@@ -22,8 +28,10 @@
 
 로컬·CI 모두 **Docker 만 있으면** 동일 동작. 테스트 프로파일에서는 Flyway 끄고 JPA `create-drop` 으로 스키마 생성. 외부 메일·SMS 는 더미 호스트/키로 막아 네트워크 의존 없이 API·서비스 통합 검증.
 
+**H2 나 embedded Redis 대신 Testcontainers 를 택한 이유**: Lua 스크립트(`EXISTS`, `ZADD`, `ZRANGEBYSCORE`)가 embedded Redis 에서 동작이 다를 수 있고, MySQL 방언 차이로 Flyway 마이그레이션이 H2 에서 실패한 경험이 있었습니다. 컨테이너 기동 비용(첫 실행 30~60초)은 있지만 "실제와 같은 환경에서 통과"가 더 의미 있다고 판단.
+
 > **🟡 Q2-1. E2E 전부 Testcontainers 로만?**
-> **A.** 핵심 플로우는 컨테이너 기반 통합 테스트, 단위는 Mockito. 부하는 별도 k6. 컨테이너 띄우는 시간 비용이 있어서 매번 풀 부트 통합은 비효율.
+> **A.** 핵심 플로우는 컨테이너 기반 통합 테스트, 단위는 Mockito. 부하는 별도 k6. 컨테이너 띄우는 시간 비용이 있어서 매번 풀 부트 통합은 비효율. 단위로 커버 가능한 분기는 단위로, 인프라 동작이 핵심인 경우만 통합으로 올리는 기준을 의식하며 구성.
 
 ---
 
@@ -80,8 +88,8 @@
 **A.**
 - **단위 + 통합 테스트 통과**
 - **ArchUnit 통과** (레이어 규칙)
-- (선택) 정적 분석/포맷 (Checkstyle, SpotBugs)
 - Docker 가 없는 CI 면 Testcontainers 가 실패 → CI 에 Docker-in-Docker 또는 원격 Docker 필요
+- Checkstyle/SpotBugs 는 미적용 — 현 시점 1인 프로젝트라 코드 규칙은 CLAUDE.md + 리뷰로 관리. 팀 규모가 커지면 추가할 항목
 
 > **🔴 Q6-1. 테스트가 부하 테스트까지 커버하나요?**
 > **A.** k6 부하 테스트는 별도 EC2 (`k6 서버`) 에서 수동 실행. CI 마다 돌리기에는 비용·시간 부담. 대신 동시성 단위 테스트(`SeatHoldConcurrencyTest`) 가 정합성 회귀를 매 PR 마다 잡아냅니다.
