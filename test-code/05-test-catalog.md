@@ -9,11 +9,11 @@
 |------|----------|----------|------|
 | 단위 테스트 (Unit) | 3 | 9 | Mockito |
 | 슬라이스 테스트 (Web Slice) | 2 | 2 | @WebMvcTest |
-| 통합 테스트 (Integration) | 3 | 4 | Testcontainers |
+| 통합 테스트 (Integration) | 4 | 9 | Testcontainers |
 | 동시성 테스트 (Concurrency) | 2 | 2 | CountDownLatch + ExecutorService |
 | 아키텍처 테스트 (ArchUnit) | 1 | 3 | @ArchTest |
 | 컨텍스트 로딩 (Smoke) | 1 | 1 | 부팅 검증 |
-| **합계** | **12** | **21** | |
+| **합계** | **13** | **26** | |
 
 ---
 
@@ -93,6 +93,18 @@
 |---|--------|----------|-----------|
 | 1 | `contextLoads` | Spring Boot 컨텍스트 로딩 | 모든 빈 정상 주입 (부팅 가능) |
 
+### 3-4. `JwtAuthenticationIntegrationTest` (Testcontainers MySQL + Redis) ⭐
+**검증 대상**: JWT stateless 약점 보완 — Redis 블랙리스트 + DB Refresh revoke + 4-case 자동 재발급
+**의존성**: 실제 MySQL(Flyway 없이 create-drop) + 실제 Redis + `TestRestTemplate` 전체 HTTP 호출
+
+| # | 메서드 | 시나리오 | 기대 결과 |
+|---|--------|----------|-----------|
+| 1 | `logout_blacklistsAccessJti_andRejectsSubsequentRequests` | 로그아웃 → 같은 Access 로 보호 API 호출 | Redis `jwt:bl:{jti}` 키 존재 + 401 |
+| 2 | `logout_revokesRefresh_andBlocksAccessReissue` | 로그아웃 후 만료 Access + revoke 된 Refresh 로 재발급 시도 | DB `revoked=true` 로 차단 → 401 |
+| 3 | `case2_reissuesAccess_viaResponseHeader` | 만료 Access + 유효 Refresh 로 호출 (Case 2) | 200 OK + `X-New-Access-Token` 헤더에 유효 JWT |
+| 4 | `mismatchedSubject_isRejected` | A의 Access + B의 Refresh (subject 불일치) | 토큰 짜깁기 차단 → 401 |
+| 5 | `blacklistKey_expiresAutomatically_byAccessRemainingTtl` | 짧은 TTL Access jti 블랙리스트 등록 → TTL 경과 | Redis 키 자동 삭제 (메모리 누수 방지) |
+
 ---
 
 ## 4. 동시성 테스트 (Concurrency) ⭐ 핵심
@@ -138,7 +150,7 @@
 | 결제 Saga | "결제 실패 시 좌석 상태 복원" 통합 테스트 | 🔴 High |
 | Kafka 컨슈머 | "이벤트 누락 시 재시도" 검증 | 🟠 Medium |
 | 서킷브레이커 | "Redis 장애 → 회로 OPEN → fallback" 시나리오 | 🟠 Medium |
-| 인증 | "JWT 만료 → refresh → 재발급" 통합 테스트 | 🟡 Low |
+| 인증 | "JWT 서명 위조·만료 토큰 거부" 추가 엣지 케이스 | 🟡 Low |
 | 멱등성 | "결제 API 동일 키 재요청 race condition" 동시성 테스트 | 🟠 Medium |
 
 ---

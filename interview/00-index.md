@@ -14,7 +14,7 @@
 | [05-transaction-and-consistency.md](05-transaction-and-consistency.md) | 트랜잭션 경계, Outbox, Saga(REQUIRES_NEW), 멱등, 일관성 |
 | [06-infra-and-operations.md](06-infra-and-operations.md) | EC2·Docker·nginx, 스케줄러·락, 헬스체크, 배포, 모니터링 |
 | [07-testing-and-quality.md](07-testing-and-quality.md) | Testcontainers, 동시성 테스트, ArchUnit, 멱등 AOP |
-| [08-jwt-auth.md](08-jwt-auth.md) | JWT Access/Refresh, family·회전·탈취 탐지, Redis 블랙리스트 |
+| [08-jwt-auth.md](08-jwt-auth.md) | JWT Access/Refresh, jti 기반 폐기, Redis 블랙리스트 |
 | [09-my-level-answer-guide.md](09-my-level-answer-guide.md) | 답변 템플릿, Saga/CB/Outbox 실전 답변 |
 
 ## 답변 전략 (모든 질문에 공통)

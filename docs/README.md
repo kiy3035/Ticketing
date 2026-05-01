@@ -17,7 +17,7 @@
 |------|------|------|------|
 | **1** | [**backend-portfolio**](backend-portfolio.md) | **메인** — 아키텍처 + 트러블슈팅 4가지 사례 + ADR | 핵심 |
 | 2 | [load-test-portfolio](load-test-portfolio.md) | 부하 테스트 7개 Phase — 가설·실험·해석 |  데이터 |
-| 3 | [jwt-auth](jwt-auth.md) | JWT 4-case 재발급 + family 기반 탈취 감지 | 보조 |
+| 3 | [jwt-auth](jwt-auth.md) | JWT 4-case 재발급 + Redis 블랙리스트 + DB jti revoke | 보조 |
 | 4 | [sequence-diagrams](sequence-diagrams.md) | 좌석 선점 · 결제 + 예약 · Saga 보상 시퀀스 | 시각 |
 
 ### 부록 (참조)

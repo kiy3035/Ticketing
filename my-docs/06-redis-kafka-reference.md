@@ -240,5 +240,5 @@ TTL 없는 ZSet (`hold:expires`, `queue:concert:*`) 이 eviction 대상에서 �
 | 멱등 AOP | `common.idempotency.IdempotencyAspect` / `IdempotencyService` |
 | Rate Limit AOP | `common.ratelimit.RateLimitAspect` / `RateLimitService` |
 | JWT Access 블랙리스트 | `auth.jwt.TokenBlacklistService` |
-| Refresh family·회전 | `auth.jwt.RefreshTokenPersistenceService` |
+| Refresh jti 저장·폐기 (DB) | `auth.jwt.RefreshTokenPersistenceService` |
 | 헬스 (DB+Redis) | `health.TicketingDatastoresHealthIndicator` |

@@ -13,8 +13,35 @@ import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 
 /**
- * 결제 엔티티. READY → APPROVED → COMPLETED. paymentMethod 에 따라 포인트 차감 또는 토스 승인 연동.
- * CARD 시 orderId(위젯 requestPayment 용), tossPaymentKey(토스 승인 후 저장) 사용. reservationId 는 complete 시 설정.
+ * ════════════════════════════════════════════════════════════════
+ * [Payment 엔티티 — 결제]
+ * 상태 흐름: READY → APPROVED → COMPLETED / CANCELED
+ * 결제 수단: POINT(포인트 차감) / CARD(토스 모의결제)
+ *
+ * ■ 연관 엔티티 참조 없이 primitive Long 사용 (concertId, seatId, userId, reservationId)
+ *
+ *   일반적으로 JPA에서 연관 엔티티는 @ManyToOne으로 선언하는 것이 정석이다.
+ *   여기서는 의도적으로 원시 Long 필드를 사용했다. 이유:
+ *
+ *   1. 결제 도메인은 Concert, Seat, Users 객체 자체가 필요 없다.
+ *      금액, 상태, 결제 키만 다루면 되므로 불필요한 조인을 없앤 것.
+ *   2. 결제 이력은 장기 보관 데이터다. 나중에 Concert나 Seat이 삭제되더라도
+ *      결제 기록은 남아있어야 하는데, FK로 걸면 참조 무결성 위반이 생긴다.
+ *   3. 마이크로서비스로 분리를 고려할 때, 각 서비스의 엔티티를 직접 참조하지 않는
+ *      "느슨한 결합" 설계와 일치한다.
+ *
+ *   단점:
+ *   - DB 레벨 FK 제약이 없어서 존재하지 않는 concertId로 결제 레코드가 생길 수 있다.
+ *   - 애플리케이션 레이어에서 반드시 유효성 검증을 해야 한다.
+ *
+ * ■ uniqueConstraints on payment_key, hold_token
+ *   - payment_key: 우리 시스템이 결제 생성 시 발급하는 고유 키 (UUID 기반).
+ *     동일 payment_key로 두 번 결제가 되어서는 안 된다 → DB 유니크 보장.
+ *   - hold_token: Redis에서 좌석을 홀드할 때 발급한 토큰.
+ *     하나의 홀드 토큰으로 하나의 결제만 가능해야 한다 → 중복 결제 방지.
+ *   - 효과: 동시에 동일 키로 INSERT가 들어와도 DB가 하나만 허용 → idempotency 보장.
+ *   - 단점: DataIntegrityViolationException 처리를 서비스에서 해야 한다.
+ * ════════════════════════════════════════════════════════════════
  */
 @Entity
 @Table(
@@ -25,19 +52,34 @@ import jakarta.persistence.UniqueConstraint;
 	}
 )
 public class Payment extends BaseEntity {
+
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
 
+	/**
+	 * 우리 시스템 고유 결제 식별자 (UUID 등).
+	 * paymentKey는 결제 생성 시 서버에서 생성해 클라이언트에 전달하고,
+	 * 이후 조회/취소 시 이 키를 기준으로 찾는다.
+	 */
 	@Column(name = "payment_key", nullable = false, length = 40)
 	private String paymentKey;
 
+	/**
+	 * 좌석 홀드 토큰. Redis에서 발급한 값을 그대로 저장.
+	 * 결제 완료 시 이 토큰으로 어떤 좌석 홀드와 연결된 결제인지 찾는다.
+	 */
 	@Column(name = "hold_token", nullable = false, length = 64)
 	private String holdToken;
 
 	@Column(name = "user_id", nullable = false, length = 64)
 	private String userId;
 
+	/**
+	 * 콘서트 ID (원시 타입).
+	 * @ManyToOne Concert 대신 ID만 저장하는 이유: 결제 처리에서 Concert 객체 불필요.
+	 * (위 클래스 주석의 "primitive Long 사용" 설명 참조)
+	 */
 	@Column(name = "concert_id", nullable = false)
 	private Long concertId;
 
@@ -66,10 +108,21 @@ public class Payment extends BaseEntity {
 	@Column(name = "toss_payment_key", length = 64)
 	private String tossPaymentKey;
 
+	/**
+	 * 결제 상태.
+	 * READY: 결제 생성됨
+	 * APPROVED: 토스 승인 완료 (CARD 전용 중간 상태)
+	 * COMPLETED: 예약 확정까지 완료된 최종 성공 상태
+	 * CANCELED: 취소됨
+	 */
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 20)
 	private PaymentStatus status = PaymentStatus.READY;
 
+	/**
+	 * 연결된 예약 ID. 결제 완료(COMPLETED) 시점에 set됨.
+	 * 결제 생성 시점에는 아직 예약이 없으므로 nullable.
+	 */
 	@Column(name = "reservation_id")
 	private Long reservationId;
 

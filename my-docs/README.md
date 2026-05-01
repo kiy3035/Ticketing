@@ -13,7 +13,7 @@
 | [04-payment-and-refund.md](04-payment-and-refund.md) | request → approve → complete, **Saga 보상(REQUIRES_NEW)**, 환불 배치 |
 | [05-schedulers.md](05-schedulers.md) | **스케줄러 5종**: 대기열 입장·정리, 홀드 만료, 환불, **Outbox 발행** |
 | [06-redis-kafka-reference.md](06-redis-kafka-reference.md) | Redis 키 카탈로그, Lua, **`kafka_outbox`**, Kafka 토픽·DLT·VT |
-| [08-jwt-auth.md](08-jwt-auth.md) | JWT Access/Refresh, **Refresh family + 회전·탈취 탐지**, Redis 블랙리스트 |
+| [08-jwt-auth.md](08-jwt-auth.md) | JWT Access/Refresh, **Refresh jti DB 저장·폐기**, Redis Access 블랙리스트 |
 | [concurrency-deep-dive.md](concurrency-deep-dive.md) | SETNX·Lua·DB 비관적 락, 동시성 테스트 |
 | [resilience-patterns.md](resilience-patterns.md) | **멱등 키·Saga·서킷브레이커·Rate Limit·Outbox** 종합 |
 | [virtual-threads-guide.md](virtual-threads-guide.md) | Virtual Thread 적용 지점(Tomcat, 스케줄러, Kafka 리스너) |

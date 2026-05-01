@@ -62,9 +62,9 @@
 ### 🟡 Q4. 배포 시 다운타임·롤링은?
 
 **A.** **롤링 배포** 가정 (인스턴스 하나씩 새 버전으로 교체).
-- **세션 없음** (JWT) → 재로그인 부담 없음, 스티키 불필요
-- **JWT Refresh family + 회전** 으로 토큰이 인스턴스 간에서도 유효
-- **DB 마이그레이션**: Flyway (V1~V7), `baseline-on-migrate=true`, `IF NOT EXISTS` 패턴으로 호환
+- **세션 없음** (JWT, stateless) → 재로그인 부담 없음, 스티키 불필요
+- **공유 저장소**(Redis Access 블랙리스트 + DB `refresh_tokens`) 로 인스턴스 간 토큰 검증·폐기 일관성 유지
+- **DB 마이그레이션**: Flyway (V1~V8), `baseline-on-migrate=true`, `IF NOT EXISTS` 패턴으로 호환
 
 **한계 — SSE**: `SseNotificationService` 가 인스턴스 로컬에 `SseEmitter` 보유 → 배포 중 끊김. 다음 단계 개선안:
 - 스티키 세션

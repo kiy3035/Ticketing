@@ -7,12 +7,12 @@
 
 | 항목 | 결과 |
 |------|------|
-| 실행일 | 2026-04-27 |
-| 전체 테스트 수 | **48개** |
-| 통과 | **48개** |
+| 실행일 | 2026-05-01 |
+| 전체 테스트 수 | **53개** |
+| 통과 | **53개** |
 | 실패 | **0개** |
 | 성공률 | **100%** |
-| 소요 시간 | 약 9초 (Testcontainers 이미지 캐시 후) |
+| 소요 시간 | 약 77초 (Testcontainers 이미지 캐시 후) |
 | 빌드 결과 | **BUILD SUCCESSFUL** |
 
 ## 산출물 (../images/)
@@ -21,11 +21,13 @@
 |------|------|---------|------------------|
 | `Test-Summary-Final.png` | `test-code/images/` | HTML 리포트 — **48 tests / 0 failures / 100% successful** + 패키지별 분류 14개 | "단위·슬라이스·통합·동시성·아키텍처 5종, 14개 패키지에 걸쳐 48개 케이스 100% 통과" |
 | `SeatHoldConcurrencyTest.png` | `test-code/images/` | 콘솔 — **`100명이 동시에 같은 좌석 홀드 시도 → 정확히 1명만 성공 PASSED`** + ArchUnit 3개 규칙 통과 | "분산 락의 정확성을 자동화 테스트로 증명. ArchUnit으로 레이어 의존성도 CI에서 강제" |
+| `jwt 테스트 결과.png` | `test-code/images/` | 콘솔 — **JWT 인증 통합 테스트 5개 PASSED** (로그아웃 블랙리스트·DB revoke·Case2 자동 재발급·sub 불일치·TTL 만료) | "JWT stateless 약점 보완을 실제 MySQL+Redis Testcontainers 환경에서 자동화 검증" |
 
-## 테스트 구성 (31개 메서드)
+## 테스트 구성 (36개 메서드)
 
 | 패키지 | 종류 | 테스트 수 |
 |--------|------|----------|
+| `auth.jwt` | **JWT 인증 통합 (Testcontainers MySQL+Redis)** | **5** |
 | `concurrency` | 동시성 (Testcontainers) | 2 |
 | `architecture` | ArchUnit | 3 |
 | `hold.controller` | 슬라이스 (@WebMvcTest) | 1 |
@@ -38,7 +40,7 @@
 | `queue.service` | 단위 (Mockito) | 5 |
 | `ratelimit` | 통합 (Testcontainers) | 1 |
 | `(root)` | 컨텍스트 로딩 | 1 |
-| **합계** | | **31** |
+| **합계** | | **36** |
 
 ## 핵심 검증 시나리오
 

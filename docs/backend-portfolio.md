@@ -38,7 +38,7 @@
 | **부하 검증** | 안정 운영 상한 VU=800 (1,447 RPS, 에러 0%), Knee Point VU=1,000~1,200 |
 
 ### 주요 구현
-- JWT Access/Refresh 인증 (탈취 감지 + family 단위 폐기)
+- JWT Access/Refresh 인증 (Redis Access 블랙리스트 + DB Refresh `revoked` 마킹)
 - Redis ZSet 대기열 + 즉시 입장 임계값
 - Redis 분산 락(SETNX + Lua) + Lua 원자적 좌석 홀드
 - 3단계 결제 플로우 (READY → APPROVED → COMPLETED)
@@ -376,7 +376,7 @@ Grafana 6패널: RPS · HTTP p95 · DB active/pending · 대기열 인원 · JVM
 
 ```
 src/main/java/com/inyoung/ticketing/
-├── auth/          # JWT 인증 (탈취 감지, family 폐기)
+├── auth/          # JWT 인증 (Access 블랙리스트 + Refresh jti revoke)
 ├── concert/       # 콘서트 도메인
 ├── seat/          # 좌석 도메인 (AVAILABLE / HOLD / RESERVED)
 ├── hold/          # 좌석 선점 (Redis Lua 원자 연산)

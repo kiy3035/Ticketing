@@ -156,7 +156,7 @@
 | **서킷브레이커** | Redis 장애가 전체로 전파되지 않도록 Queue/Hold 핵심 경로에 fast-fail + fallback 을 실제 연결했다. |
 | **아웃박스** | 예약 DB 커밋과 이벤트 발행 타이밍 불일치를 outbox + 스케줄러 재시도(최대 25회→FAILED) 로 줄였다. |
 | **Virtual Thread** | Tomcat + 만료/환불 배치 + Kafka 리스너에 적용해 I/O 대기 중 carrier thread 점유를 없앴다. |
-| **JWT** | Refresh family 회전 + Redis Access 블랙리스트로 stateless 의 한계(즉시 무효화)와 탈취 탐지를 동시에 해결. |
+| **JWT** | Refresh jti DB 저장·폐기 + Redis Access 블랙리스트로 stateless 의 한계(즉시 무효화)를 보완. 회전·탈취 탐지는 트레이드오프(정상 사용자 강제 로그아웃)를 고려해 의도적으로 단순 구조 채택. |
 | **분산 락** | 좌석 단위(`lock:seat:*`) + 배치 단위(`lock:batch:*`) 로 동시 선점·중복 실행을 모두 막고, unlock 은 Lua 토큰 검증. |
 | **이중 방어** | Redis 락 → Lua EXISTS → DB seat.status → DB 트랜잭션 4단으로 좌석 경합을 막고 어느 한 단계가 실패해도 정합성 유지. |
 

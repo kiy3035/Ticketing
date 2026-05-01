@@ -8,7 +8,7 @@
 
 | 패키지 | 역할 | 핵심 클래스 |
 |--------|------|-------------|
-| **auth** | 회원가입, 로그인, JWT, Refresh family·회전·블랙리스트 | `AuthApiController`, `UsersService`, `JwtTokenIssueService`, `JwtAuthenticationService`, `JwtAuthenticationFilter`, `RefreshTokenPersistenceService`, `TokenBlacklistService`, `RefreshToken` |
+| **auth** | 회원가입, 로그인, JWT, Refresh jti DB 저장·폐기, Access Redis 블랙리스트 | `AuthApiController`, `UsersService`, `JwtTokenIssueService`, `JwtAuthenticationService`, `JwtAuthenticationFilter`, `RefreshTokenPersistenceService`, `TokenBlacklistService`, `RefreshToken` |
 | **concert** | 공연 목록/상세, 카테고리·과거 공연 필터 | `ConcertController`, `ConcertService` |
 | **seat** | 좌석 목록(DB + Redis 홀드 반영), 잔여석 캐시 | `SeatController`, `SeatService` |
 | **queue** | 콘서트별 대기열 진입/순번/입장 허용/퇴장 | `QueueController`, `QueueService` |

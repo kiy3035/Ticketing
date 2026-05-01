@@ -22,6 +22,7 @@
 | [11-seat-hold-consumer-idempotency-test.md](11-seat-hold-consumer-idempotency-test.md) | **SeatHoldEventConsumer 멱등성** — 동일 결함 연쇄 발견·holdToken+type 키 설계 |
 | [12-hold-store-lua-test.md](12-hold-store-lua-test.md) | **HoldStore Lua 스크립트 원자성** — Redis 레이어에서 중복 홀드 방어 직접 검증 |
 | [13-payment-service-unit-test.md](13-payment-service-unit-test.md) | **PaymentService 단위 테스트** — 결제 분기 7가지 + Saga 보상 호출 verify |
+| [14-jwt-auth-test.md](14-jwt-auth-test.md) | **JWT 인증 통합 테스트** — Redis 블랙리스트·DB revoke·Case 2 자동 재발급·sub 불일치 차단 5 시나리오 |
 
 ## 산출물 (evidence/)
 

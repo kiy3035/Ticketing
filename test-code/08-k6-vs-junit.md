@@ -110,7 +110,7 @@ export default function() {
 |------|----------------|
 | `docs/backend-portfolio.md` | 프로젝트 개요·아키텍처·핵심 구현·결과를 한 페이지로 요약 |
 | `docs/decisions.md` | 5가지 핵심 기술 결정 (락, Kafka, DB락, 멱등, Virtual Thread) — **why 중심** |
-| `docs/jwt-auth.md` | JWT 4-case 재발급, family 탈취 감지, 단일 트랜잭션 — 분산 환경 의식 |
+| `docs/jwt-auth.md` | JWT 4-case 재발급, Redis 블랙리스트 + DB jti revoke, 단일 트랜잭션 — 분산 환경 의식 |
 | `test-code/05-test-catalog.md` | 23개 테스트 메서드 카탈로그 표 |
 | `test-code/07-bugs-found-via-testing.md` | 실제 발견·수정한 버그 3건 (Testcontainers / JWT 트랜잭션 / nginx 로그) |
 | `test-code/evidence/README.md` + `images/` | 23 tests 100% pass 증거 (HTML 리포트 + 동시성 콘솔) |
