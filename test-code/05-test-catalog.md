@@ -7,13 +7,13 @@
 
 | 종류 | 클래스 수 | 메서드 수 | 비고 |
 |------|----------|----------|------|
-| 단위 테스트 (Unit) | 3 | 9 | Mockito |
+| 단위 테스트 (Unit) | 4 | 15 | Mockito |
 | 슬라이스 테스트 (Web Slice) | 2 | 2 | @WebMvcTest |
-| 통합 테스트 (Integration) | 4 | 9 | Testcontainers |
+| 통합 테스트 (Integration) | 6 | 19 | Testcontainers |
 | 동시성 테스트 (Concurrency) | 2 | 2 | CountDownLatch + ExecutorService |
 | 아키텍처 테스트 (ArchUnit) | 1 | 3 | @ArchTest |
 | 컨텍스트 로딩 (Smoke) | 1 | 1 | 부팅 검증 |
-| **합계** | **13** | **26** | |
+| **합계** | **16** | **42** | JWT 블랙리스트 8 + 서킷브레이커 6 + 멱등성 race condition 포함 |
 
 ---
 
@@ -105,6 +105,27 @@
 | 4 | `mismatchedSubject_isRejected` | A의 Access + B의 Refresh (subject 불일치) | 토큰 짜깁기 차단 → 401 |
 | 5 | `blacklistKey_expiresAutomatically_byAccessRemainingTtl` | 짧은 TTL Access jti 블랙리스트 등록 → TTL 경과 | Redis 키 자동 삭제 (메모리 누수 방지) |
 
+### 3-5. `RedisCircuitBreakerExecutorTest` (단위) ⭐
+**검증 대상**: `RedisCircuitBreakerExecutor` CLOSED/OPEN/예외 분기 — Mockito로 CircuitBreaker 목
+**상세**: [15-resilience-circuit-breaker-test.md](15-resilience-circuit-breaker-test.md)
+
+| # | 메서드 | 시나리오 | 기대 결과 |
+|---|--------|----------|-----------|
+| 1 | `execute_returnsActionResult_whenCircuitClosed` | 회로 CLOSED, Redis 호출 성공 | action 결과값 반환 |
+| 2 | `execute_returnsFallback_whenCircuitOpen` | 회로 OPEN — `CallNotPermittedException` | fallback 반환 |
+| 3 | `execute_returnsFallback_andRecordsFailure_whenRedisThrows` | Redis 예외 발생 | fallback 반환 |
+
+### 3-6. `RedisCircuitBreakerIntegrationTest` (Testcontainers Redis) ⭐
+**검증 대상**: CLOSED → OPEN → HALF_OPEN → CLOSED 전체 상태 전이 + QueueService 레벨 fallback
+**상세**: [15-resilience-circuit-breaker-test.md](15-resilience-circuit-breaker-test.md)
+
+| # | 메서드 | 시나리오 | 기대 결과 |
+|---|--------|----------|-----------|
+| 1 | `circuitBreaker_open_returnsFallback_withoutCallingRedis` | OPEN 강제 전환 → execute() 호출 | fallback 반환, action 람다 실행 횟수 0 |
+| 2 | `circuitBreaker_transitionsToOpen_afterFailureRateExceeded` | 슬라이딩 윈도우 실패율 초과 | 상태 OPEN 전환 확인 |
+| 3 | `circuitBreaker_halfOpen_closesAfterSuccessfulProbes` | HALF_OPEN → 3회 성공 프로브 | 상태 CLOSED 복귀 |
+| 4 | `queueService_enterQueue_returnsFallback_whenCircuitForcedOpen` | OPEN 상태에서 QueueService 호출 | 예외 없이 fallback 처리 |
+
 ---
 
 ## 4. 동시성 테스트 (Concurrency) ⭐ 핵심
@@ -147,11 +168,16 @@
 
 | 영역 | 시나리오 | 우선순위 |
 |------|----------|---------|
-| 결제 Saga | "결제 실패 시 좌석 상태 복원" 통합 테스트 | 🔴 High |
-| Kafka 컨슈머 | "이벤트 누락 시 재시도" 검증 | 🟠 Medium |
-| 서킷브레이커 | "Redis 장애 → 회로 OPEN → fallback" 시나리오 | 🟠 Medium |
-| 인증 | "JWT 서명 위조·만료 토큰 거부" 추가 엣지 케이스 | 🟡 Low |
-| 멱등성 | "결제 API 동일 키 재요청 race condition" 동시성 테스트 | 🟠 Medium |
+| 인증 | "JWT 서명 위조·만료 토큰 거부" 추가 엣지 케이스 | ✅ 완료 → `JwtAuthenticationIntegrationTest` 시나리오 6·7·8 |
+
+> 아래 항목들은 완료됨 — 향후 추가 필요 없음
+
+| 영역 | 완료된 테스트 | 위치 |
+|------|-------------|------|
+| 결제 Saga | 결제 실패 시 포인트 복원·CANCELED 전환·REQUIRES_NEW·멱등성 4 시나리오 | `PaymentCompensationIntegrationTest` |
+| Kafka 컨슈머 재시도 | 예외 → 멱등성 키 해제 → Kafka 재전송 시 재처리 가능 | `PaymentCompleteEventConsumerIntegrationTest` 시나리오 4, `SeatHoldEventConsumerIntegrationTest` 시나리오 4 |
+| 서킷브레이커 | CLOSED/OPEN/HALF_OPEN 전이 + fast-fail | `RedisCircuitBreakerExecutorTest`, `RedisCircuitBreakerIntegrationTest` |
+| 멱등성 race condition | 50개 스레드 동시 선점 → 정확히 1개만 성공 | `IdempotencyServiceTest.concurrentAcquire_onlyOneSucceeds` |
 
 ---
 

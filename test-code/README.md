@@ -13,7 +13,7 @@
 | [02-test-types-and-conventions.md](02-test-types-and-conventions.md) | **4가지 테스트 유형** (단위/슬라이스/통합/동시성) + Given-When-Then 컨벤션 |
 | [03-how-to-run.md](03-how-to-run.md) | **실행 명령** — Gradle 태스크, IntelliJ, CI |
 | [04-capturing-evidence.md](04-capturing-evidence.md) | **결과 캡처** — HTML 리포트, JaCoCo 커버리지, 스크린샷 폴더 운영 |
-| [05-test-catalog.md](05-test-catalog.md) | **테스트 카탈로그** — 현재 작성된 12개 테스트의 시나리오/검증 항목 표 |
+| [05-test-catalog.md](05-test-catalog.md) | **테스트 카탈로그** — 현재 작성된 20개 테스트 클래스·40개 메서드의 시나리오/검증 항목 표 |
 | [06-interview-qa.md](06-interview-qa.md) | **면접 예상 Q&A** — 테스트 관련 질문에 대한 답변 스크립트 |
 | [07-bugs-found-via-testing.md](07-bugs-found-via-testing.md) | **실제 발견·수정한 버그 3건** — 테스트/코드리뷰로 찾은 근거 자료 |
 | [08-k6-vs-junit.md](08-k6-vs-junit.md) | **k6 부하 테스트 vs JUnit** — 차이·역할 분담·포트폴리오 노출 가이드 |
@@ -22,7 +22,8 @@
 | [11-seat-hold-consumer-idempotency-test.md](11-seat-hold-consumer-idempotency-test.md) | **SeatHoldEventConsumer 멱등성** — 동일 결함 연쇄 발견·holdToken+type 키 설계 |
 | [12-hold-store-lua-test.md](12-hold-store-lua-test.md) | **HoldStore Lua 스크립트 원자성** — Redis 레이어에서 중복 홀드 방어 직접 검증 |
 | [13-payment-service-unit-test.md](13-payment-service-unit-test.md) | **PaymentService 단위 테스트** — 결제 분기 7가지 + Saga 보상 호출 verify |
-| [14-jwt-auth-test.md](14-jwt-auth-test.md) | **JWT 인증 통합 테스트** — Redis 블랙리스트·DB revoke·Case 2 자동 재발급·sub 불일치 차단 5 시나리오 |
+| [14-jwt-auth-test.md](14-jwt-auth-test.md) | **JWT 인증 통합 테스트** — Redis 블랙리스트·DB revoke·Case 2 자동 재발급·sub 불일치·서명 위조·만료 차단 8 시나리오 |
+| [15-resilience-circuit-breaker-test.md](15-resilience-circuit-breaker-test.md) | **Resilience4j 서킷브레이커 테스트** — CLOSED/OPEN/HALF_OPEN 상태 전이·fallback 반환·QueueService 레벨 검증 7 시나리오 |
 
 ## 산출물 (evidence/)
 
@@ -35,10 +36,10 @@ test-code/
 ├── 05-test-catalog.md
 ├── 06-interview-qa.md
 └── evidence/                  ← 실제 실행 결과(스크린샷, 리포트 발췌)를 모아 둘 폴더
-    ├── unit-tests-passed.png  (gradle test 결과)
-    ├── coverage-report.png    (JaCoCo HTML 리포트)
-    ├── concurrency-test.png   (100 threads → 1 success)
-    └── ...
+    ├── jwt-auth-test-result.md
+    ├── circuit-breaker-test-result.md
+    ├── idempotency-test-result.md
+    └── README.md
 ```
 
 ## 빠른 시작

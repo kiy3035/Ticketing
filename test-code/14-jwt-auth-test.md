@@ -159,11 +159,12 @@ BUILD SUCCESSFUL
 
 ---
 
-## 8. 사용자가 채워야 할 부분 (작성 시 점검)
+## 8. 완료 체크리스트
 
-- [ ] `application-test.properties` 에 짧은 TTL 옵션 추가 (`access-ttl-seconds`, `refresh-ttl-seconds`)
-- [ ] 보호된 API 한 개를 시나리오 호출 대상으로 픽 (예: `GET /api/reservations/me`)
-- [ ] `Users` 엔티티 시그니처 확인 후 `createUser` 헬퍼 작성
-- [ ] 시나리오 5(블랙리스트 TTL 자동 만료) 는 통합으로 둘지 단위 테스트로 분리할지 결정
-- [ ] 통과 후 `evidence/` 에 HTML 리포트 캡처 추가
-- [ ] `05-test-catalog.md` 와 `README.md` 에 14번 항목 추가
+- [x] `application-test.properties` 짧은 TTL 불필요 — `mintExpiredAccessToken()` 헬퍼로 직접 과거 exp 설정
+- [x] 보호된 API: `GET /api/reservations/me` 픽 완료
+- [x] `createUser` 헬퍼 작성 완료
+- [x] 시나리오 5 통합 테스트로 유지 결정 (`Thread.sleep(2500)` 사용)
+- [x] `evidence/jwt-auth-test-result.md` + `images/jwt 테스트 결과.png` 캡처 완료
+- [x] `05-test-catalog.md` 와 `README.md` 에 14번 항목 추가 완료
+- [x] 시나리오 6~8 추가 (서명 위조·둘 다 만료·형식 깨진 JWT) — 8개 전체 PASSED

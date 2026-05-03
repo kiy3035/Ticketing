@@ -45,6 +45,7 @@ class JwtAuthenticationIntegrationTest extends IntegrationTestBase {
 	@Autowired private JwtTokenIssueService jwtTokenIssueService;
 	@Autowired private JwtAuthenticationService jwtAuthenticationService;
 	@Autowired private RefreshTokenPersistenceService refreshTokenPersistenceService;
+	@Autowired private TokenBlacklistService tokenBlacklistService;
 	@Autowired private RefreshTokenRepository refreshTokenRepository;
 	@Autowired private UsersRepository usersRepository;
 	@Autowired private TicketingProperties ticketingProperties;
@@ -171,25 +172,82 @@ class JwtAuthenticationIntegrationTest extends IntegrationTestBase {
 	@Test
 	@DisplayName("짧은 TTL Access 블랙리스트 등록 → TTL 경과 후 키 자동 삭제")
 	void blacklistKey_expiresAutomatically_byAccessRemainingTtl() throws InterruptedException {
-		// given: 2초 뒤 만료되는 Access 의 jti 를 블랙리스트에 등록
+		// given: 2초 뒤 만료되는 jti 를 블랙리스트에 등록
 		String jti = UUID.randomUUID().toString();
 		Instant expiresAt = Instant.now().plusSeconds(2);
 
 		// when
-		// 실제 TokenBlacklistService 빈을 통해 등록 (TTL = 잔여 만료시간)
-		// (this 클래스에 inject 안 한 이유: 다른 시나리오에선 직접 호출 안 함)
-		// TODO: TokenBlacklistService 를 @Autowired 로 추가하고 blacklistAccessJti(jti, expiresAt) 호출
-		// 또는 redisTemplate 으로 직접 SET EX 검증
+		tokenBlacklistService.blacklistAccessJti(jti, expiresAt);
 
-		// then-immediate: 등록 직후엔 키 존재
-		// then-after-ttl: 약 3초 대기 후 키가 사라져야 함
-		// Awaitility 권장 — Thread.sleep 은 fragile
+		// then-immediate: 등록 직후엔 키 존재 (블랙리스트 활성 상태)
+		assertThat(redisTemplate.hasKey("jwt:bl:" + jti))
+			.as("등록 직후에는 블랙리스트 키가 존재해야 한다")
+			.isTrue();
 
-		// 작성 시 헬퍼 채우기:
-		// tokenBlacklistService.blacklistAccessJti(jti, expiresAt);
-		// assertThat(redisTemplate.hasKey("jwt:bl:" + jti)).isTrue();
-		// Thread.sleep(2500);
-		// assertThat(redisTemplate.hasKey("jwt:bl:" + jti)).isFalse();
+		// then-after-ttl: TTL 경과 후 키 자동 삭제 (메모리 무한 누적 방지)
+		Thread.sleep(2500);
+		assertThat(redisTemplate.hasKey("jwt:bl:" + jti))
+			.as("TTL 경과 후에는 Redis 키가 자동 삭제되어야 한다")
+			.isFalse();
+	}
+
+	// ─────────────────────────────────────────────────────────────────────────────
+	// 시나리오 6: 서명 위조 Access → 401 (다른 키로 서명된 토큰 거부)
+	// ─────────────────────────────────────────────────────────────────────────────
+	@Test
+	@DisplayName("위조된 서명의 Access 토큰 → 401 (서명 검증 실패)")
+	void forgedAccessToken_isRejected() {
+		// given: 다른 비밀키로 서명된 Access (형식은 유효한 JWT 지만 서명이 틀림)
+		Users user = createUser(USER_A);
+		TokenPairResponse pair = jwtTokenIssueService.issueForUsername(USER_A);
+		String forgedAccess = mintForgedAccessToken(USER_A, user.getRole());
+
+		// when
+		ResponseEntity<String> response = callProtected(forgedAccess, pair.refreshToken());
+
+		// then: 서명 불일치 → parseSignedClaimsLenient 가 empty 반환 → 인증 거부
+		assertThat(response.getStatusCode())
+			.as("위조 서명 토큰은 즉시 거부되어야 한다")
+			.isEqualTo(HttpStatus.UNAUTHORIZED);
+	}
+
+	// ─────────────────────────────────────────────────────────────────────────────
+	// 시나리오 7: Access + Refresh 둘 다 만료 (Case 1) → 401
+	// ─────────────────────────────────────────────────────────────────────────────
+	@Test
+	@DisplayName("Access + Refresh 둘 다 만료 (Case 1) → 401")
+	void bothTokensExpired_isRejected() {
+		// given: 만료된 Access + 만료된 Refresh
+		Users user = createUser(USER_A);
+		String expiredAccess  = mintExpiredAccessToken(USER_A, user.getRole());
+		String expiredRefresh = mintExpiredRefreshToken(USER_A);
+
+		// when
+		ResponseEntity<String> response = callProtected(expiredAccess, expiredRefresh);
+
+		// then: 재발급 불가 → 401
+		assertThat(response.getStatusCode())
+			.as("Access·Refresh 모두 만료 시 재발급 없이 401")
+			.isEqualTo(HttpStatus.UNAUTHORIZED);
+	}
+
+	// ─────────────────────────────────────────────────────────────────────────────
+	// 시나리오 8: 형식이 깨진 JWT 문자열 → 401
+	// ─────────────────────────────────────────────────────────────────────────────
+	@Test
+	@DisplayName("형식이 깨진 JWT 문자열 → 401 (파싱 불가)")
+	void malformedJwt_isRejected() {
+		// given: JWT 형식이 아닌 문자열
+		createUser(USER_A);
+		TokenPairResponse pair = jwtTokenIssueService.issueForUsername(USER_A);
+
+		// when
+		ResponseEntity<String> response = callProtected("not.a.valid.jwt.token", pair.refreshToken());
+
+		// then: 파싱 실패 → empty → 401
+		assertThat(response.getStatusCode())
+			.as("깨진 JWT 문자열은 파싱 불가로 즉시 401")
+			.isEqualTo(HttpStatus.UNAUTHORIZED);
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────────
@@ -206,6 +264,41 @@ class JwtAuthenticationIntegrationTest extends IntegrationTestBase {
 		u.setRole("USER");
 		u.setPoint(0L);
 		return usersRepository.save(u);
+	}
+
+	/**
+	 * 다른 비밀키로 서명한 Access 토큰. 서명 위조 공격 시나리오 검증용.
+	 */
+	private String mintForgedAccessToken(String username, String role) {
+		SecretKey wrongKey = Keys.hmacShaKeyFor(
+			"wrong-secret-key-at-least-32-bytes-!!!!".getBytes(StandardCharsets.UTF_8));
+		Instant now = Instant.now();
+		return Jwts.builder()
+			.id(UUID.randomUUID().toString())
+			.subject(username)
+			.claim(JwtTokenService.CLAIM_TYP, JwtTokenService.TYP_ACCESS)
+			.claim(JwtTokenService.CLAIM_ROLE, role)
+			.issuedAt(Date.from(now))
+			.expiration(Date.from(now.plusSeconds(3600)))
+			.signWith(wrongKey)
+			.compact();
+	}
+
+	/**
+	 * 같은 비밀키로 서명하되 exp 가 과거인 Refresh 토큰. Case 1(둘 다 만료) 시나리오 검증용.
+	 */
+	private String mintExpiredRefreshToken(String username) {
+		SecretKey key = Keys.hmacShaKeyFor(
+			ticketingProperties.getJwt().getSecret().getBytes(StandardCharsets.UTF_8));
+		Instant now = Instant.now();
+		return Jwts.builder()
+			.id(UUID.randomUUID().toString())
+			.subject(username)
+			.claim(JwtTokenService.CLAIM_TYP, JwtTokenService.TYP_REFRESH)
+			.issuedAt(Date.from(now.minusSeconds(120)))
+			.expiration(Date.from(now.minusSeconds(60)))
+			.signWith(key)
+			.compact();
 	}
 
 	/**
