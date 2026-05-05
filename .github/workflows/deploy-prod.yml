@@ -79,8 +79,8 @@ jobs:
             "docker exec nginx nginx -t && docker exec nginx nginx -s reload"
 
   # ── 3. App1 배포 ──────────────────────────────────────────────────────────
-  # ALB 헬스체크(10s × 2회 = 20s)가 app1을 unhealthy로 감지하면
-  # 자동으로 app2로만 트래픽을 보낸다. 별도 AWS CLI 없이 무중단 효과.
+  # nginx passive health check(max_fails=2 fail_timeout=10s)로 app1 다운 시
+  # 자동으로 app2로만 트래픽을 보낸다. proxy_next_upstream으로 진행 중 요청도 재시도.
   deploy-app1:
     needs: [build, deploy-infra]
     if: always() && needs.build.result == 'success' && (needs.deploy-infra.result == 'success' || needs.deploy-infra.result == 'skipped')

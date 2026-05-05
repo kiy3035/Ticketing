@@ -16,7 +16,7 @@
 | 순서 | 문서 | 내용 | 분량 |
 |------|------|------|------|
 | **1** | [**backend-portfolio**](backend-portfolio.md) | **메인** — 아키텍처 + 트러블슈팅 4가지 사례 + ADR | 핵심 |
-| 2 | [load-test-portfolio](load-test-portfolio.md) | 부하 테스트 7개 Phase — 가설·실험·해석 |  데이터 |
+| 2 | [load-test-portfolio](load-test-portfolio.md) | 부하 테스트 8개 Phase — 가설·실험·해석 (페일오버 포함) |  데이터 |
 | 3 | [jwt-auth](jwt-auth.md) | JWT 4-case 재발급 + Redis 블랙리스트 + DB jti revoke | 보조 |
 | 4 | [sequence-diagrams](sequence-diagrams.md) | 좌석 선점 · 결제 + 예약 · Saga 보상 시퀀스 | 시각 |
 
@@ -38,4 +38,4 @@
 | 1대 기준선 (pool=10) | 800 | 1.93s | ~408/s | 0% |
 | **1대 + 잔여석 캐시** | 800 | **444ms** | **~834/s** | **0%** |
 | **2대 nginx 분산** | 800 | **164ms** | **~1,447/s** | **0%** |
-| 동시 좌석 선점 (정확성) | 100 | - | - | **201: 1건** |
+| 동시 좌석 선점 정확성 (20회 시행) | 100 | - | - | **201: 모든 회차 1건** |

@@ -104,6 +104,7 @@ VU=800이 5ms 간격으로 폴링 → **초당 수천 건 COUNT 쿼리**. 풀을
 
 ![2대 nginx Grafana](../portfolio/7.%20캐시후_nginx_poolsize30_batchsize50_VT_vu800_0.005/2회차.png)
 *nginx `least_conn` 환경에서 처리 안정 — 실측 분배 비율 app1:app2 = 50.9%:49.1% (VU=800, 총 245,506건 기준)*
+> ⚠️ 사진 재촬영 예정: 기존 캡처는 Prometheus 타겟이 app1만 등록되어 있던 시점이라 server2 메트릭 누락. app2 추가 후 재실행·재촬영 필요.
 
 이상적 선형 확장은 2배(~1,668/s). 실측은 1.74배(~1,447/s)로 효율 약 87%. 차이는 공유 자원(Redis/MySQL/nginx) 오버헤드·네트워크 RTT·분산 락 경합에서 발생. DB·Redis가 단일 인스턴스인 분산 환경에서 일반적인 효율 구간(80~95%) 내 양호한 수치.
 
@@ -123,6 +124,7 @@ VU=800이 5ms 간격으로 폴링 → **초당 수천 건 COUNT 쿼리**. 풀을
 | **2대** | **1,500** | **1.74s** | **1,177/s** | **3.41%** |
 
 ![VU=1500 Grafana](../portfolio/8.%20캐시후_nginx_poolsize30_batchsize50_VT_vu1500_0.005/2회차.png)
+> ⚠️ 사진 재촬영 예정: 기존 캡처는 app1 단독 메트릭. app2 추가 후 재실행·재촬영 필요.
 
 **핵심 관측**: VU를 1.875배 늘렸는데 **RPS가 오히려 1,447 → 1,177/s로 감소**. 시스템 포화의 전형적 신호.
 
@@ -174,6 +176,7 @@ VU=800이 5ms 간격으로 폴링 → **초당 수천 건 COUNT 쿼리**. 풀을
 
 ![Knee Point Grafana](../portfolio/9.%20knee_point%20찾기/5회차.png)
 *RPS 곡선이 VU=1000~1200 구간에서 평탄화 → DB pending 스파이크·EOF 발생 (5회차)*
+> ⚠️ 사진 재촬영 예정: 기존 캡처는 app1 단독 메트릭. app2 추가 후 knee-point.js 재실행 + 재촬영 필요.
 
 ### Knee Point 식별 — 두 지표가 같은 구간을 가리킴
 
@@ -287,10 +290,10 @@ passive health check는 "실제 요청이 실패해야 격리 시작"하는 사�
 |------|------|-----------|
 | `proxy_connect_timeout 5s → 1s` | 죽은 서버 응답 대기 시간 단축 → 사용자 에러 감소 | 정상 부하 스파이크에서 false-positive 격리 위험 |
 | `max_fails 2 → 1` | 1번 실패에 격리, 격리 속도 ↑ | 일시적 네트워크 흔들림에도 멀쩡한 서버 격리 |
-| **active health check** (nginx plus / 외부 헬스 프로브 + dynamic upstream) | 죽은 서버를 사용자 요청 전에 미리 발견·격리 → 0에 가까운 에러 가능 | 추가 인프라(nginx plus 라이선스 또는 별도 health probe), 운영 복잡도 증가 |
+| **active health check** (nginx plus 유료 / `nginx_upstream_check_module` 외부 모듈 / 별도 헬스 프로브 + dynamic upstream / K8s·클라우드 LB) | 죽은 서버를 사용자 요청 전에 미리 발견·격리 → 0에 가까운 에러 가능 | 추가 인프라 또는 라이선스, 운영 복잡도 증가 |
 | **클라이언트 retry-with-backoff** | 사용자 단에서 자동 재시도로 에러 숨김 | 클라이언트 구현 필요, 멱등성 보장 필수 |
 
-**결론**: 현재 구성(t3a.small + nginx passive HC)에서 **다운타임 30초 시 사용자 에러 ~20%는 구조적 한계**. 운영 환경에서 이를 5% 미만으로 낮추려면 active health check 도입이 필수. 이 한계는 측정으로 정량화되었고, 개선 방향은 명확한 trade-off 분석으로 도출됨.
+**결론**: 현재 구성(t3a.small + **오픈소스 nginx의 passive HC**)에서 **다운타임 30초 시 사용자 에러 ~20%는 구조적 한계**. 오픈소스 nginx는 active health check를 자체 지원하지 않으므로(유료 nginx Plus 또는 외부 모듈·프로브 필요) 이 에러율 하한이 무료 솔루션 단독으로는 풀리지 않음. 운영 환경에서 5% 미만으로 낮추려면 active HC 도입이 필수. 이 한계는 측정으로 정량화되었고, 개선 방향은 명확한 trade-off 분석으로 도출됨.
 
 > **측정 메트릭 보강**: 1회차 시점에 Prometheus 스크래이프 타겟에 app1만 등록되어 있어 server1 kill 시 모든 패널이 공백으로 보이는 문제 발견. `prometheus.yml`에 app2(172.31.37.7:8080) 추가 후 재측정. 이후 패널 3·4 (DB Pool active/pending)는 인스턴스별 분리(`sum` 미사용)로 server1·server2 라인을 따로 보여주어 failover 동역학을 시각화.
 
