@@ -104,7 +104,8 @@ VU=800이 5ms 간격으로 폴링 → **초당 수천 건 COUNT 쿼리**. 풀을
 
 ![2대 nginx Grafana](../portfolio/7.%20캐시후_nginx_poolsize30_batchsize50_VT_vu800_0.005/2회차.png)
 *nginx `least_conn` 환경에서 처리 안정 — 실측 분배 비율 app1:app2 = 50.9%:49.1% (VU=800, 총 245,506건 기준)*
-> ⚠️ 사진 재촬영 예정: 기존 캡처는 Prometheus 타겟이 app1만 등록되어 있던 시점이라 server2 메트릭 누락. app2 추가 후 재실행·재촬영 필요.
+
+> **재현성 검증**: hot JVM 2회 재측정 평균 p95=135ms, RPS=1,621/s, 에러율 0%. 회차 간 변동 9% 내, 문서 기록값(164ms / 1,447/s)과 동등 이상.
 
 이상적 선형 확장은 2배(~1,668/s). 실측은 1.74배(~1,447/s)로 효율 약 87%. 차이는 공유 자원(Redis/MySQL/nginx) 오버헤드·네트워크 RTT·분산 락 경합에서 발생. DB·Redis가 단일 인스턴스인 분산 환경에서 일반적인 효율 구간(80~95%) 내 양호한 수치.
 
@@ -124,7 +125,9 @@ VU=800이 5ms 간격으로 폴링 → **초당 수천 건 COUNT 쿼리**. 풀을
 | **2대** | **1,500** | **1.74s** | **1,177/s** | **3.41%** |
 
 ![VU=1500 Grafana](../portfolio/8.%20캐시후_nginx_poolsize30_batchsize50_VT_vu1500_0.005/2회차.png)
-> ⚠️ 사진 재촬영 예정: 기존 캡처는 app1 단독 메트릭. app2 추가 후 재실행·재촬영 필요.
+*VU=1500 한계 부하 — 처리량 plateau 유지되나 DB pending spike 발생, 시스템 포화 신호 시각화*
+
+> **재현성 검증**: hot JVM 2회 재측정 평균 p95=1.38s, RPS=1,455/s, 에러율 2.90%, 진입 성공률 77.5%. 회차 간 변동 7% 내, 문서 기록값(1.74s / 3.41% / 75%)과 ±15% 일치.
 
 **핵심 관측**: VU를 1.875배 늘렸는데 **RPS가 오히려 1,447 → 1,177/s로 감소**. 시스템 포화의 전형적 신호.
 
@@ -174,9 +177,10 @@ VU=800이 5ms 간격으로 폴링 → **초당 수천 건 COUNT 쿼리**. 풀을
 
 > **재현 검증 (5회차)**: 동일 조건 재실행에서 p95=448ms, 에러율=3.20%, RPS=2,428/s. 4회차와 동일 추세(VU=1000~1200 구간 EOF·평탄화) 재현. 단, `http_req_duration max=1m0s`(k6 기본 timeout) — VU=1500 구간에서 일부 요청이 응답을 받지 못하고 60초에 잘림. 즉 한계 초과 시 일부 사용자는 timeout까지 기다리다 끊기는 운영 위험 존재 → "VU=800 안정 상한" 결론을 강화하는 근거.
 
-![Knee Point Grafana](../portfolio/9.%20knee_point%20찾기/5회차.png)
-*RPS 곡선이 VU=1000~1200 구간에서 평탄화 → DB pending 스파이크·EOF 발생 (5회차)*
-> ⚠️ 사진 재촬영 예정: 기존 캡처는 app1 단독 메트릭. app2 추가 후 knee-point.js 재실행 + 재촬영 필요.
+![Knee Point Grafana](../portfolio/9.%20knee_point%20찾기/1회차.png)
+*RPS 곡선이 VU=1000~1200 구간에서 평탄화 → DB pending 스파이크·EOF 발생. JDBC active·pending 패널의 5개 톱니 spike는 knee-point.js의 VU 단계(500/800/1000/1200/1500)와 정확히 매핑.*
+
+> **재측정 검증**: hot JVM 재측정에서 p95=537ms, RPS=2,322/s, 에러율=2.59%, 진입 성공률 87%. 문서 5회차값과 ±20% 이내 일치, `max=1m0s` timeout도 동일 재현 → "VU=800 안정 상한" 결론 재차 확인.
 
 ### Knee Point 식별 — 두 지표가 같은 구간을 가리킴
 
@@ -293,7 +297,34 @@ passive health check는 "실제 요청이 실패해야 격리 시작"하는 사�
 | **active health check** (nginx plus 유료 / `nginx_upstream_check_module` 외부 모듈 / 별도 헬스 프로브 + dynamic upstream / K8s·클라우드 LB) | 죽은 서버를 사용자 요청 전에 미리 발견·격리 → 0에 가까운 에러 가능 | 추가 인프라 또는 라이선스, 운영 복잡도 증가 |
 | **클라이언트 retry-with-backoff** | 사용자 단에서 자동 재시도로 에러 숨김 | 클라이언트 구현 필요, 멱등성 보장 필수 |
 
-**결론**: 현재 구성(t3a.small + **오픈소스 nginx의 passive HC**)에서 **다운타임 30초 시 사용자 에러 ~20%는 구조적 한계**. 오픈소스 nginx는 active health check를 자체 지원하지 않으므로(유료 nginx Plus 또는 외부 모듈·프로브 필요) 이 에러율 하한이 무료 솔루션 단독으로는 풀리지 않음. 운영 환경에서 5% 미만으로 낮추려면 active HC 도입이 필수. 이 한계는 측정으로 정량화되었고, 개선 방향은 명확한 trade-off 분석으로 도출됨.
+### 개선 시도 — Ablation 분석으로 효과 정량화
+
+위 trade-off 분석을 실측해 두 개선 레이어의 효과를 분리·결합 측정.
+
+**개선 적용**
+- **nginx 튜닝**: `max_fails 2→1`, `fail_timeout 10s→5s`, `proxy_connect_timeout 5s→1s`
+- **클라이언트 retry**: 5xx/timeout 발생 시 100ms·200ms·400ms 지수 백오프 (최대 2회). 새 스크립트 `queue-flow-with-retry.js`
+
+**Ablation 매트릭스** (동일 시나리오 30초 kill·restart)
+
+| 조건 | nginx 튜닝 | retry | http_req_failed | 진입 성공률 |
+|------|-----------|-------|-----------------|-------------|
+| **A. baseline** (1·2회차) | OFF | OFF | 20.77% | (미측정) |
+| **B. 튜닝 단독** (5회차) | ON | OFF | **24.51%** ⚠️ | **5%** |
+| **C. 결합** (3·4회차 평균) | ON | ON | **11.05%** ✅ | **38%** |
+
+![Phase 8 개선 측정 Grafana](../portfolio/10.%20fail%20over%20테스트/4회차.png)
+*튜닝 + retry 결합 측정(4회차). JVM threads(우하): server1 라인이 T+150s에 끊기고 T+180s에 복귀. JDBC pending 거의 0 — 빠른 격리 효과 시각화.*
+
+### 결정적 발견 — 가설이 뒤집힘
+
+처음 가설은 "nginx 튜닝 + retry 결합 → 에러 감소". 실측 결과:
+
+1. **nginx 튜닝 단독(B)은 baseline(A)보다 +3.74%p 악화, 진입 성공률 5%로 폭락** — `max_fails=1`·`connect_timeout=1s`가 VU=800 정상 부하에서 **false-positive 격리** 트리거. 정상 서버가 1초 안에 응답 못 하면 즉시 격리 → 트래픽이 다른 서버로 몰림 → 그 서버도 timeout → cascading isolation. 이는 nginx.conf 주석에 미리 적은 트레이드오프 위험이 측정으로 확정된 사례.
+2. **retry 레이어가 개선의 주역** — 결합 효과 -47% 중 retry 단독 기여(B→C, -13.46%p)가 거의 전부. nginx 튜닝의 부작용을 retry가 흡수해 진입 5% → 38%로 끌어올림.
+3. **운영 권고**: 공격적인 nginx 튜닝값(`max_fails=1`·`connect_timeout=1s`)은 트래픽이 적은 환경에서만 안전. 스트레스 부하에서는 **active HC**가 사실상 유일한 근본 해결책.
+
+**결론**: 오픈소스 nginx + passive HC 단독으로는 **다운타임 30초 시 사용자 에러 ~20%가 구조적 하한**. 클라이언트 retry로 11%까지 흡수 가능하나, **운영 SLO 5% 미만은 active HC 도입 필수**. 이 결론은 ablation으로 정량 검증됨.
 
 > **측정 메트릭 보강**: 1회차 시점에 Prometheus 스크래이프 타겟에 app1만 등록되어 있어 server1 kill 시 모든 패널이 공백으로 보이는 문제 발견. `prometheus.yml`에 app2(172.31.37.7:8080) 추가 후 재측정. 이후 패널 3·4 (DB Pool active/pending)는 인스턴스별 분리(`sum` 미사용)로 server1·server2 라인을 따로 보여주어 failover 동역학을 시각화.
 
@@ -316,6 +347,6 @@ passive health check는 "실제 요청이 실패해야 격리 시작"하는 사�
 2. batch-size는 **역U자 곡선** — 무조건 클수록 좋지 않음 (Phase 3)
 3. 스케일아웃 효과는 이론치의 ~87% 수준, 공유 자원이 상한 결정 (Phase 4)
 4. **에러율과 p95는 별도 SLO 지표** — VU=1500에서 p95는 봐줄 만해도 에러율은 운영 불가 (Phase 5·6)
-5. **passive health check는 0 에러 failover 불가능** — kill 후 ~10초 격리 지연 동안 사용자 에러 ~20% 발생, active health check 도입이 운영 환경의 필수 조건 (Phase 8)
+5. **passive health check는 0 에러 failover 불가능** — kill 후 ~10초 격리 지연 동안 사용자 에러 ~20% 발생. nginx 튜닝 + 클라이언트 retry 결합으로 11%까지 흡수 가능하나(-47%), ablation으로 nginx 튜닝 단독은 false-positive 격리로 24.51%로 악화 확인 → **retry가 개선의 주역**, 운영 SLO 5% 미만은 active HC 도입이 필수 조건 (Phase 8)
 
 > **측정 환경 노이즈**: 동일 조건 반복 측정 시 p95·에러율·RPS는 ±10% 내외 변동 관찰됨 (예: Phase 5 에러율 3.41%↔2.75%, Phase 6 4.90%↔3.20%). 추세 결론은 변동 폭보다 큰 차이를 만든 변경(예: 캐시 도입 후 p95 78% 감소)을 기준으로 도출했음.

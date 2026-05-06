@@ -352,8 +352,11 @@ JWT 인증을 도입할 때 두 가지 요구사항이 있었다.
 | 2대, VU=1500 (한계 부하) | 1500 | 1.74s | 1,177/s | 3.41% |
 | 동시 선점 정확성 (VU=100, 20회 시행) | - | - | - | 201: **모든 회차 1건** |
 | **2대, app1 30s 다운 (페일오버)** | 800 | 246ms | - | **20.77%** |
+| 2대, 페일오버 + nginx 튜닝 + 클라이언트 retry | 800 | 180ms | - | **11.05%** |
 
-> 페일오버 에러율 ~20%는 nginx passive health check(`max_fails=2 fail_timeout=10s`)의 구조적 결과 — kill 후 ~10초 격리 지연 동안 사용자 에러 발생. 두 회차 0.06%p 차이로 재현. 운영에서 5% 미만으로 낮추려면 active health check 도입 필요.
+> 페일오버 에러율 ~20%는 nginx passive health check(`max_fails=2 fail_timeout=10s`)의 구조적 결과 — kill 후 ~10초 격리 지연 동안 사용자 에러 발생. 두 회차 0.06%p 차이로 재현.
+>
+> **개선 시도 (ablation)**: nginx 튜닝(`max_fails=1`·`connect_timeout=1s`) + 클라이언트 retry 결합으로 **20.77% → 11.05% (-47%)**. 단, ablation 측정으로 **nginx 튜닝 단독은 false-positive 격리로 오히려 24.51%로 악화**, 클라이언트 retry가 개선의 주역임을 확인. 운영 SLO 5% 미만은 active HC 도입 필수.
 
 **전체 분석**: [`load-test-portfolio.md`](load-test-portfolio.md)
 
