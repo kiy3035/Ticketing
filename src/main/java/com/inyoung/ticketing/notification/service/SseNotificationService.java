@@ -23,11 +23,11 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
  * sendNotification()이 emitters 맵에서 직접 에미터를 꺼내 전송했다.
  * 즉, "알림을 보내는 코드"와 "SSE 연결이 저장된 인스턴스"가 반드시 같아야 동작했다.
  *
- * ── 문제 (ALB + 2대 구성 시) ──────────────────────────────────────────────
+ * ── 문제 (nginx + 2대 구성 시) ────────────────────────────────────────────
  * Kafka 컨슈머(SeatHoldEventConsumer)는 어느 인스턴스에서든 실행될 수 있다.
  * 예) 사용자가 Instance-1에 SSE 연결 → Kafka 이벤트를 Instance-2가 처리
  *     → Instance-2의 emitters 맵에는 해당 사용자 에미터 없음 → 알림 누락
- * ALB Sticky Session을 켜도 Kafka 컨슈머 실행 인스턴스는 제어할 수 없어서 해결 불가.
+ * nginx Sticky Session(`ip_hash` 등)을 켜도 Kafka 컨슈머 실행 인스턴스는 제어할 수 없어 해결 불가.
  *
  * ── 변경 내용 ─────────────────────────────────────────────────────────────
  * 1. implements MessageListener 추가

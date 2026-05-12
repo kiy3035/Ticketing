@@ -24,7 +24,7 @@
 - **만료 정리**: 토큰 TTL + 정리 스케줄러로 유령 대기열 자동 제거
 
 ### 2. 좌석 홀드/만료 시스템 (Hold System)
-- **Redis TTL + 분산 락**: 경쟁 상태 해결 및 중복 홀드 방지. 락 키 `lock:seat:{seatId}`, TTL·재시도는 설정으로 조정 ([docs/architecture.md](docs/architecture.md#distributed-lock))
+- **Redis TTL + 분산 락**: 경쟁 상태 해결 및 중복 홀드 방지. 락 키 `lock:seat:{seatId}`, TTL·재시도는 설정으로 조정 ([docs/backend-portfolio.md](docs/backend-portfolio.md#3-시스템-아키텍처))
 - **홀드 TTL**: 10분(600초, `ticketing.hold.ttl-seconds`). 결제 진행 시 연장 설정 가능
 - **자동 만료 처리**: 스케줄러가 만료된 홀드를 스캔하여 자동 정리
 - **이벤트 기반 알림**: Kafka로 만료 이벤트 발행 후 SSE로 실시간 전달
@@ -135,8 +135,10 @@
 - Kafka로 이벤트 기반 비동기 처리
 
 ### 7. 부하 테스트·수용 인원 (Knee point)
-- **k6 스크립트**: [load-tests/](load-tests/) 에 API 건강·대기열·좌석/홀드·DB 읽기·캐시 핫리드(5축) 및 E2E `full-flow.js` 제공 ([load-tests/README.md](load-tests/README.md))
-- **목표 인프라**: t3a.medium 1대(Redis/Kafka/Prometheus/Grafana) + t3.small 2대(앱) 구성 시 동시 사용자 수·RPS를 단계적으로 올려 **knee point** 측정. 결과는 “동시 N명(또는 RPS)까지 검증”으로 문서화 ([docs/deployment-ec2.md](docs/deployment-ec2.md), [docs/load-test-portfolio.md](docs/load-test-portfolio.md)). 동시성·대기열·홀드 단위/통합 테스트, Redis·Kafka·DB 헬스, 비즈니스 메트릭·락 재시도 설정으로 검증·운영 보강.
+- **k6 스크립트**: [load-tests/](load-tests/) 에 `queue-flow.js`, `concurrent-hold.js`, `knee-point.js`, `full-flow.js`, `jwt-scenarios.js` 제공
+- **인프라**: t3a.medium 1대(Redis/Kafka/Prometheus/Grafana/nginx) + t3a.small 2대(앱) + t3a.small(k6)
+- **결과 (Phase 1~8)**: 단일 인스턴스 캐시 적용으로 p95 2.06s → 444ms (▼78%), RPS 376 → 834/s (▲122%). 2대 nginx 분산으로 p95 164ms / RPS 1,447/s / 에러 0%. **Knee Point VU=1,000~1,200**, 안정 운영 상한 VU=800. 좌석 동시 선점 정확성은 100 VU × 20회 시행에서 모두 정확히 1건 성공. nginx 페일오버(앱 30초 다운) 시 사용자 에러 ~20% → 클라이언트 retry 결합 11%까지 흡수
+- **상세**: [docs/backend-portfolio.md](docs/backend-portfolio.md), [docs/load-test-portfolio.md](docs/load-test-portfolio.md), [docs/deployment-ec2.md](docs/deployment-ec2.md)
 
 ## 📋 핵심 기능
 
@@ -345,10 +347,11 @@ ticketing/
 │   ├── static/            # 정적 리소스 (HTML, JS, CSS)
 │   └── application.properties
 ├── docs/                  # 문서 (포트폴리오/면접관용) — 목차: docs/README.md
-│   ├── architecture.md   # 구성·동시성·결제·JWT
-│   ├── decisions.md      # 기술 선택 요약(구 ADR 통합)
-│   ├── sequence-diagrams.md # 시퀀스·정합성 §5
-│   ├── api.md, data.md, infra.md, deployment-ec2.md, …
+│   ├── backend-portfolio.md  # 메인: 아키텍처 + 트러블슈팅 5사례 + ADR 6개
+│   ├── load-test-portfolio.md # Phase 1~8 부하 테스트 + knee point + 페일오버
+│   ├── jwt-auth.md            # JWT 4-case + Redis 블랙리스트 + DB revoke
+│   ├── sequence-diagrams.md   # 좌석 선점/결제+예약/Saga 보상 시퀀스
+│   ├── data.md, infra.md, monitoring.md, deployment-ec2.md
 ├── my-docs/              # 상세/공부용 (워크플로우, 소스 구조, Redis/Kafka 등)
 │   ├── README.md         # my-docs 목차
 │   ├── 01-full-workflow.md
@@ -362,7 +365,7 @@ ticketing/
 - **상세/공부용**: [my-docs/](my-docs/README.md) — 전체 워크플로우, 소스 구조, 홀드·결제·스케줄러·Redis/Kafka 정리. 코드와 흐름 이해용.
 
 요약 링크:
-- [아키텍처](docs/architecture.md) | [기술결정](docs/decisions.md) | [시퀀스·정합성](docs/sequence-diagrams.md) | [API](docs/api.md) | [데이터](docs/data.md) | [인프라](docs/infra.md) | [배포](docs/deployment-ec2.md) | [부하테스트](docs/load-test-portfolio.md) | [모니터링](docs/monitoring.md) | [관리자](docs/admin-setup.md)
+- [백엔드 포트폴리오 (메인)](docs/backend-portfolio.md) | [부하 테스트](docs/load-test-portfolio.md) | [JWT 인증](docs/jwt-auth.md) | [시퀀스 다이어그램](docs/sequence-diagrams.md) | [데이터](docs/data.md) | [인프라](docs/infra.md) | [모니터링](docs/monitoring.md) | [배포](docs/deployment-ec2.md)
 
 ## 🎓 학습 포인트
 

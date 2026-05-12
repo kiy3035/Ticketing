@@ -79,7 +79,7 @@ TokenBlacklistService.blacklistAccessJti(jti, accessExpiresAt)
 - 로그아웃 시 `JwtAuthenticationService.logout()` 가 호출 → Access jti 블랙리스트 등록 + Refresh jti `revoked = true`
 - 인증 필터는 매 요청마다 `TokenBlacklistService.isAccessBlacklisted(jti)` 검사 — true면 401
 
-**왜 Redis인가?** 앱 인스턴스 2대 이상에서도 **모든 인스턴스가 같은 블랙리스트 참조**해야 하므로 공유 저장소 필요. ALB 뒤 다중 인스턴스 환경에서 필수.
+**왜 Redis인가?** 앱 인스턴스 2대 이상에서도 **모든 인스턴스가 같은 블랙리스트 참조**해야 하므로 공유 저장소 필요. nginx 뒤 다중 인스턴스 환경에서 필수.
 
 ---
 

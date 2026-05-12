@@ -69,7 +69,7 @@ test-code/
 
 | 파일 | 캡처 시점 | 무엇을 보여주는가 |
 |------|-----------|------------------|
-| 01-gradle-test-result.png | 2026-04-XX | 전체 12개 테스트 모두 통과, 소요 시간 47초 |
+| 01-gradle-test-result.png | 2026-04-XX | 전체 46개 테스트 모두 통과, 소요 시간 ~1분 |
 | 02-html-report-summary.png | 2026-04-XX | Successful 12 / Failed 0 / Skipped 0 |
 | 03-html-report-detail.png | 2026-04-XX | 패키지별 분류 (concurrency, hold, queue, lock, ...) |
 | 04-concurrency-result.png | 2026-04-XX | 100 thread 동시 홀드 시도 → 정확히 1 성공 |
@@ -147,7 +147,7 @@ start build/reports/jacoco/test/html/index.html
 
 ### 시나리오 A: "테스트 작성 경험 있나요?"
 1. `test-code/README.md` 열어서 목차 보여주기
-2. `test-code/05-test-catalog.md` 의 12개 테스트 표 펼치기
+2. `test-code/05-test-catalog.md` 의 46개 테스트 표 펼치기
 3. `evidence/02-html-report-summary.png` 보여주며 "12개 모두 통과합니다"
 
 ### 시나리오 B: "동시성 어떻게 보장했나요?"

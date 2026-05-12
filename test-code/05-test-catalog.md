@@ -9,11 +9,11 @@
 |------|----------|----------|------|
 | 단위 테스트 (Unit) | 4 | 15 | Mockito |
 | 슬라이스 테스트 (Web Slice) | 2 | 2 | @WebMvcTest |
-| 통합 테스트 (Integration) | 6 | 19 | Testcontainers |
+| 통합 테스트 (Integration) | 7 | 23 | Testcontainers |
 | 동시성 테스트 (Concurrency) | 2 | 2 | CountDownLatch + ExecutorService |
 | 아키텍처 테스트 (ArchUnit) | 1 | 3 | @ArchTest |
 | 컨텍스트 로딩 (Smoke) | 1 | 1 | 부팅 검증 |
-| **합계** | **16** | **42** | JWT 블랙리스트 8 + 서킷브레이커 6 + 멱등성 race condition 포함 |
+| **합계** | **17** | **46** | JWT 블랙리스트 8 + 서킷브레이커 6 + SSE 다중 인스턴스 4 + 멱등성 race condition 포함 |
 
 ---
 
@@ -126,6 +126,17 @@
 | 3 | `circuitBreaker_halfOpen_closesAfterSuccessfulProbes` | HALF_OPEN → 3회 성공 프로브 | 상태 CLOSED 복귀 |
 | 4 | `queueService_enterQueue_returnsFallback_whenCircuitForcedOpen` | OPEN 상태에서 QueueService 호출 | 예외 없이 fallback 처리 |
 
+### 3-7. `SseNotificationMultiInstanceIntegrationTest` (Testcontainers Redis) ⭐
+**검증 대상**: nginx 뒤 2대 환경에서 발행 인스턴스 ≠ SSE 연결 인스턴스 일 때 Redis Pub/Sub 으로 알림 전달
+**상세**: [16-sse-multi-instance-test.md](16-sse-multi-instance-test.md)
+
+| # | 메서드 | 시나리오 | 기대 결과 |
+|---|--------|----------|-----------|
+| 1 | `crossInstanceBroadcast_publisherIsB_subscriberIsA` | A 에 user1 emitter, B 에서 publish | A 의 emitter 가 send 받음 (Awaitility) |
+| 2 | `broadcast_bothInstancesReceive_whenUserConnectedToBoth` | 같은 userId 가 A·B 양쪽에 연결 → publish | 두 emitter 모두 send 호출 (broadcast 본성) |
+| 3 | `userIsolation_publishToOtherUser_doesNotReachThisUserEmitter` | A 의 user1 emitter 등록, B 에서 user2 publish | user1 emitter 는 호출되지 않음 (`Awaitility.during(1s)`) |
+| 4 | `noEmitterAnywhere_publishCompletesQuietly` | 양쪽 모두 emitter 없음 → publish | 예외 없이 정상 리턴 (no-op) |
+
 ---
 
 ## 4. 동시성 테스트 (Concurrency) ⭐ 핵심
@@ -178,6 +189,7 @@
 | Kafka 컨슈머 재시도 | 예외 → 멱등성 키 해제 → Kafka 재전송 시 재처리 가능 | `PaymentCompleteEventConsumerIntegrationTest` 시나리오 4, `SeatHoldEventConsumerIntegrationTest` 시나리오 4 |
 | 서킷브레이커 | CLOSED/OPEN/HALF_OPEN 전이 + fast-fail | `RedisCircuitBreakerExecutorTest`, `RedisCircuitBreakerIntegrationTest` |
 | 멱등성 race condition | 50개 스레드 동시 선점 → 정확히 1개만 성공 | `IdempotencyServiceTest.concurrentAcquire_onlyOneSucceeds` |
+| SSE 다중 인스턴스 | Redis Pub/Sub 으로 발행/구독 인스턴스 분리 환경에서 알림 전달·격리·broadcast·no-op | `SseNotificationMultiInstanceIntegrationTest` 4 시나리오 |
 
 ---
 

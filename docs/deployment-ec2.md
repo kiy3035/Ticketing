@@ -27,7 +27,7 @@
 | **JWT** | 운영 인스턴스에 동일 `JWT_SECRET` 주입. Access 블랙리스트는 Redis 공유로 모든 인스턴스에서 차단 |
 | **배치 스케줄러** | Redis 분산 락으로 단일 인스턴스만 실행 보장 |
 | **Kafka consumer** | `group-id` 동일 → 파티션 수 ≥ 소비자 수 필요 |
-| **SSE** | 사용자가 어느 인스턴스에 연결되는지 고정 안 됨 → 필요 시 nginx Sticky Session(`ip_hash` 등) 검토 |
+| **SSE** | `SseNotificationService` 가 `MessageListener` 구현 + Redis Pub/Sub(`sse:notify:*` PSUBSCRIBE) 으로 브로드캐스트 → 발행 인스턴스와 SSE 연결 인스턴스가 달라도 정상 전달. 스티키 세션 불필요 |
 | **로드밸런싱** | nginx `least_conn` + passive health check (`max_fails=2 fail_timeout=10s`) + `proxy_next_upstream` |
 | **헬스체크** | `GET /actuator/health` (ticketingDatastores UP 기준 — Redis PING + DB `isValid`) |
 | **Graceful Shutdown** | `application-prod.properties`: `server.shutdown=graceful`, timeout 30s |

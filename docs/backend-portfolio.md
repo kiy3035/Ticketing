@@ -11,7 +11,7 @@
 |---|------|------|
 | 1 | **DB 병목 진단 → 캐시 도입** | p95 2.06s → 444ms (▼78%), RPS 376 → 834/s (▲122%). 풀 크기·Virtual Thread 변경으로 안 풀리던 병목을 폴링 쿼리 캐시화로 해결 |
 | 2 | **분산 락 정확성 증명** | 100 VU 동시 선점 시 201 응답 정확히 1건. 2대 nginx 분산 환경에서도 동일 결과로 **좌석 중복 예약 0건 불변식** 검증 |
-| 3 | **스케일아웃 + knee point 측정** | 앱 서버 1→2대로 RPS 834→1447/s (▲73%), p95 ▼63%. VU=1500에서 처리량이 오히려 감소하는 knee point를 시나리오 기반으로 탐지 |
+| 3 | **스케일아웃 + knee point 측정** | 앱 서버 1→2대로 RPS 834→1447/s (▲73%), p95 ▼63%. VU=1500에서 처리량 감소 신호 발견 후 ramp 시나리오로 변곡점 **VU=1,000~1,200** 식별 |
 
 ---
 
@@ -34,7 +34,7 @@
 |------|------|
 | **목적** | 대규모 트래픽 처리·좌석 동시 선점 제어·인프라 운영 경험을 포트폴리오로 증명 |
 | **핵심 문제** | ① 공연 오픈 순간 트래픽 폭주 ② 동일 좌석 동시 선점 경쟁 ③ 결제·예약 정합성 보장 |
-| **인프라** | t3a.medium(Redis/Kafka/Prometheus/Grafana/nginx) + t3.small 앱 서버 **2대** + t3.small k6 |
+| **인프라** | t3a.medium(Redis/Kafka/Prometheus/Grafana/nginx) + t3a.small 앱 서버 **2대** + t3a.small k6 |
 | **부하 검증** | 안정 운영 상한 VU=800 (1,447 RPS, 에러 0%), Knee Point VU=1,000~1,200 |
 
 ### 주요 구현
@@ -45,6 +45,7 @@
 - Saga 보상 트랜잭션 (`REQUIRES_NEW` 분리 커밋)
 - Transactional Outbox (예약 확정 이벤트 유실 방지)
 - Resilience4j 서킷브레이커 + Sliding Window Rate Limit
+- SSE 다중 인스턴스 브로드캐스트 (Redis Pub/Sub `sse:notify:*`)
 - Prometheus 커스텀 메트릭 + Grafana 대시보드
 
 ---
@@ -80,7 +81,7 @@
               ▼                        ▼
    ┌─────────────────────┐  ┌─────────────────────┐
    │   App Server #1     │  │   App Server #2     │
-   │   t3.small          │  │   t3.small          │
+   │   t3a.small         │  │   t3a.small         │
    │   Spring Boot 3.4   │  │   Spring Boot 3.4   │
    │   Java 21 (Loom VT) │  │   Java 21 (Loom VT) │
    └──────────┬──────────┘  └──────────┬──────────┘
@@ -153,7 +154,7 @@ VU=800 부하에서 `GET /api/queue/status` 폴링 응답의 p95가 **1.93s**. H
 앱 서버 2대 + nginx 환경에서 동일 좌석에 동시 선점 요청이 들어올 때 **정확히 1명만 성공**해야 한다. 코드 리뷰만으로는 불충분하고 부하 테스트로 직접 증명하기로 함.
 
 #### 설계 결정
-- **Redis SETNX + UUID 토큰**으로 좌석당 배타적 락. TTL 3초 (보유자 죽어도 다음 요청이 빠르게 진입).
+- **Redis SETNX + UUID 토큰**으로 좌석당 배타적 락. TTL 기본 5초(부하테스트는 3초로 단축, `ticketing.lock.ttl-seconds`) — 보유자 죽어도 다음 요청이 빠르게 진입.
 - **Lua 스크립트로 unlock** — `GET == 토큰 → DEL` 원자 처리. 다른 소유자의 락을 오삭제하는 사고 방지.
 - **Lua로 holdInfo 작성** — `EXISTS` 확인 → 좌석→토큰 SET → 토큰→상세 SET → 만료 ZADD를 한 번에. 중간 끼어듦 차단.
 - **Redisson 미사용** — 단일 Redis 인스턴스에서 Redlock은 과한 복잡도라고 판단. UUID 토큰 + Lua 해제만으로 충분.
@@ -318,7 +319,7 @@ JWT 인증을 도입할 때 두 가지 요구사항이 있었다.
 
 #### ADR-1. Redis SETNX 분산 락 (Redisson 미사용)
 - 단일 Redis 인스턴스에서 Redlock은 과도. UUID 토큰 + Lua 해제로 동등한 안전성 확보
-- TTL 3초 — 락 보유자가 죽어도 다음 요청이 빠르게 진입
+- TTL 기본 5초(부하테스트 3초) — 락 보유자가 죽어도 다음 요청이 빠르게 진입
 - Sentinel/Cluster 전환 시 라이브러리 재검토 필요 (현재 단일 인스턴스 전제)
 
 #### ADR-2. Kafka 이벤트 드리븐
@@ -338,6 +339,16 @@ JWT 인증을 도입할 때 두 가지 요구사항이 있었다.
 - Tomcat 요청 스레드 VT 전환 → JVM live threads **225→30** (87% 감소)
 - I/O 바운드 환경에서만 효과 — DB 쿼리 빈도가 병목이면 처리량 개선은 제한적 (사례 1 참조)
 - 제외 영역: 스케줄러 트리거, Netty/Kafka Producer 내부
+
+#### ADR-6. SSE 다중 인스턴스 — Redis Pub/Sub 브로드캐스트
+- 문제: Kafka 컨슈머가 어느 앱 인스턴스에서 실행되는지 제어 불가 → 사용자가 app1에 SSE 연결됐는데 app2가 알림 발행하면 누락
+- 대안 비교:
+  - **스티키 세션(`ip_hash`)** — 같은 사용자를 같은 앱으로 라우팅하지만 **Kafka 컨슈머 실행 인스턴스는 독립** → 본질 해결 안 됨
+  - **클라이언트 폴링** — 푸시 모델의 즉시성 포기
+  - **Redis Pub/Sub** ✅ — 발행은 어느 인스턴스든, 구독은 모든 인스턴스. 자기 emitter 보유분만 send
+- 구현: `SseNotificationService implements MessageListener` + `SseRedisConfig`의 `RedisMessageListenerContainer`가 `sse:notify:*` PSUBSCRIBE
+- 검증: `SseNotificationMultiInstanceIntegrationTest` (Testcontainers Redis) 4 시나리오 — cross-instance broadcast / 양쪽 동시 연결 / 사용자 격리 / no-op
+- 트레이드오프: SSE 연결 자체는 인스턴스 로컬 유지(연결 메타까지 Redis로 올리면 과한 설계). 배포 중 끊김은 클라이언트 재연결 + Redis List `notify:user:{userId}` 폴링으로 보완
 
 ---
 

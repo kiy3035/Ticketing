@@ -78,7 +78,7 @@ public void publishPending() {
 
 ## #5. Kafka 헬스체크가 부하 시 60초 타임아웃 → readiness 죽음
 
-**증상**: 부하 테스트 중 `/actuator/health` 가 60초 멈춤 → ALB 헬스체크 실패 → 트래픽 끊김
+**증상**: 부하 테스트 중 `/actuator/health` 가 60초 멈춤 → nginx upstream으로 들어온 요청이 timeout → passive HC 누적으로 인스턴스 격리 → 트래픽 끊김
 
 **원인**: Spring Boot 기본 Kafka HealthIndicator 가 브로커 metadata 조회 시 timeout 60초.
 

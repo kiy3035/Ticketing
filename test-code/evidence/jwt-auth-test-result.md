@@ -97,4 +97,4 @@ BUILD SUCCESSFUL in 1m 8s
 
 > "JWT stateless 약점(로그아웃 즉시 무효화 불가)을 Redis 블랙리스트 + DB revoke 두 가지로 보완했고,
 > 두 경로가 모두 401을 반환함을 Testcontainers 기반 통합 테스트로 검증했습니다.
-> Redis는 공유 저장소라 ALB 뒤 2대 환경에서도 어느 인스턴스로 라우팅되든 동일하게 차단됩니다."
+> Redis는 공유 저장소라 nginx 뒤 2대 환경에서도 어느 인스턴스로 라우팅되든 동일하게 차단됩니다."

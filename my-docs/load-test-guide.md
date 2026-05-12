@@ -3,7 +3,7 @@
 **용량 검증·실측·해석**은 `docs/load-test-portfolio.md` 한 파일에 둔다. 이 파일은 **백엔드 관점에서 어떤 시나리오·관측 포인트로 돌리는지** 빠르게 보기 위한 운영 노트다.
 
 ## 사전 체크
-- [ ] `BASE_URL` (nginx 또는 ALB), `CONCERT_ID` 고정
+- [ ] `BASE_URL` (nginx), `CONCERT_ID` 고정
 - [ ] 로그인 필요한 시나리오는 `TEST_USER` / `TEST_PASS` 준비
 - [ ] Grafana 시간축이 부하 구간과 겹치도록 설정
 - [ ] HikariCP / Redis pool / JVM 변경은 **한 축씩** 적용 후 재기동

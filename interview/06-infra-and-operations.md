@@ -10,10 +10,10 @@
 - **앱 서버 #2** (t3a.small): Spring Boot — Docker (스케일아웃 후)
 - **k6 서버** (t3a.small): 부하 테스트 전용
 
-**현재 운영**: 앱 서버 1대로 운영 중. **ALB + 2대 스케일아웃** 예정. 앱은 환경변수(`.env` / spring-dotenv)로 DB/Redis/Kafka 접속 정보 주입.
+**현재 운영**: nginx + 앱 서버 2대 스케일아웃 구성으로 운영 중 (Phase 4·5·6·7·8 부하 테스트 검증). 앱은 환경변수(`.env` / spring-dotenv)로 DB/Redis/Kafka 접속 정보 주입.
 
 > **🟢 Q1-1. nginx 는 왜 있나요?**
-> **A.** ALB 도입 전 단계로 nginx 가 reverse proxy + 정적 자원/헬스체크 종단점 역할. ALB 도입 후에도 부하 테스트 시 단일 진입점으로 사용.
+> **A.** nginx가 reverse proxy + `least_conn` 부하 분산(앱서버 2대) + passive health check(`max_fails=2 fail_timeout=10s`) + `proxy_next_upstream`으로 페일오버 담당. 부하 테스트의 단일 진입점이기도 함.
 
 > **🟡 Q1-2. 스케줄러가 두 대에서 동시에 돌면?**
 > **A.** 5종 스케줄러 모두 `lock:batch:*` Redis 분산 락으로 한 인스턴스만 실행. `RedisLockService.tryLock` (SETNX + TTL) → unlock Lua. TTL 은 가장 긴 배치(환불 5분)는 360초로 넉넉히.
@@ -55,7 +55,7 @@
 - 개별 indicator 도 있음: `DatabaseHealthIndicator`, `RedisHealthIndicator`, `KafkaHealthIndicator` (수동 호출용)
 
 > **🟡 Q3-1. DB 는 살아 있는데 Redis 가 죽으면?**
-> **A.** `ticketingDatastores` 가 DOWN → Kubernetes/ALB 가 트래픽 차단. 이 프로젝트는 Redis 없이 대기열·홀드가 불가능해서 **의도적으로 엄격** 하게 둔 선택입니다. 운영 정책에 따라 Redis 만 별도 컴포넌트로 빼서 부분 가용성 모드로 운영하는 것도 가능.
+> **A.** `ticketingDatastores` 가 DOWN → nginx의 active health check 모듈은 오픈소스에 없으므로 자동 격리는 안 되지만, 실제 요청이 5xx로 실패하면 passive health check가 누적해 격리. 이 프로젝트는 Redis 없이 대기열·홀드가 불가능해서 **의도적으로 엄격** 하게 묶은 선택입니다. 운영 정책에 따라 Redis 만 별도 컴포넌트로 빼서 부분 가용성 모드로 운영하는 것도 가능.
 
 ---
 
@@ -66,10 +66,12 @@
 - **공유 저장소**(Redis Access 블랙리스트 + DB `refresh_tokens`) 로 인스턴스 간 토큰 검증·폐기 일관성 유지
 - **DB 마이그레이션**: Flyway (V1~V8), `baseline-on-migrate=true`, `IF NOT EXISTS` 패턴으로 호환
 
-**한계 — SSE**: `SseNotificationService` 가 인스턴스 로컬에 `SseEmitter` 보유 → 배포 중 끊김. 다음 단계 개선안:
-- 스티키 세션
-- Redis Pub/Sub 으로 다른 인스턴스에 브로드캐스트
-- 알림은 Redis List `notify:user:{userId}` 폴링으로도 받을 수 있어 SSE 끊김이 알림 누락은 아님
+**SSE 다중 인스턴스 — Redis Pub/Sub 브로드캐스트로 해결**:
+- `SseNotificationService` 가 `MessageListener` 구현 → `SseRedisConfig` 의 `RedisMessageListenerContainer` 가 `sse:notify:*` PSUBSCRIBE
+- 알림 발행: `redisTemplate.convertAndSend("sse:notify:{userId}", json)` → 모든 인스턴스의 `onMessage()` 가 호출되고, 에미터 보유 인스턴스만 `emitter.send()` 실행
+- 인스턴스 로컬 SSE 연결은 그대로 유지하되 **알림 전달 경로만 Redis 경유** — Kafka 컨슈머가 어느 인스턴스에서 실행돼도 정상 전달
+- `SseNotificationMultiInstanceIntegrationTest` (Testcontainers) 4 시나리오로 검증: cross-instance broadcast / 양쪽 동시 연결 / 사용자 격리 / no-op
+- 배포 중 인스턴스 재시작 시 SSE 연결은 끊기지만 알림은 Redis List `notify:user:{userId}` 에도 적재되어 클라이언트 폴링으로 누락 보완 가능
 
 > **🔴 Q4-1. DB 마이그레이션 순서는?**
 > **A.** Zero-downtime 배포라면 **호환 우선 패턴**:
@@ -107,7 +109,7 @@
 > - Redis: ElastiCache (Sentinel/Cluster) 매니지드
 > - Kafka: MSK (관리형) + 3브로커 + replication
 > - DB: RDS Multi-AZ
-> - 헬스 + ALB 로 앱 서버 페일오버는 이미 가능
+> - nginx passive health check로 앱 서버 페일오버는 이미 검증됨 (Phase 8 — 30초 다운 시 사용자 에러 ~20%, retry 결합으로 ~11%까지 흡수). 0% 에러는 active HC 도입이 사실상 필수.
 
 ---
 
@@ -130,7 +132,7 @@ VT (Tomcat 가상 스레드) 도입으로 동시 요청 수 한계가 풀렸지�
 
 **A.**
 - **k6 서버**: 별도 EC2 t3a.small — 앱 서버와 분리해 부하 발생기 자체가 병목 안 되도록
-- **타깃**: nginx (ALB 도입 전) → 앱 서버
+- **타깃**: nginx → 앱 서버 2대 (`least_conn` 분산)
 - **시나리오** (`load-tests/`):
   - `queue-flow.js`: 대기열 진입→폴링 (백엔드 핵심 경로)
   - `knee-point.js`: VU 500→800→1000→1200→1500 계단식 (knee point 탐색)

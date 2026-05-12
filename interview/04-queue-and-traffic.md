@@ -91,7 +91,7 @@
 1. **잔여석 집계 캐시**: `GET /api/queue/status` 가 호출되는 잔여석 계산을 `@Cacheable(QUEUE_STATUS_AVAILABLE_SEATS, key=#concertId)` 로 묶고 TTL 2초. 홀드/예약/만료 시 evict 동기화. 1만 명 동시 폴링도 공연당 0.5 QPS 만 실제 계산.
 2. **Redis 서킷브레이커**: `RedisCircuitBreakerExecutor` 로 polling 대상 (`queue.getRank`, `queue.countWaiting`, `queue.isAllowed`) 모두 fast-fail + fallback.
 
-다음 단계로는 **WebSocket/SSE 푸시 모델** 로 polling 자체를 줄이는 게 맞고, 알림 부분은 이미 `NotificationSseController` 로 일부 시도 중입니다.
+다음 단계로는 **WebSocket/SSE 푸시 모델** 로 polling 자체를 줄이는 게 맞습니다. 알림 채널은 이미 `NotificationSseController` + `SseNotificationService` 로 구현했고 Redis Pub/Sub 브로드캐스트로 다중 인스턴스 환경에서도 동작합니다 (`SseNotificationMultiInstanceIntegrationTest` 검증).
 
 > **🔴 Q6-1. 폴링 주기는 어떻게 정했나요?**
 > **A.** 프론트에서 2초 주기. `QueueProcessingScheduler` 의 입장 허용 주기와 맞춰 사용자가 "허용된 직후" 평균 1초 안에 화면 전환되게. 너무 짧으면 서버 부하·너무 길면 사용자 경험 저하 — 트레이드오프.

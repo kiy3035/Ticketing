@@ -22,7 +22,7 @@ JUnit은 **합격/불합격**을 판단하고, k6는 **숫자(p95 latency, RPS, 
 | 대상 | 단일 클래스, 단일 API | 전체 시스템 (nginx + 앱 2대 + DB + Redis) |
 | 부하 수준 | 100 스레드 (인메모리) | 수천 VU (실제 HTTP) |
 | 검증 방식 | `assertThat()` 통과 여부 | 통계 지표 (avg/p95/p99 latency, RPS, error rate) |
-| 핵심 산출물 | "23 tests passed" | **knee point**, 처리량 한계, 병목 |
+| 핵심 산출물 | "46 tests passed" | **knee point**, 처리량 한계, 병목 |
 | 실행 빈도 | 매 커밋, 매 PR | 릴리스 전, 인프라 변경 후 |
 | 결과 해석 | 이진 (Pass/Fail) | 그래프·수치 분석 필요 |
 
@@ -88,7 +88,7 @@ export default function() {
   │  설계 / 아키텍처 │  │   correctness   │  │   performance   │
   │                 │  │                 │  │                 │
   │  docs/          │  │  test-code/     │  │  load-tests/    │
-  │  - JWT 인증     │  │  - 23 tests     │  │  - knee point   │
+  │  - JWT 인증     │  │  - 46 tests     │  │  - knee point   │
   │  - 좌석 락 설계 │  │  - 동시성 검증  │  │  - p95 latency  │
   │  - Saga 보상   │  │  - ArchUnit     │  │  - RPS 한계     │
   └─────────────────┘  └─────────────────┘  └─────────────────┘
@@ -109,18 +109,18 @@ export default function() {
 | 파일 | 무엇을 보여주나 |
 |------|----------------|
 | `docs/backend-portfolio.md` | 프로젝트 개요·아키텍처·핵심 구현·결과를 한 페이지로 요약 |
-| `docs/decisions.md` | 5가지 핵심 기술 결정 (락, Kafka, DB락, 멱등, Virtual Thread) — **why 중심** |
+| `docs/backend-portfolio.md` § ADR | 6가지 핵심 기술 결정 (락, Kafka, DB락, 멱등, Virtual Thread, SSE 다중 인스턴스) — **why 중심** |
 | `docs/jwt-auth.md` | JWT 4-case 재발급, Redis 블랙리스트 + DB jti revoke, 단일 트랜잭션 — 분산 환경 의식 |
-| `test-code/05-test-catalog.md` | 23개 테스트 메서드 카탈로그 표 |
+| `test-code/05-test-catalog.md` | 46개 테스트 메서드 카탈로그 표 |
 | `test-code/07-bugs-found-via-testing.md` | 실제 발견·수정한 버그 3건 (Testcontainers / JWT 트랜잭션 / nginx 로그) |
-| `test-code/evidence/README.md` + `images/` | 23 tests 100% pass 증거 (HTML 리포트 + 동시성 콘솔) |
+| `test-code/evidence/README.md` + `images/` | 46 tests 100% pass 증거 (HTML 리포트 + 동시성 콘솔) |
 | `docs/load-test-portfolio.md` | k6 부하 테스트 결과 (knee point, p95, RPS) |
 
 ### ⭐⭐ Tier 2 — 깊이 있는 질문 들어왔을 때 꺼낼 것
 | 파일 | 무엇을 보여주나 |
 |------|----------------|
 | `docs/sequence-diagrams.md` | 홀드·결제·Saga 보상 시퀀스 |
-| `docs/resilience-ops.md` | 서킷브레이커·Redis 장애 시 fallback 동작 |
+| `my-docs/resilience-patterns.md` | 멱등성·Saga·서킷브레이커·Rate Limit·Outbox 종합 |
 | `docs/monitoring.md` | Prometheus 커스텀 메트릭, Golden Signals |
 | `test-code/01-test-strategy.md` | 테스트 피라미드 + 설계 결정 |
 | `test-code/06-interview-qa.md` | 면접 답변 스크립트 (본인용 준비 자료) |
@@ -135,10 +135,10 @@ export default function() {
 
 ### 면접 시 권장 노출 순서
 1. `backend-portfolio.md` — 첫 30초로 전체 그림 잡기
-2. `decisions.md` — 1~2분으로 핵심 의사결정 어필
+2. `docs/backend-portfolio.md` § ADR — 1~2분으로 핵심 의사결정 어필
 3. 질문 따라 분기:
    - **"테스트 작성?"** → `test-code/05-test-catalog.md` + `evidence/Test-Summary.png`
-   - **"동시성?"** → `SeatHoldConcurrencyTest.png` + `decisions.md`
+   - **"동시성?"** → `SeatHoldConcurrencyTest.png` + `docs/backend-portfolio.md` § ADR-1
    - **"부하?"** → `load-test-portfolio.md`
    - **"버그 발견 경험?"** → `test-code/07-bugs-found-via-testing.md`
    - **"JWT?"** → `docs/jwt-auth.md`

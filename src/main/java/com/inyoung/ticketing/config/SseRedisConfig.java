@@ -36,6 +36,9 @@ public class SseRedisConfig {
 	 *                           Pub/Sub 전용 커넥션은 일반 커맨드 커넥션과 별도로 관리된다.
 	 * @param sseNotificationService  MessageListener를 구현한 서비스.
 	 *                                onMessage() 콜백을 통해 수신 메시지를 처리한다.
+	 *
+	 * 운영: 앱 인스턴스(현재 nginx 뒤 2대)마다 이 빈이 자동 생성되어 각자 같은 채널을 구독하므로,
+	 * 어느 인스턴스에서 PUBLISH 해도 모든 인스턴스가 수신해 자기 emitter 보유분만 전달한다.
 	 */
 	@Bean
 	public RedisMessageListenerContainer sseRedisMessageListenerContainer(

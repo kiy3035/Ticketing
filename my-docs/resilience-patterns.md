@@ -189,12 +189,12 @@ public PaymentResponse request(...) { ... }
 
 | 장애 | 영향 | 대응 |
 |------|------|------|
-| Redis 다운 | 락/홀드/대기열/캐시 불능 | `ticketingDatastores` 헬스 DOWN → ALB가 트래픽 제거 검토. 서킷브레이커가 즉시 fail-fast로 응답 시간 보호 |
+| Redis 다운 | 락/홀드/대기열/캐시 불능 | `ticketingDatastores` 헬스 DOWN. nginx passive HC는 실제 5xx 누적 후 격리 — 서킷브레이커가 즉시 fail-fast로 응답 시간 보호 |
 | Kafka 다운 | 직접 send 경로(알림 등) 지연/유실 가능 | `RESERVATION_CONFIRMED`는 outbox에 남음 → 브로커 복구 후 스케줄러가 재시도 |
 | Outbox 반복 실패 | `publish_attempts` 25회 초과 → `FAILED` | 모니터링 알람·수동 재처리·원인 조사(브로커/페이로드) |
-| DB 다운 | 전체 서비스 불능 | 헬스체크 DOWN → ALB 제거. RDS 페일오버 대기 |
+| DB 다운 | 전체 서비스 불능 | 헬스체크 DOWN. nginx passive HC가 실패 누적으로 격리. RDS 페일오버 대기 |
 | 외부 PG (토스) 장애 | 카드 결제 불가 | 포인트 결제는 정상. 카드는 `tossPaymentsClient.confirmPayment` 예외 → 결제 APPROVED 안 됨 |
-| 앱 서버 OOM | 해당 인스턴스 불능 | ALB 헬스체크 실패 시 다른 인스턴스로 라우팅 (다른 인스턴스가 있다면) |
+| 앱 서버 OOM | 해당 인스턴스 불능 | nginx passive HC가 실패 누적해 격리 → 다른 인스턴스로 라우팅 (Phase 8 검증, 30s 다운 시 사용자 에러 ~20% → retry 결합 11%) |
 
 ---
 

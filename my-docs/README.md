@@ -17,11 +17,11 @@
 | [concurrency-deep-dive.md](concurrency-deep-dive.md) | SETNX·Lua·DB 비관적 락, 동시성 테스트 |
 | [resilience-patterns.md](resilience-patterns.md) | **멱등 키·Saga·서킷브레이커·Rate Limit·Outbox** 종합 |
 | [virtual-threads-guide.md](virtual-threads-guide.md) | Virtual Thread 적용 지점(Tomcat, 스케줄러, Kafka 리스너) |
-| [flyway-guide.md](flyway-guide.md) | 마이그레이션 운영 팁 (V1~V7 현황 포함) |
+| [flyway-guide.md](flyway-guide.md) | 마이그레이션 운영 팁 (V1~V8 현황 포함) |
 | [load-test-guide.md](load-test-guide.md) | k6 스크립트 실행 커맨드 |
 | [troubleshooting.md](troubleshooting.md) | 개발 중 이슈 로그 |
 
 ## docs/ 와의 역할 분리
 
-- **`docs/`**: 포트폴리오·배포·API·아키텍처 요약. [`decisions.md`](../docs/decisions.md), [`sequence-diagrams.md`](../docs/sequence-diagrams.md) 가 설계 결정과 시퀀스의 기준이다.
+- **`docs/`**: 포트폴리오·배포·API·아키텍처 요약. [`backend-portfolio.md`](../docs/backend-portfolio.md)의 ADR 섹션과 [`sequence-diagrams.md`](../docs/sequence-diagrams.md) 가 설계 결정과 시퀀스의 기준이다.
 - **`my-docs/`**: 위를 **코드 라인 단위로 펼친** 공부 노트. Redis·Kafka 상세는 **`06-redis-kafka-reference.md` 한 파일**로 모았다.

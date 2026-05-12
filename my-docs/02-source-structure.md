@@ -22,7 +22,7 @@
 | **notification** | 알림 저장(Redis), SSE 스트림, 결제 완료 시 이메일/SMS | `NotificationController`, `NotificationSseController`, `NotificationService`, `SseNotificationService`, `PaymentNotificationService`, `EmailService`, `SmsService` |
 | **admin** | 통계, 유저/결제 목록, 미판매 좌석 | `AdminController`, `AdminService` |
 | **seller** | 판매자용 공연·좌석 등록, 예약·매출 조회, 공연 취소 | `SellerController`, `SellerService` |
-| **config** | Security, Redis, Kafka, 결제, Resilience, OpenAPI | `SecurityConfig`, `RedisConfig`, `KafkaConfig`, `PaymentConfig`, `ResilienceConfig`, `OpenApiConfig`, `TicketingProperties`, `AppConfig` |
+| **config** | Security, Redis, Kafka, 결제, Resilience, OpenAPI, **SSE Pub/Sub** | `SecurityConfig`, `RedisConfig`, `KafkaConfig`, `PaymentConfig`, `ResilienceConfig`, `OpenApiConfig`, `SseRedisConfig`, `TicketingProperties`, `AppConfig` |
 | **common.api** | 공통 응답·예외 처리 | `ApiResponse`, `ErrorResponse`, `ApiResponseAdvice`, `GlobalExceptionHandler` |
 | **common.idempotency** | `@Idempotent` AOP + Redis 키 저장 | `Idempotent`, `IdempotencyAspect`, `IdempotencyService` |
 | **common.ratelimit** | `@RateLimit` AOP + Redis Sliding Window Lua | `RateLimit`, `RateLimitAspect`, `RateLimitService` |

@@ -95,6 +95,6 @@ TTL 없는 ZSet (`queue:concert:*`, `hold:expires`) 은 `QueueCleanupScheduler.p
 ### 🔴 Q7. Redis 가 단일 인스턴스라 SPOF 인데, 어떻게 보완하나요?
 
 **A.** 현재는 단일 인스턴스 + 다음 단계 인지를 솔직히 말합니다.
-- **현재**: `RedisCircuitBreakerExecutor` 로 fast-fail + fallback. `ticketingDatastores` 헬스가 DOWN 으로 떨어지면 ALB 가 트래픽 빼게 됨.
+- **현재**: `RedisCircuitBreakerExecutor` 로 fast-fail + fallback. `ticketingDatastores` 헬스가 DOWN 으로 떨어지면 nginx upstream의 실제 실패가 누적되며 passive health check가 해당 인스턴스를 격리(`max_fails=2 fail_timeout=10s`).
 - **다음 단계**: Redis Sentinel(자동 페일오버) 또는 Cluster(샤딩 + 복제) 도입. ElastiCache 같은 매니지드 서비스로 운영 부담 감소.
 - **데이터 측면**: 모든 Redis 데이터는 휘발성으로 설계 — 영속이 필요한 건 DB. Redis 가 죽어도 DB 데이터는 무사.

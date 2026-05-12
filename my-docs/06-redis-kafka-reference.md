@@ -35,8 +35,11 @@
 | `queue:status:available-seats:*` (`CacheNames.QUEUE_STATUS_AVAILABLE_SEATS`) | String | 2초 (`ticketing.cache.queue-status-available-seats-ttl-seconds`) | 잔여석 집계 캐시 | `SeatService.countAvailableSeatsForQueueStatus` (홀드/예약/만료 시 evict) |
 | `idempotency:{key}` | String | `@Idempotent.ttlSeconds` | HTTP 멱등 결과 캐시·`__PROCESSING__` 마커 | `IdempotencyService` |
 | `ratelimit:{identifier}` | ZSet | Lua 내 `EXPIRE(window+1)` | 슬라이딩 윈도 레이트 리밋 | `RateLimitService` |
+| `sse:notify:{userId}` (Pub/Sub 채널) | — (메시지 패스) | 비영속 | SSE 다중 인스턴스 브로드캐스트. 모든 인스턴스가 `sse:notify:*` PSUBSCRIBE → 발행 측은 `convertAndSend`, 수신 측은 자기 emitter 보유분만 send | `SseNotificationService`, `SseRedisConfig` |
 
 > **Spring Session은 사용하지 않는다.** 인증은 JWT(Access + Refresh) — `ticketing:sessions:*` 같은 세션 키는 없다.
+>
+> **`sse:notify:*` 는 Pub/Sub 채널**(키-값 저장소가 아님). `KEYS` 로 보이지 않으며 메모리 점유도 없음. 발행 시점에만 구독자에게 전달되고 사라진다.
 
 ### 1.3 `hold:user:{userId}` 를 따로 둔 이유
 

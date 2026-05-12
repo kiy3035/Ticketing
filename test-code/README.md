@@ -24,6 +24,7 @@
 | [13-payment-service-unit-test.md](13-payment-service-unit-test.md) | **PaymentService 단위 테스트** — 결제 분기 7가지 + Saga 보상 호출 verify |
 | [14-jwt-auth-test.md](14-jwt-auth-test.md) | **JWT 인증 통합 테스트** — Redis 블랙리스트·DB revoke·Case 2 자동 재발급·sub 불일치·서명 위조·만료 차단 8 시나리오 |
 | [15-resilience-circuit-breaker-test.md](15-resilience-circuit-breaker-test.md) | **Resilience4j 서킷브레이커 테스트** — CLOSED/OPEN/HALF_OPEN 상태 전이·fallback 반환·QueueService 레벨 검증 7 시나리오 |
+| [16-sse-multi-instance-test.md](16-sse-multi-instance-test.md) | **SSE 다중 인스턴스 브로드캐스트 테스트** — Redis Pub/Sub 으로 발행/구독 인스턴스가 달라도 알림 전달·사용자 격리·broadcast·no-op 4 시나리오 |
 
 ## 산출물 (evidence/)
 
@@ -39,6 +40,7 @@ test-code/
     ├── jwt-auth-test-result.md
     ├── circuit-breaker-test-result.md
     ├── idempotency-test-result.md
+    ├── sse-multi-instance-test-result.md
     └── README.md
 ```
 

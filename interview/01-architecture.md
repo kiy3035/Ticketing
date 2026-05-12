@@ -55,7 +55,7 @@
 **A.** **감사·정산·법적 추적**이 필요하면 MySQL. **순위·선점·캐시·휘발성**이 핵심이면 Redis. 두 저장소가 엮이는 지점(예약 확정)은 **DB 커밋 후 Redis 정리(AFTER_COMMIT)** 와 **outbox 로 Kafka** 로 경계를 나눕니다.
 
 > **🟡 Q5-1. Redis 장애 시?**
-> **A.** 대기열·홀드·락이 막히므로 **오픈 예매 플로우는 사실상 중단**에 가깝습니다. `RedisCircuitBreakerExecutor` 가 OPEN 상태에서 fast-fail 로 응답 시간만큼은 보호하고, `ticketingDatastores` 헬스가 DOWN 으로 떨어져 ALB 가 트래픽을 빼게 됩니다. 이미 적재된 예약·결제 조회는 DB 로 가능. 다음 단계로는 Sentinel/Cluster 도입 가능.
+> **A.** 대기열·홀드·락이 막히므로 **오픈 예매 플로우는 사실상 중단**에 가깝습니다. `RedisCircuitBreakerExecutor` 가 OPEN 상태에서 fast-fail 로 응답 시간만큼은 보호하고, `ticketingDatastores` 헬스가 DOWN 으로 떨어집니다(현재 nginx는 passive health check라 헬스 DOWN을 자동 감지하진 않고, upstream 실제 실패 누적으로 격리). 이미 적재된 예약·결제 조회는 DB 로 가능. 다음 단계로는 Sentinel/Cluster 도입 가능.
 
 ---
 
@@ -67,21 +67,20 @@
 - **Kafka 컨슈머**: 동일 group-id 로 파티션 단위 분산
 - **DB 커넥션**: HikariCP `maximum-pool-size=30`, `minimum-idle=5` — 인스턴스 수 × max-pool 합이 RDS `max_connections` 한계 안쪽이 되도록 설계
 
-현재 t3a.small 1대로 운영 중이고, ALB 도입 후 2대 스케일아웃 예정입니다.
+현재 t3a.small 앱서버 2대 + 인프라서버 nginx(`least_conn` + passive health check) 구성으로 운영 중. 부하 테스트(Phase 4·5·6·7·8)로 스케일아웃·페일오버 검증 완료.
 
 > **🟡 Q6-1. SSE 는 다중 인스턴스에서 어떻게?**
-> **A.** `SseNotificationService` 가 인스턴스 로컬에 `SseEmitter` 를 들고 있어 다음 단계가 필요합니다. **스티키 세션** 또는 **Redis Pub/Sub 브로드캐스트** 를 후보로 생각하고 있고, 면접에서는 한계를 인정하고 개선안을 말합니다.
+> **A.** **Redis Pub/Sub 브로드캐스트** 로 해결했습니다. `SseNotificationService` 가 `MessageListener` 를 구현하고, `SseRedisConfig` 가 `RedisMessageListenerContainer` 로 `sse:notify:*` 패턴을 PSUBSCRIBE 합니다. 알림 발행 시 `redisTemplate.convertAndSend("sse:notify:{userId}", json)` → 모든 인스턴스의 `onMessage()` 가 호출되고, **에미터를 보유한 인스턴스만** 자기 emitter 에 send 합니다. Kafka 컨슈머가 어느 인스턴스에서 실행돼도 사용자가 연결된 인스턴스로 알림이 전달됩니다. `SseNotificationMultiInstanceIntegrationTest` (Testcontainers Redis) 에서 cross-instance broadcast·격리·no-op 4 시나리오로 검증.
 
 ---
 
 ### 🔴 Q7. 지금 구조에서 아쉬운 점·개선하고 싶은 점은?
 
 **A.** 코드 레벨에서 다음을 인지하고 있습니다.
-1. **SSE 다중 인스턴스 미해결** — Redis Pub/Sub 으로 브로드캐스트 필요
-2. **직접 Kafka send 경로**(`HOLD_CREATED`, `PaymentComplete`) 의 운영 재처리·모니터링 — outbox 수준으로 끌어올릴지 트레이드오프
-3. **`QueueProcessingScheduler` 가 `findAll()` 로 전 공연 순회** — 대기열 활성 공연만 추리는 인덱싱 필요
-4. **`HoldStore.extendHoldTtl` 가 Lua 가 아닌 다중 명령** — 결제 단계라 경합은 적지만 원자성 보강 가능
-5. **`QueueService.removeExistingTokens` 가 ZSet 전체 스캔** — `queue:user:{concertId}:{userId}` 역인덱스로 O(1) 화 가능
+1. **직접 Kafka send 경로**(`HOLD_CREATED`, `PaymentComplete`) 의 운영 재처리·모니터링 — outbox 수준으로 끌어올릴지 트레이드오프
+2. **`QueueProcessingScheduler` 가 `findAll()` 로 전 공연 순회** — 대기열 활성 공연만 추리는 인덱싱 필요
+3. **`HoldStore.extendHoldTtl` 가 Lua 가 아닌 다중 명령** — 결제 단계라 경합은 적지만 원자성 보강 가능
+4. **`QueueService.removeExistingTokens` 가 ZSet 전체 스캔** — `queue:user:{concertId}:{userId}` 역인덱스로 O(1) 화 가능
 
 > **🔴 Q7-1. 처음부터 다시 짠다면?**
 > **A.** **읽기 전용 트래픽(공연 목록·좌석 조회)** 을 별도 서비스로 분리해 스케일 단위를 나누는 걸 검토합니다. 현재 단일 모듈 구조는 포트폴리오·온보딩 비용 면에서는 유리한 선택이었습니다.
