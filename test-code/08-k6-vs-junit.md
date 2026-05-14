@@ -108,8 +108,8 @@ export default function() {
 ### ⭐⭐⭐ Tier 1 — 반드시 보여줘야 할 것
 | 파일 | 무엇을 보여주나 |
 |------|----------------|
-| `docs/backend-portfolio.md` | 프로젝트 개요·아키텍처·핵심 구현·결과를 한 페이지로 요약 |
-| `docs/backend-portfolio.md` § ADR | 6가지 핵심 기술 결정 (락, Kafka, DB락, 멱등, Virtual Thread, SSE 다중 인스턴스) — **why 중심** |
+| `docs/ticketing-portfolio.md` | 프로젝트 개요·아키텍처·핵심 구현·결과를 한 페이지로 요약 |
+| `docs/ticketing-portfolio.md` § ADR | 6가지 핵심 기술 결정 (락, Kafka, DB락, 멱등, Virtual Thread, SSE 다중 인스턴스) — **why 중심** |
 | `docs/jwt-auth.md` | JWT 4-case 재발급, Redis 블랙리스트 + DB jti revoke, 단일 트랜잭션 — 분산 환경 의식 |
 | `test-code/05-test-catalog.md` | 46개 테스트 메서드 카탈로그 표 |
 | `test-code/07-bugs-found-via-testing.md` | 실제 발견·수정한 버그 3건 (Testcontainers / JWT 트랜잭션 / nginx 로그) |
@@ -134,11 +134,11 @@ export default function() {
 | `test-code/02-test-types-and-conventions.md` | 테스트 작성 컨벤션 |
 
 ### 면접 시 권장 노출 순서
-1. `backend-portfolio.md` — 첫 30초로 전체 그림 잡기
-2. `docs/backend-portfolio.md` § ADR — 1~2분으로 핵심 의사결정 어필
+1. `ticketing-portfolio.md` — 첫 30초로 전체 그림 잡기
+2. `docs/ticketing-portfolio.md` § ADR — 1~2분으로 핵심 의사결정 어필
 3. 질문 따라 분기:
    - **"테스트 작성?"** → `test-code/05-test-catalog.md` + `evidence/Test-Summary.png`
-   - **"동시성?"** → `SeatHoldConcurrencyTest.png` + `docs/backend-portfolio.md` § ADR-1
+   - **"동시성?"** → `SeatHoldConcurrencyTest.png` + `docs/ticketing-portfolio.md` § ADR-1
    - **"부하?"** → `load-test-portfolio.md`
    - **"버그 발견 경험?"** → `test-code/07-bugs-found-via-testing.md`
    - **"JWT?"** → `docs/jwt-auth.md`

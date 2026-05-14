@@ -23,5 +23,5 @@
 
 ## docs/ 와의 역할 분리
 
-- **`docs/`**: 포트폴리오·배포·API·아키텍처 요약. [`backend-portfolio.md`](../docs/backend-portfolio.md)의 ADR 섹션과 [`sequence-diagrams.md`](../docs/sequence-diagrams.md) 가 설계 결정과 시퀀스의 기준이다.
+- **`docs/`**: 포트폴리오·배포·API·아키텍처 요약. [`ticketing-portfolio.md`](../docs/ticketing-portfolio.md)의 ADR 섹션과 [`sequence-diagrams.md`](../docs/sequence-diagrams.md) 가 설계 결정과 시퀀스의 기준이다.
 - **`my-docs/`**: 위를 **코드 라인 단위로 펼친** 공부 노트. Redis·Kafka 상세는 **`06-redis-kafka-reference.md` 한 파일**로 모았다.

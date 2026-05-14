@@ -15,7 +15,7 @@
 
 | 순서 | 문서 | 내용 | 분량 |
 |------|------|------|------|
-| **1** | [**backend-portfolio**](backend-portfolio.md) | **메인** — 아키텍처 + 트러블슈팅 5가지 사례 + ADR | 핵심 |
+| **1** | [**ticketing-portfolio**](ticketing-portfolio.md) | **메인** — 아키텍처 + k6 트러블슈팅 4사례 + 구현 결정 2건 + ADR | 핵심 |
 | 2 | [load-test-portfolio](load-test-portfolio.md) | 부하 테스트 8개 Phase — 가설·실험·해석 (페일오버 포함) |  데이터 |
 | 3 | [jwt-auth](jwt-auth.md) | JWT 4-case 재발급 + Redis 블랙리스트 + DB jti revoke | 보조 |
 | 4 | [sequence-diagrams](sequence-diagrams.md) | 좌석 선점 · 결제 + 예약 · Saga 보상 시퀀스 | 시각 |

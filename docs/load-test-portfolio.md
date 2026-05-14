@@ -1,7 +1,7 @@
 # 부하 테스트 — 병목 진단 & 한계 탐지
 
 > 이 문서는 **트러블슈팅 여정**의 데이터 부록입니다.
-> 핵심 트러블슈팅 서사는 [`backend-portfolio.md` 4장](backend-portfolio.md#4-트러블슈팅-사례)에 있고,
+> 핵심 트러블슈팅 서사는 [`ticketing-portfolio.md` 4장](ticketing-portfolio.md#4-트러블슈팅-사례--k6-부하-테스트)에 있고,
 > 이 문서에서는 각 Phase의 가설·실험 조건·실측 수치·Grafana 증거를 정리합니다.
 
 ## 개요
