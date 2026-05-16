@@ -16,6 +16,7 @@
 | [08-jwt-auth.md](08-jwt-auth.md) | JWT Access/Refresh, **Refresh jti DB 저장·폐기**, Redis Access 블랙리스트 |
 | [concurrency-deep-dive.md](concurrency-deep-dive.md) | SETNX·Lua·DB 비관적 락, 동시성 테스트 |
 | [resilience-patterns.md](resilience-patterns.md) | **멱등 키·Saga·서킷브레이커·Rate Limit·Outbox** 종합 |
+| [sse-multi-instance.md](sse-multi-instance.md) | **SSE 다중 인스턴스** Redis Pub/Sub 브로드캐스트, 트레이드오프, 테스트 검증 |
 | [virtual-threads-guide.md](virtual-threads-guide.md) | Virtual Thread 적용 지점(Tomcat, 스케줄러, Kafka 리스너) |
 | [flyway-guide.md](flyway-guide.md) | 마이그레이션 운영 팁 (V1~V8 현황 포함) |
 | [load-test-guide.md](load-test-guide.md) | k6 스크립트 실행 커맨드 |

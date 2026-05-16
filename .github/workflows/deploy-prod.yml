@@ -79,8 +79,11 @@ jobs:
             "docker exec nginx nginx -t && docker exec nginx nginx -s reload"
 
   # ── 3. App1 배포 ──────────────────────────────────────────────────────────
-  # nginx passive health check(max_fails=2 fail_timeout=10s)로 app1 다운 시
-  # 자동으로 app2로만 트래픽을 보낸다. proxy_next_upstream으로 진행 중 요청도 재시도.
+  # App1·App2 병렬 배포 (deploy-app2와 동시 실행). 두 서버 컨테이너 재기동
+  # 윈도우가 짧게 겹치는 순간엔 일시적 5xx 가능 — failover 측정 범위 외 시나리오.
+  # 사용자 트래픽이 없는 토이 프로젝트 특성상 감내하며, 실서비스 전환 시
+  # graceful shutdown + active health check 도입 후 rolling 전략으로 전환 권장.
+  # (한 대만 다운 시엔 nginx passive HC + proxy_next_upstream으로 자동 격리·재시도.)
   deploy-app1:
     needs: [build, deploy-infra]
     if: always() && needs.build.result == 'success' && (needs.deploy-infra.result == 'success' || needs.deploy-infra.result == 'skipped')
@@ -113,7 +116,7 @@ jobs:
           ssh -o StrictHostKeyChecking=no -i ec2_key.pem "ubuntu@$EC2_HOST" \
             "cd ~/ticketing && sudo docker compose -f docker-compose.app.yml up -d --build"
 
-      # 헬스체크 통과 확인 후 app2 배포 진행 (최대 3분 대기)
+      # App1 컨테이너 정상 기동 확인 (최대 3분 대기). App2 배포는 병렬로 진행 중.
       - name: Wait for App1 health check
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
