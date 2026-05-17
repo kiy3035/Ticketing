@@ -37,7 +37,7 @@
 ### 🟡 Q3. 홀드 관련 Redis 키 설계를 자세히 설명해 주세요.
 
 **A.** 4개 키:
-- `hold:seat:{seatId}` (String): 좌석→홀드 토큰. `HoldStore.CREATE_SCRIPT` 의 `EXISTS` 가 중복 홀드 차단. TTL = `ticketing.hold.ttl-seconds` (기본 10분, 결제 단계 진입 시 20분으로 연장).
+- `hold:seat:{seatId}` (String): 좌석→홀드 토큰. `HoldStore.CREATE_SCRIPT` 의 `EXISTS` 가 중복 홀드 차단. TTL = `ticketing.hold.ttl-seconds` (300초 = 5분, 결제 단계 진입 시 1200초 = 20분으로 연장).
 - `hold:token:{holdToken}` (String): 토큰→`HoldInfo` JSON. 결제 시 홀드 유효성 검증.
 - `hold:expires` (ZSet): score=만료 시각(ms), member=payload JSON. `HoldCleanupScheduler` 가 `ZRANGEBYSCORE 0 now` 로 만료 항목 일괄 조회.
 - `hold:user:{userId}` (Set): 사용자별 활성 홀드 토큰 인덱스. "내 홀드 목록" API 에서 O(전역 홀드 수) 스캔 회피.
@@ -53,8 +53,8 @@
 ### 🟡 Q4. Redis 메모리 정책(`maxmemory 400mb`, `allkeys-lru`)과 TTL 전략?
 
 **A.** Docker Compose 에서 Redis 에 `maxmemory 400mb`, `maxmemory-policy allkeys-lru`, `save ""` (RDB 비활성). 개별 키 TTL:
-- 대기열 토큰: 30분 (`ticketing.queue.token-ttl-seconds`)
-- 홀드: 10분, 결제 진입 시 20분 연장
+- 대기열 토큰: 60초 (`ticketing.queue.token-ttl-seconds`, 부하 테스트 시나리오 회전을 짧게 잡은 값. 실서비스라면 30분~1시간)
+- 홀드: 5분 (300초), 결제 진입 시 20분(1200초) 연장
 - JWT Access 블랙리스트: 토큰 남은 만료 시간
 - 캐시(콘서트 목록): 5분
 - 잔여석 캐시: 2초

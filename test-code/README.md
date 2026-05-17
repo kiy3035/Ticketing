@@ -13,7 +13,7 @@
 | [02-test-types-and-conventions.md](02-test-types-and-conventions.md) | **4가지 테스트 유형** (단위/슬라이스/통합/동시성) + Given-When-Then 컨벤션 |
 | [03-how-to-run.md](03-how-to-run.md) | **실행 명령** — Gradle 태스크, IntelliJ, CI |
 | [04-capturing-evidence.md](04-capturing-evidence.md) | **결과 캡처** — HTML 리포트, JaCoCo 커버리지, 스크린샷 폴더 운영 |
-| [05-test-catalog.md](05-test-catalog.md) | **테스트 카탈로그** — 현재 작성된 20개 테스트 클래스·40개 메서드의 시나리오/검증 항목 표 |
+| [05-test-catalog.md](05-test-catalog.md) | **테스트 카탈로그** — 현재 작성된 17개 테스트 클래스·46개 메서드의 시나리오/검증 항목 표 |
 | [06-interview-qa.md](06-interview-qa.md) | **면접 예상 Q&A** — 테스트 관련 질문에 대한 답변 스크립트 |
 | [07-bugs-found-via-testing.md](07-bugs-found-via-testing.md) | **실제 발견·수정한 버그 3건** — 테스트/코드리뷰로 찾은 근거 자료 |
 | [08-k6-vs-junit.md](08-k6-vs-junit.md) | **k6 부하 테스트 vs JUnit** — 차이·역할 분담·포트폴리오 노출 가이드 |

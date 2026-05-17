@@ -25,7 +25,7 @@
 
 ### 2. 좌석 홀드/만료 시스템 (Hold System)
 - **Redis TTL + 분산 락**: 경쟁 상태 해결 및 중복 홀드 방지. 락 키 `lock:seat:{seatId}`, TTL·재시도는 설정으로 조정 ([docs/ticketing-portfolio.md](docs/ticketing-portfolio.md#3-시스템-아키텍처))
-- **홀드 TTL**: 10분(600초, `ticketing.hold.ttl-seconds`). 결제 진행 시 연장 설정 가능
+- **홀드 TTL**: 5분(300초, `ticketing.hold.ttl-seconds`). 결제 진행 시 20분(1200초)으로 자동 연장
 - **자동 만료 처리**: 스케줄러가 만료된 홀드를 스캔하여 자동 정리
 - **이벤트 기반 알림**: Kafka로 만료 이벤트 발행 후 SSE로 실시간 전달
 
@@ -137,7 +137,7 @@
 ### 7. 부하 테스트·수용 인원 (Knee point)
 - **k6 스크립트**: [load-tests/](load-tests/) 에 `queue-flow.js`, `concurrent-hold.js`, `knee-point.js`, `full-flow.js`, `jwt-scenarios.js` 제공
 - **인프라**: t3a.medium 1대(Redis/Kafka/Prometheus/Grafana/nginx) + t3a.small 2대(앱) + t3a.small(k6)
-- **결과 (Phase 1~8)**: 단일 인스턴스 캐시 적용으로 p95 2.06s → 444ms (▼78%), RPS 376 → 834/s (▲122%). 2대 nginx 분산으로 p95 164ms / RPS 1,447/s / 에러 0%. **Knee Point VU=1,000~1,200**, 안정 운영 상한 VU=800. 좌석 동시 선점 정확성은 100 VU × 20회 시행에서 모두 정확히 1건 성공. nginx 페일오버(앱 30초 다운) 시 사용자 에러 ~20% → 클라이언트 retry 결합 11%까지 흡수
+- **결과 (Phase 1~8)**: 캐시 + 2대 nginx 분산으로 **p95 2.06s → 164ms (▼92%)**, RPS 376 → 1,447/s, 에러 0%. (단일 인스턴스 캐시 단독: p95 444ms / 834 RPS). **Knee Point VU=1,000~1,200**, 안정 운영 상한 VU=800. 좌석 동시 선점 정확성은 100 VU × 20회 시행에서 모두 정확히 1건 성공. nginx 페일오버(앱 30초 다운) 시 사용자 에러 ~20% → 클라이언트 retry 결합 11%까지 흡수
 - **상세**: [docs/ticketing-portfolio.md](docs/ticketing-portfolio.md), [docs/load-test-portfolio.md](docs/load-test-portfolio.md), [docs/deployment-ec2.md](docs/deployment-ec2.md)
 
 ## 📋 핵심 기능
@@ -160,7 +160,7 @@
 - 대기열 나가기
 
 ### 좌석 예매
-- 좌석 선택 및 홀드 생성 (10분 TTL, 설정 가능)
+- 좌석 선택 및 홀드 생성 (5분 TTL, 결제 진입 시 20분으로 연장)
 - 홀드 만료 알림 (SSE 실시간 전달)
 - 결제 완료 시 예약 확정 (별도 예약 확정 API 없음)
 - 예약 내역 조회
@@ -283,7 +283,7 @@ docker compose up -d
    - 입장 허용 시 `/concert.html?concertId={id}&queueToken={token}`로 자동 이동
 
 6. **좌석 선택**
-   - 좌석 선택 후 홀드 생성 (10분 TTL, 설정 가능)
+   - 좌석 선택 후 홀드 생성 (5분 TTL, 결제 진입 시 20분으로 연장)
    - 홀드 생성 시 Kafka로 `HOLD_CREATED` 이벤트 발행
 
 7. **결제 완료 및 예약 확정**
@@ -303,7 +303,7 @@ docker compose up -d
 ### 대기열 시스템
 - **Redis ZSet**: O(log N) 순번 조회로 성능 최적화
 - **배치 처리**: 2초마다 상위 50명 처리로 서버 부하 분산
-- **토큰 TTL**: `ticketing.queue.token-ttl-seconds`로 설정 (기본 30분)
+- **토큰 TTL**: `ticketing.queue.token-ttl-seconds` = 60초 (부하 테스트용 짧은 값. 실서비스 30분~1시간 권장)
 
 ### 서버 캐시
 - **콘서트 목록**: Redis 캐시로 응답 속도 향상 및 DB 부하 최적화
@@ -315,7 +315,7 @@ docker compose up -d
 
 ### JWT·Redis
 - **Access TTL**: 30분, **Refresh TTL**: 14일 (설정 가능)
-- **대기열 토큰 TTL**: `ticketing.queue.token-ttl-seconds` (기본 30분, 설정 가능)
+- **대기열 토큰 TTL**: `ticketing.queue.token-ttl-seconds` = 60초 (부하 테스트용. 실서비스 30분~1시간 권장)
 
 ### 실시간 알림
 - **SSE**: 즉시 전달로 사용자 경험 향상

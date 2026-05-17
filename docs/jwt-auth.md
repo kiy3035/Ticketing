@@ -7,7 +7,7 @@
 | 알고리즘 | HS256 | HS256 |
 | TTL | 30분 | 14일 |
 | 전달 방식 | `Authorization: Bearer <token>` | `X-Refresh-Token: <token>` |
-| 저장 위치 | 클라이언트 메모리 | 클라이언트 + DB `refresh_tokens` |
+| 저장 위치 | 클라이언트 `sessionStorage` | 클라이언트 `sessionStorage` + DB `refresh_tokens` |
 | 폐기 방식 | Redis 블랙리스트 (`jwt:bl:{jti}`) | DB `revoked = true` |
 
 **알고리즘 선택 이유**: HS256은 대칭키(단일 시크릿)다. 이 프로젝트처럼 **단일 백엔드가 발급·검증 모두 담당**하는 구조에서는 RS256(비대칭)의 이점이 없고, 키 관리가 단순한 HS256이 적합하다.

@@ -360,7 +360,7 @@ baseline 20.77%를 줄여야 했다. 자연스러운 첫 가설은 *nginx가 죽
 
 #### 설계
 
-- Redis SETNX + UUID 토큰으로 좌석당 배타적 락. 부하 테스트 환경의 `ticketing.lock.ttl-seconds=3`을 적용했다(실서비스 복원 시 5초 권장). 보유자가 죽어도 다음 요청이 빠르게 진입할 수 있다.
+- Redis SETNX + UUID 토큰으로 좌석당 배타적 락. `ticketing.lock.ttl-seconds=3` — 정상 흐름이 1초 내 종료되는 것 기준 3배 여유. 보유자가 비정상 종료되어도 다음 요청이 빠르게 진입할 수 있다.
 - Lua 스크립트로 unlock — `GET == 토큰 → DEL`을 원자로 처리. 다른 소유자의 락을 잘못 해제하는 사고를 막는다.
 - Lua로 holdInfo 작성 — `EXISTS` 확인 → 좌석→토큰 SET → 토큰→상세 SET → 만료 ZADD를 한 번에. 중간에 끼어드는 연산이 없도록.
 - Redisson을 도입하지 않았다. 단일 Redis 인스턴스에서 Redlock 알고리즘은 과한 복잡도라고 봤다. UUID 토큰 + Lua 해제로 동등한 안전성을 얻을 수 있다.
@@ -443,7 +443,7 @@ JWT 인증을 도입할 때 두 가지 요구사항이 충돌했다.
 |---|---|---|
 | TTL | 30분 | 14일 |
 | 용도 | 매 요청 인증 | Access 만료 시 새 Access 발급 |
-| 저장 | 클라이언트 메모리 | 클라이언트 + DB(`refresh_tokens`) |
+| 저장 | 클라이언트 `sessionStorage` | 클라이언트 `sessionStorage` + DB(`refresh_tokens`) |
 
 매 요청에 Access + Refresh를 같이 보내고 만료 조합에 따라 4가지로 분기한다.
 
@@ -483,7 +483,7 @@ Access는 Redis, Refresh는 DB로 분리한 이유는 두 토큰의 수명·추�
 
 #### ADR-1. Redis SETNX 분산 락 (Redisson 미사용)
 - 단일 Redis 인스턴스에서 Redlock은 과도. UUID 토큰 + Lua 해제로 동등한 안전성 확보
-- TTL 기본 5초(부하테스트 3초) — 락 보유자가 죽어도 다음 요청이 빠르게 진입
+- TTL 3초 — 정상 흐름(Redis 4회 + DB 1회)이 1초 내 종료되는 것 기준 3배 여유. 락 보유자가 비정상 종료되어도 다음 요청이 빠르게 진입
 - Sentinel/Cluster 전환 시 라이브러리 재검토 필요 (현재 단일 인스턴스 전제)
 
 #### ADR-2. Kafka 이벤트 드리븐

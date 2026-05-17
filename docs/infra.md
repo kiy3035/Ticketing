@@ -49,9 +49,9 @@ nginx는 앱 서버(t3a.small)가 아닌 **인프라 서버(t3a.medium)**에서 
 | Hikari max-pool-size | 30 | 부하 테스트 최적값 (Phase 1 실험 도출) |
 | Hikari minimum-idle | 5 | 앱서버 2대 × 30 = 60 상시 점유로 RDS max_connections 초과 방지. 평시 총 10개 유지 |
 | Redis max-active | 20, min-idle=5 | Lettuce 풀 |
-| 좌석 락 TTL | 3s (부하테스트) / 5s (기본) | `ticketing.lock.ttl-seconds` |
-| 홀드 TTL | 300s (부하테스트) / 600s (기본) | `ticketing.hold.ttl-seconds` |
-| 대기열 토큰 TTL | 60s (부하테스트) / 1800s (기본) | `ticketing.queue.token-ttl-seconds` |
+| 좌석 락 TTL | 3s | `ticketing.lock.ttl-seconds` — 정상 흐름(Redis 4회+DB 1회)이 1초 내 종료되는 것 기준 3배 여유 |
+| 홀드 TTL | 300s (5분) | `ticketing.hold.ttl-seconds` — 결제 진입 시 1200s로 연장 |
+| 대기열 토큰 TTL | 60s | `ticketing.queue.token-ttl-seconds` — 부하 테스트 시나리오 회전을 위해 짧게 설정 (실서비스 30분~1시간 권장) |
 | 결제 중 홀드 연장 | 1200s (20분) | `ticketing.payment.hold-extension-ttl-seconds` |
 | Rate Limit | 10 req/s/user | Sliding Window, `ticketing.rate-limit.*` |
 | Circuit Breaker | failure-rate 50%, wait 30s | `redisCircuitBreaker` |

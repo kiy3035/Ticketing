@@ -94,7 +94,7 @@
 | 1 | `contextLoads` | Spring Boot 컨텍스트 로딩 | 모든 빈 정상 주입 (부팅 가능) |
 
 ### 3-4. `JwtAuthenticationIntegrationTest` (Testcontainers MySQL + Redis) ⭐
-**검증 대상**: JWT stateless 약점 보완 — Redis 블랙리스트 + DB Refresh revoke + 4-case 자동 재발급
+**검증 대상**: JWT stateless 약점 보완 — Redis 블랙리스트 + DB Refresh revoke + 4-case 자동 재발급 + 위·변조 거부
 **의존성**: 실제 MySQL(Flyway 없이 create-drop) + 실제 Redis + `TestRestTemplate` 전체 HTTP 호출
 
 | # | 메서드 | 시나리오 | 기대 결과 |
@@ -104,6 +104,9 @@
 | 3 | `case2_reissuesAccess_viaResponseHeader` | 만료 Access + 유효 Refresh 로 호출 (Case 2) | 200 OK + `X-New-Access-Token` 헤더에 유효 JWT |
 | 4 | `mismatchedSubject_isRejected` | A의 Access + B의 Refresh (subject 불일치) | 토큰 짜깁기 차단 → 401 |
 | 5 | `blacklistKey_expiresAutomatically_byAccessRemainingTtl` | 짧은 TTL Access jti 블랙리스트 등록 → TTL 경과 | Redis 키 자동 삭제 (메모리 누수 방지) |
+| 6 | `tamperedSignature_isRejected` | 서명 위조된 Access 로 호출 | JJWT 서명 검증 실패 → 401 |
+| 7 | `bothExpired_returns401_andRequiresReLogin` | Access·Refresh 둘 다 만료 (Case 1) | 401 (재로그인 필요) |
+| 8 | `malformedJwt_isRejected` | 형식이 깨진 JWT 문자열 | 파싱 단계 차단 → 401 |
 
 ### 3-5. `RedisCircuitBreakerExecutorTest` (단위) ⭐
 **검증 대상**: `RedisCircuitBreakerExecutor` CLOSED/OPEN/예외 분기 — Mockito로 CircuitBreaker 목

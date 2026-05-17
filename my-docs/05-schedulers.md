@@ -101,13 +101,13 @@
 | `ticketing.queue.batch-size` | 50 | `QueueProcessingScheduler` | 한 번에 허용할 최대 인원 |
 | `ticketing.queue.cleanup-interval-ms` | 60000 | `QueueCleanupScheduler` | 유령 토큰 정리 주기 |
 | `ticketing.queue.cleanup-batch-size` | 200 | `QueueCleanupScheduler` | ZSCAN 한 번에 보는 수 |
-| `ticketing.queue.token-ttl-seconds` | 60(부하)/1800(default) | `QueueService` | 대기열 토큰 String TTL |
+| `ticketing.queue.token-ttl-seconds` | 60 | `QueueService` | 대기열 토큰 String TTL (실서비스 1800 권장) |
 | `ticketing.queue.activation-threshold` | 50 | `QueueController.required` | 대기열 화면 활성화 임계치 |
 | `ticketing.queue.immediate-allow-threshold` | 30 | `QueueController.enter` | 즉시 입장 허용 임계치 |
-| `ticketing.hold.ttl-seconds` | 300(부하)/600(default) | `HoldStore.createHold` | 좌석 홀드 TTL |
+| `ticketing.hold.ttl-seconds` | 300 | `HoldStore.createHold` | 좌석 홀드 TTL (5분, 결제 진입 시 1200으로 연장) |
 | `ticketing.hold.cleanup-interval-ms` | 60000 | `HoldCleanupScheduler` | 만료 홀드 정리 주기 |
 | `ticketing.hold.cleanup-batch-size` | 200 | `HoldCleanupScheduler` | 한 번에 처리할 만료 홀드 |
-| `ticketing.lock.ttl-seconds` | 3(부하)/5(default) | `RedisLockService` | 좌석 락 TTL |
+| `ticketing.lock.ttl-seconds` | 3 | `RedisLockService` | 좌석 락 TTL (정상 흐름이 1초 내 종료되는 것 기준 3배 여유) |
 | `ticketing.lock.retry-count` | 0 | `HoldService.createHold` | 락 재시도 횟수 |
 | `ticketing.payment.hold-extension-ttl-seconds` | 1200 | `PaymentService.requestPayment` | 결제 진행 중 홀드 연장 TTL (20분) |
 | `ticketing.refund.interval-ms` | 300000 | `RefundForCancelledConcertScheduler` | 환불 배치 주기 (5분) |

@@ -47,7 +47,7 @@ JWT 는 서명만 유효하면 만료 전까지 어떤 서버에서든 통과한
 
 ---
 
-## 3. 5가지 시나리오
+## 3. 8가지 시나리오
 
 `JwtAuthenticationIntegrationTest extends IntegrationTestBase` (Testcontainers MySQL + Redis 사용)
 
@@ -58,8 +58,9 @@ JWT 는 서명만 유효하면 만료 전까지 어떤 서버에서든 통과한
 | 3 | **Case 2 자동 재발급** | 만료된 Access + 유효 Refresh 로 요청 → 200 + 응답 헤더 `X-New-Access-Token` 존재, 새 Access 가 유효한 JWT | 4-case 분기 중 가장 핵심. 클라이언트 재시도 없는 투명한 재발급 |
 | 4 | **다른 사용자의 Refresh 도용 차단** | 사용자 A 의 Access + 사용자 B 의 Refresh 로 요청 → 401 (sub 불일치) | jti 도용·토큰 짜깁기 공격 방어 |
 | 5 | **블랙리스트 TTL 자동 만료** | 짧은 TTL(2초) Access 를 블랙리스트 등록 → 3초 대기 → Redis 키 사라짐 | 메모리 무한 누적 방지. 운영 안정성 어필 |
-
-> 시나리오 5 는 운영 관점 어필이라 단위 테스트(`TokenBlacklistServiceTest`) 로 분리해도 됨. 통합 5개로 묶을지 4 통합 + 1 단위 로 나눌지는 작성 시 선택.
+| 6 | **서명 위조 거부** | payload 변조 후 임의 서명을 붙인 Access 로 호출 → 401 | JJWT 서명 검증 단계가 동작하는지 자동화 보장 |
+| 7 | **Case 1 — 둘 다 만료** | Access·Refresh 모두 만료된 상태로 요청 → 401 (재로그인 필요) | 4-case 분기 완전 커버, 자동 재발급 경로가 절대 열리지 않음 |
+| 8 | **형식 깨진 JWT 거부** | base64 가 아닌 임의 문자열을 Bearer 로 전송 → 401 | 파싱 단계에서 예외 흡수, 500 으로 새지 않음을 확인 |
 
 ---
 
@@ -110,12 +111,15 @@ void logout_blacklistsAccessJti_andRejectsSubsequentRequests() {
 ```bash
 ./gradlew test --tests JwtAuthenticationIntegrationTest
 
-# 기대 출력
+# 기대 출력 (8개 시나리오)
 JwtAuthenticationIntegrationTest > 로그아웃 → ... 401, Redis 블랙리스트 키 존재 PASSED
 JwtAuthenticationIntegrationTest > 로그아웃 → 만료된 Access + 살아있는 Refresh 로 요청 → 401 PASSED
 JwtAuthenticationIntegrationTest > 만료된 Access + 유효 Refresh → X-New-Access-Token 헤더로 새 Access 발급 PASSED
 JwtAuthenticationIntegrationTest > 사용자 A 의 Access + 사용자 B 의 Refresh → 401 (sub 불일치) PASSED
 JwtAuthenticationIntegrationTest > 짧은 TTL Access 블랙리스트 등록 → TTL 경과 후 키 자동 삭제 PASSED
+JwtAuthenticationIntegrationTest > 서명 위조된 Access → 401 PASSED
+JwtAuthenticationIntegrationTest > Access·Refresh 모두 만료(Case 1) → 401 PASSED
+JwtAuthenticationIntegrationTest > 형식 깨진 JWT → 401 PASSED
 
 BUILD SUCCESSFUL
 ```

@@ -14,7 +14,7 @@
 5. `finally` 에서 `lockService.unlock(lockKey, lockToken)` (Lua: 본인 토큰일 때만 DEL)
 
 > **🟡 Q1-1. `finally` 에서 unlock 하는 이유? 어차피 TTL 로 풀리지 않나요?**
-> **A.** TTL(기본 5초)로 자동 해제되긴 하지만, 정상 흐름에서 5초간 다른 사용자가 같은 좌석을 홀드하지 못하게 됩니다. `finally` 에서 즉시 해제하면 락 점유 시간을 최소화해 다음 요청 처리 속도가 빨라집니다. unlock 도 Lua (`GET → 토큰 비교 → DEL`) 로 자기 토큰일 때만 풀어 다른 락을 실수로 해제하지 않게 했습니다.
+> **A.** TTL(3초)로 자동 해제되긴 하지만, 정상 흐름에서 3초간 다른 사용자가 같은 좌석을 홀드하지 못하게 됩니다. `finally` 에서 즉시 해제하면 락 점유 시간을 최소화해 다음 요청 처리 속도가 빨라집니다. unlock 도 Lua (`GET → 토큰 비교 → DEL`) 로 자기 토큰일 때만 풀어 다른 락을 실수로 해제하지 않게 했습니다.
 
 ---
 
@@ -64,11 +64,11 @@ return 1
 
 ---
 
-### 🟡 Q4. 락 TTL 을 5초로 설정한 근거와, TTL 이 짧아서 문제되는 경우는?
+### 🟡 Q4. 락 TTL 을 3초로 설정한 근거와, TTL 이 짧아서 문제되는 경우는?
 
-**A.** `TicketingProperties.Lock.ttlSeconds = 5`, `retryCount = 0` 이 디폴트입니다. 5초 안에 홀드 생성 응답이 오지 않으면 사용자 입장에서도 너무 느린 거고, Redis 에 불필요하게 긴 락을 남기지 않으려는 운영 절충입니다.
+**A.** `ticketing.lock.ttl-seconds=3`, `retry-count=0` 이 디폴트입니다. 정상 흐름에서 좌석 홀드 생성은 Redis 호출 4회(락 획득 → 좌석 검증 → Lua `holdInfo` 작성 → 락 해제) + DB 1회로 약 1초 내에 끝나므로, 3초는 정상 처리 시간의 3배 여유에 해당합니다. 너무 길면 락 보유자가 비정상 종료됐을 때 다른 사용자 대기 시간이 늘어나고, 너무 짧으면 정상 처리 중 락이 만료될 수 있어 균형점으로 잡았습니다.
 
-> **🟡 Q4-1. 5초 안에 처리가 안 끝나면 데이터가 꼬이지 않나요?**
+> **🟡 Q4-1. 3초 안에 처리가 안 끝나면 데이터가 꼬이지 않나요?**
 > **A.** 락 TTL 만료 ≠ 데이터 꼬임입니다. 3중 방어로:
 > - `HoldStore.CREATE_SCRIPT` 의 `EXISTS` 가 이미 홀드된 좌석 차단
 > - `ReservationService.confirm()` 에서 `seat.getStatus() == RESERVED` 검증
@@ -80,7 +80,7 @@ return 1
 
 ### 🔴 Q5. 홀드 만료와 예약 확정이 동시에 일어나는 레이스는 어떻게?
 
-**A.** 세 단계로 방어합니다.
+**A.** 네 단계로 방어합니다.
 1. `ReservationService.confirm()` 진입 시 `hold.getExpiresAt().isBefore(Instant.now())` → 이미 만료면 즉시 409
 2. `lock:seat:{seatId}` 좌석 락으로 `HoldCleanupScheduler` 와 동시에 같은 좌석을 조작하려 하면 한쪽이 실패
 3. 락 안에서 `holdStore.isSeatHeldByToken(seatId, holdToken)` 재확인 → cleanup 이 먼저 지웠으면 false → 409

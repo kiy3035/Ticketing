@@ -23,16 +23,16 @@
 |------|------|---------|------------------|
 | `Test-Summary-Final.png` | `test-code/images/` | HTML 리포트 — **48 tests / 0 failures / 100% successful** + 패키지별 분류 14개 | "단위·슬라이스·통합·동시성·아키텍처 5종, 14개 패키지에 걸쳐 48개 케이스 100% 통과" |
 | `SeatHoldConcurrencyTest.png` | `test-code/images/` | 콘솔 — **`100명이 동시에 같은 좌석 홀드 시도 → 정확히 1명만 성공 PASSED`** + ArchUnit 3개 규칙 통과 | "분산 락의 정확성을 자동화 테스트로 증명. ArchUnit으로 레이어 의존성도 CI에서 강제" |
-| `jwt 테스트 결과.png` | `test-code/images/` | 콘솔 — **JWT 인증 통합 테스트 5개 PASSED** (로그아웃 블랙리스트·DB revoke·Case2 자동 재발급·sub 불일치·TTL 만료) | "JWT stateless 약점 보완을 실제 MySQL+Redis Testcontainers 환경에서 자동화 검증" |
+| `jwt 테스트 결과.png` | `test-code/images/` | 콘솔 — **JWT 인증 통합 테스트 8개 PASSED** (로그아웃 블랙리스트·DB revoke·Case2 자동 재발급·sub 불일치·TTL 만료·서명 위조·둘 다 만료·형식 깨짐) | "JWT stateless 약점 보완을 실제 MySQL+Redis Testcontainers 환경에서 자동화 검증" |
 | `sse 다중인스턴스 테스트 결과.png` | `test-code/images/` | 콘솔 — **SSE 다중 인스턴스 통합 테스트 4개 PASSED** (cross-instance broadcast·양쪽 동시 연결·사용자 격리·no-op) | "스케일아웃 환경의 SSE 알림 누락 문제를 Redis Pub/Sub 으로 해결, 발행/구독 인스턴스가 달라도 정상 전달됨을 자동화 검증" |
 
 ## 추가 실행 결과 (2026-05-03)
 
 | 테스트 클래스 | 결과 파일 | 통과 | 소요 시간 |
 |--------------|-----------|------|-----------|
-| `JwtAuthenticationIntegrationTest` | [jwt-auth-test-result.md](jwt-auth-test-result.md) | 5/5 | - |
+| `JwtAuthenticationIntegrationTest` | [jwt-auth-test-result.md](jwt-auth-test-result.md) | 8/8 | - |
 | `IdempotencyServiceTest` | [idempotency-test-result.md](idempotency-test-result.md) | 3/3 | - |
-| 위 두 클래스 합산 | | **8/8** | **1분 10초** |
+| 위 두 클래스 합산 | | **11/11** | **1분 10초** |
 | `RedisCircuitBreakerExecutorTest` | [circuit-breaker-test-result.md](circuit-breaker-test-result.md) | 3/3 | 13초 |
 | `RedisCircuitBreakerIntegrationTest` | [circuit-breaker-test-result.md](circuit-breaker-test-result.md) | 3/3 | 57초 |
 | `SseNotificationMultiInstanceIntegrationTest` | [sse-multi-instance-test-result.md](sse-multi-instance-test-result.md) | 4/4 | 1분 9초 |

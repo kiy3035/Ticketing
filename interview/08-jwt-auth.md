@@ -80,7 +80,7 @@ Access 는 짧은 TTL + 단순 존재 여부 확인이라 Redis 가 적합 — *
 5. **sessionStorage 저장**: localStorage 보다 짧은 생명주기. CSRF 는 SameSite + 헤더 기반 인증으로 완화 (REST API 라 폼 기반 CSRF 위협이 적음)
 
 > **🔴 Q7-1. 왜 sessionStorage 인가요? Cookie HttpOnly 가 더 안전하지 않나요?**
-> **A.** Cookie HttpOnly 는 XSS 방어에는 강하지만 CORS/SameSite 설정 복잡도가 올라가고 CSRF 토큰 별도 관리 필요. sessionStorage 는 XSS 만 방어하면 되고 (CSP, 입력 sanitization 으로 보강), REST API + JWT 조합과 잘 맞습니다. 트레이드오프를 인지하고 선택했습니다.
+> **A.** Cookie HttpOnly 는 XSS 방어에는 강하지만 CORS/SameSite 설정 복잡도가 올라가고 CSRF 토큰 별도 관리가 필요합니다. sessionStorage 는 탭 단위로 격리되어 다른 탭·창에서 접근할 수 없고 탭 종료 시 자동 삭제된다는 장점이 있습니다. 대신 XSS 에는 노출되므로 CSP·입력 sanitization 으로 보강합니다. REST API + JWT 조합에서는 단순성·관리 비용 측면에서 적합하다고 판단했습니다.
 
 ---
 
