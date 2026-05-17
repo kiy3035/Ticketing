@@ -34,6 +34,18 @@
 > - `PaymentComplete` 직접 send 가 실패해도 DB는 이미 반영. 알림만 지연·유실 가능 (프로듀서 `acks=all`, `retries=3`, `enable.idempotence=true` 로 완화).
 > - `RESERVATION_CONFIRMED` 는 outbox 가 남으므로 브로커 복구 후 스케줄러가 다시 보냅니다.
 
+> **🔴 Q3-1-1. `acks=all`·`retries=3`·`enable.idempotence=true` 세 옵션이 각각 뭘 보호하나요?**
+> **A.** 세 옵션이 같이 작동해야 "유실 0 + 중복 0" 에 가까운 전송 보장이 됩니다.
+> - **`acks=all`** — 메시지 유실 방지. leader + 모든 in-sync replica 가 받아야 send 성공으로 처리. leader 브로커가 죽어도 replica 에 복제됐기 때문에 살아남습니다.
+> - **`retries=3`** — 일시적 네트워크 실패 시 프로듀서가 자동 재시도. 1초 간격 고정 백오프.
+> - **`enable.idempotence=true`** — `acks=all` 재시도 도중 사실은 브로커가 이미 받았던 경우, 같은 메시지가 두 번 저장되는 것 방지. 프로듀서 PID + 시퀀스 번호로 브로커가 중복 감지·제거합니다. 설정 위치는 `application.properties:53-55`.
+
+> **🟡 Q3-1-2. Kafka 는 at-least-once 인데 컨슈머 중복 수신은 어떻게 막나요?**
+> **A.** 프로듀서 멱등성과 별개로 컨슈머에서도 멱등성 가드를 둡니다. `PaymentCompleteEventConsumer` 에서 `paymentKey` 를 멱등성 키(`kafka:payment-complete:{paymentKey}`)로 잡고 `IdempotencyService.acquireKey()` (Redis SETNX 기반)로 한 번만 통과시킵니다. TTL 24시간. 같은 `paymentKey` 가 리밸런스·재시도로 또 와도 `acquireKey` 가 `false` 를 반환해 알림 재발송 스킵. 처리 실패 시 `releaseKey` 로 풀어 Kafka 재시도가 다시 발송할 수 있게 합니다.
+
+> **🟡 Q3-1-3. 알림 발송이 계속 실패하면 어떻게 처리되나요?**
+> **A.** `KafkaConfig.createErrorHandler()` 에서 `DefaultErrorHandler + FixedBackOff(1000ms, 3회)` 로 3회 재시도 후 실패하면 Dead Letter Topic(원래 토픽 + `.DLT`, 예: `ticketing.payment-complete.DLT`) 으로 보냅니다. DLT 는 운영자가 수동 모니터링해서 재처리하는 큐. 컨슈머 코드가 예외를 잡지 않고 그대로 throw 하기 때문에 이 에러 핸들러가 정상 동작합니다.
+
 > **🔴 Q3-2. 왜 모든 이벤트를 outbox로 보내지 않았나요?**
 > **A.** outbox 는 추가 INSERT + 스케줄러 + 모니터링 비용을 동반합니다. **DB 커밋과 반드시 묶여야 하는 발행** 만 outbox 로 보내고 (=`RESERVATION_CONFIRMED`), 나머지는 직접 send 로 두는 트레이드오프입니다. 운영하면서 `HOLD_*` 알림 누락이 비즈니스에 치명적이라고 판단되면 같은 패턴으로 확장 가능하다는 걸 코드 구조상 보장해 두었습니다.
 
