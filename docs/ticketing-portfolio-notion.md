@@ -20,24 +20,82 @@
 
 # 🤝 AI 협업 분담
 
-SI 출신 백엔드 개발자로서, IT 서비스업 트랜지션 과정에서 AI 도구를 의도적으로 활용했다. 면접관에게 변명이 아닌 자기 인식으로 공유한다.
+SI 출신 백엔드 개발자로서 IT 서비스업으로 이동하며 AI 도구(Claude·Cursor)를 의도적으로 활용했다. 단순히 "AI를 썼다/안 썼다"가 아니라 **작업 단계별로 어디까지 위임하고 어디서부터 본인이 책임졌는지** 명시한다.
 
-### AI(Claude/Cursor)에 맡긴 영역
-- **반복적 보일러플레이트 작성**: DTO·Controller·Repository 스캐폴드, Bean Validation 어노테이션
-- **Lua 스크립트 초안 작성**: SETNX·EXISTS·ZADD를 결합한 Lua 문법 초안 (이후 본인이 원자성 가설로 재검토)
-- **문서·주석 1차 작성**: README, ADR 초안, JavaDoc 1차 표현
-- **부하 테스트 가설 후보 제시**: "pool을 늘려보자", "Virtual Thread를 켜보자" 등 시도 후보군 나열
-- **에러 메시지·시나리오 케이스 발산**: 놓친 엣지 케이스 후보 제시
+## 1. 설계·의사결정 단계
 
-### 본인이 직접 수행한 영역
-- **아키텍처 의사결정**: Redisson 미도입(단일 Redis 전제), nginx 단독(ALB 미사용), Saga REQUIRES_NEW, JWT 블랙리스트 전략
-- **임계치·TTL 산정 근거**: 락 TTL 3초(정상 흐름 1초 + 3배 마진), 캐시 TTL 2초(잔여석 근사 허용 가능 범위), 풀 30(부하 테스트 실측 도출)
-- **부하 테스트 시나리오 설계 및 실행**: k6 스크립트 4종 작성·실행, 4회차 시행착오 직접 디버깅
-- **가설 기각 판단**: pool→VT 두 가설 기각 후 폴링 빈도가 진짜 병목이라는 결론, ablation 매트릭스 작성으로 nginx 튜닝 단독은 악화임을 증명
-- **재현성 검증**: 모든 핵심 측정에서 최소 2회 반복, Part A는 20회 반복
-- **트레이드오프 명시**: 단일 Redis 전제 한계, VT ablation 미완성 한계, 5% 미만 SLO에 active HC 필요 등 본문에 명시
+| 활동 | 담당 | 비고 |
+|------|------|------|
+| 도메인 요구사항 정의 (좌석 동시성, 트래픽 폭주 두 축) | 본인 단독 | 프로젝트 컨셉 자체 |
+| 아키텍처 옵션 발산 (분산 락 vs DB 비관 락, Kafka vs Redis 큐 등) | AI 제안 → 본인 선택 | AI는 후보 나열, 채택 근거는 본인 판단 |
+| 임계치·TTL 산정 | 본인 직접 | 락 3초·캐시 2초·pool 30 모두 부하 테스트 실측 근거 |
+| 핵심 아키텍처 결정 | 본인 직접 | 아래 명시 |
 
-이 분담의 핵심은 **"AI가 만든 코드를 그대로 신뢰하지 않고, 측정으로 검증한 뒤 본인 이름으로 채택했는가"**다.
+**본인이 직접 내린 아키텍처 결정**
+- **Redisson 미도입** — 단일 Redis 환경에서 Redlock 오버헤드 불필요 판단
+- **nginx 단독 + ALB 미사용** — 인프라 비용·운영 단순성. ABL 헬스체크 대신 passive HC + proxy_next_upstream
+- **Saga REQUIRES_NEW** — 분산 트랜잭션 회피, 결제 단계 격리
+- **JWT Access + Refresh + Redis 블랙리스트** — 무상태 인증 + 로그아웃 즉시 무효화
+- **Kafka acks=all + idempotence=true + DLT 3회 재시도** — at-least-once + 컨슈머 paymentKey 멱등성
+
+## 2. 구현 단계
+
+| 활동 | 담당 | 비고 |
+|------|------|------|
+| 보일러플레이트 (DTO·Controller 스캐폴드, Bean Validation, Repository 인터페이스) | AI 생성 → 본인 검토 | 반복 작업은 AI 위임이 효율적 |
+| 도메인 서비스 로직 (HoldService, ReservationService, PaymentService) | AI 초안 → 본인 수정 | 트랜잭션 경계·예외 처리는 본인이 재정의 |
+| Lua 스크립트 (`UNLOCK_SCRIPT`, `CREATE_SCRIPT`, `RELEASE_SCRIPT`) | AI 초안 → 본인 원자성 시나리오 검증 | "GET/DEL 사이 race", "EXISTS+SET 사이 동시성" 등 분리 검증 |
+| 부하 테스트 스크립트(k6) | AI 골격 → 본인 시나리오 조정 | 4회차 시행착오는 모두 본인이 디버깅 |
+| `nginx.conf` 튜닝 | 본인 직접 | max_fails·fail_timeout·proxy_connect_timeout 값은 ablation 결과로 결정 |
+| `application.properties` 외부화 | 본인 직접 | 매직 넘버 금지 원칙 적용 |
+| Micrometer 커스텀 카운터 등록 | 본인 직접 | 비즈니스 메트릭(`ticketing_hold_created_total` 등) 3종 |
+
+## 3. 검증 단계 — 전부 본인 단독
+
+| 활동 | 결과 사례 |
+|------|----------|
+| 부하 테스트 실행 | Phase 1~8, 매 단계 최소 2회 반복, Part A는 20회 |
+| 가설 수립·기각 판단 | B-1: pool 확대·VT 도입 두 가설 모두 기각 → 진짜 병목(폴링 빈도) 발견 |
+| Ablation 매트릭스 설계 | B-3: nginx 튜닝 단독 24.51% > baseline 20.77% 증명, retry가 주역 |
+| 측정 결과 교차 검증 | Knee Point: k6 `WARN[0178] EOF` + Grafana RPS 평탄화 동시점 확인 |
+| 측정 인프라 진단 | Prometheus scrape에 app2 누락 발견, Kafka 헬스 인디케이터 60s 타임아웃 진단 |
+| 코드 결함 부수 발견 | HoldController `@ResponseStatus` 누락 — 응답 코드 분포 검증 중 발견 |
+
+## 4. 문서화 단계
+
+| 활동 | 담당 |
+|------|------|
+| README·ADR 1차 작성 | AI 작성 → 본인 정확성 검증 |
+| 부하 테스트 보고서(`docs/load-test-portfolio.md`) | 본인 작성 |
+| 한계·트레이드오프 명시 | 본인 직접 (아래 정정 사례 참조) |
+| 본 노션 포트폴리오 본문 | AI 초안 → 본인 검수·정정 |
+
+## 5. AI 산출물 검증 — 실제 정정 사례
+
+AI가 만든 문서를 그대로 신뢰하지 않고 코드·스크립트와 대조해 정정한 사례. 모두 노션 본문 검수 단계에서 발견:
+
+| 항목 | AI 1차 산출물 | 본인 정정 (근거) |
+|------|--------------|----------------|
+| 잔여석 캐시 evict 지점 | "이 네 지점" | **6곳** — 코드 grep으로 `HoldService` 2곳, `HoldCleanupScheduler`, `ReservationConfirmedEventListener`, `ReservationService`, `SellerService` 확인 |
+| retry 횟수 표현 | "최대 3회" | **"최초 시도 + 재시도 2회, 총 3번 시도"** — `queue-flow-with-retry.js:45` MAX_RETRIES=2 확인 |
+| Knee Point 시행착오 횟수 | 3회차 | **4회차** — (1)ramp 깨짐 (2)retry storm (3)5xx 30% (4)성공. 1회차 누락 복원 |
+| VT 기여도 | (언급 없음) | "캐시 후 환경은 pool=30 + VT on 한 조건만 측정 — VT off 비교 미완성" **한계 추가** |
+| 단일 Redis 전제 | (언급 없음) | "Sentinel/Cluster 전환 시 Redlock 필요, 라이브러리 재검토 필요" **한계 추가** |
+
+## 6. AI 제안을 거부한 사례
+
+판단 근거가 약하거나 정직성을 해친다고 봤을 때 도입하지 않은 결정:
+
+- **무중단 배포 ADR 추가 거부** — `deploy-prod.yml`은 blue-green/카나리가 아닌 "병렬 인-플레이스 재시작" 패턴. AI는 무중단 배포로 포장 가능하다고 제안했으나, 실제와 다르므로 ADR 작성 안 함
+- **본문 수치 일괄 갱신 패턴 거부** — AI는 재측정 결과가 나올 때마다 본문 수치를 갱신하자 제안. 본인은 본문 수치를 유지하고 "재현성 검증" 인용문을 별도 추가하는 패턴 선택 (측정 시점 분리가 더 정직)
+- **active HC 도입했다는 표현 거부** — AI는 "페일오버 개선했음" 톤의 표현을 자주 제안. 본인은 무료 nginx 한계로 active HC 도입 불가임을 명시하고 "5% 미만 SLO엔 K8s/클라우드 LB/nginx-plus 필요"로 한계 기록
+- **테스트 코드 100% 통과 표현 거부** — SI 출신으로 테스트 코드 작성 경험이 적은 사실을 숨기지 않음. `test-code/` 디렉토리는 학습 산출물로 표시, "실무 경험 N년"이라는 표현 사용 안 함
+
+---
+
+## 이 분담의 핵심
+
+코드 한 줄 한 줄을 누가 썼는가가 아니라 **"AI가 만든 결과를 측정과 코드로 역검증한 뒤 본인 이름으로 채택했는가"** 가 핵심이다. AI 시대에 적응한 SI 출신 개발자의 작업 방식 그 자체를 공개한다.
 
 ---
 
@@ -210,9 +268,17 @@ Grafana 신호: `hikaricp_connections_active`가 10에 평탄, `hikaricp_connect
 
 #### 첫 가설 — Hikari pool 10 → 30
 
--- 표(기존 유지)
+| 지표 | pool=10 (기준선) | pool=30 | 변화 |
+|------|------------------|---------|------|
+| p95 | 1.93s | 1.85s | ▼ 80ms (-4.1%) |
+| RPS | ~408/s | ~386/s | ▲ -22/s (-5.4%) |
+| 에러율 | 0% | 0% | - |
+| JVM threads | ~225개 | ~225개 | - |
+| DB pending | 톱니파, 최대 170까지 | 톱니파 패턴 유지 | 적체 해소 안 됨 |
 
-p95는 80ms만 줄고 RPS는 오히려 감소. 풀을 3배로 늘렸는데 사실상 차이가 없음.
+> 조건: 캐시 미적용, VU=800, `K6_QUEUE_POLL_SLEEP_SEC=0.005`, JVM hot 2·3회차 중앙값
+
+p95는 80ms만 줄고 RPS는 오히려 감소. **풀을 3배로 늘렸는데 사실상 차이가 없음.** 더 결정적인 신호는 DB pending 적체가 해소되지 않은 것 — 커넥션을 더 줘도 DB가 받는 쿼리 자체가 너무 많아 큐가 풀리지 않는다.
 
 #### 두 번째 가설 — Virtual Thread
 
