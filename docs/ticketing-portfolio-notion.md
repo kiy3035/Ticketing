@@ -18,11 +18,30 @@
 
 ---
 
-# 🎯 운영 SLO와 Degraded Mode
+# 🚀 한눈에 — 무엇을 만들었고 무엇을 증명했는가
 
-이 시스템은 단일 임계값으로 "통과/실패"를 가르는 대신, **부하 등급마다 별도 SLO를 두고 그에 맞는 동작을 미리 설계**했다. 가장 자주 일어나는 Normal에서는 까다롭게, 드물게 발생하는 Failover에서는 현실적 한계까지 인정하는 쪽이 정직한 운영 기준이라고 봤다.
+**핵심 설계 3가지**
+1. **Redis 분산 락(SETNX + UUID 토큰 + Lua)** — 좌석 단위 잠금 + 소유자 토큰 검증 + Lua 원자 해제. Redisson 미사용
+2. **잔여석 캐시(`@Cacheable` TTL=2s + 6곳 evict)** — DB 폴링 빈도 병목 해소
+3. **앱 2대 + nginx `least_conn`** — 분산 환경에서도 락 무결성 유지
 
-## SLO 등급 정의
+**증명한 수치**
+
+| 항목 | 결과 |
+|------|------|
+| 좌석 동시 선점 정확성 | VU=100, 20회 독립 시행 **모두 정확히 1건** 성공 |
+| 안정 운영 상한(Normal) | VU=800 (≈ **1,447 RPS**), p95 **164ms**, 에러 **0%** |
+| 캐시 도입 효과 | p95 2.06s → **444ms (▼78%)**, RPS 376 → **834/s (▲122%)** |
+| Knee Point | VU **1,000~1,200** (k6 EOF + Grafana RPS 평탄화 동시점) |
+| 페일오버 ablation | nginx 튜닝 단독 **+3.74%p 악화**, retry 결합 -47% — 실질 개선 주역은 retry |
+
+**정직성으로 적은 한계** — VT 단독 기여도 미분리 · 단일 Redis 전제 · 잔여석 캐시는 CB 적용 범위 밖 · 클라이언트 retry는 k6에서만 측정.
+
+---
+
+# 🎯 운영 SLO — 부하 등급별 분리 정의
+
+단일 임계값으로 "통과/실패"를 가르는 대신 **부하 등급마다 별도 SLO**를 정의했다. 가장 자주 일어나는 Normal은 까다롭게, 드물게 발생하는 Failover는 현실적 한계까지 인정하는 쪽이 정직한 운영 기준이라고 봤다.
 
 | 등급 | 부하 조건 | P95 | 에러율 | 시스템 동작 | 근거 측정 |
 |------|----------|-----|-------|------------|----------|
@@ -31,46 +50,9 @@
 | **Failover** | 앱 1대 다운 30초 윈도우 | < 1s | retry 적용 시 ~11%, 미적용 시 ~20% | passive HC + nginx `proxy_next_upstream` 재시도 | Phase 8 baseline 20.77%, k6 retry 결합 시 11.05% |
 | **Hard limit** | VU ≥ 1,500 | timeout 발생 | n/a | 대기열 차단·입장 제한 | Phase 5: max 40s, 에러 3.41% |
 
-> 가용성 퍼센티지(99.X%)는 본 프로젝트 부하 테스트로는 산출하지 않는다. 단발 시나리오의 단위 시간은 한 달 기준 가용성을 계산하기엔 표본이 부족하다. 대신 **Failover 윈도우에서 사용자 노출 에러율**을 가용성 대리 지표로 두고 정량화했다.
+> **가용성 퍼센티지(99.X%)는 산출하지 않는다.** 단발 부하 시나리오는 한 달 가용성 계산에 표본이 부족하다. 대신 **Failover 윈도우에서 사용자 노출 에러율**을 가용성 대리 지표로 정량화했다.
 
-## 장애·실패 대응 메커니즘 (현재 구현)
-
-### 1) Redis 장애 대비 Circuit Breaker (Resilience4j)
-
-Redis를 직접 호출하는 `HoldStore`(홀드 생성·조회·해제)와 `QueueService`(대기열 진입·순번·만료)에 `RedisCircuitBreakerExecutor`로 CB를 적용했다. 상태 전이는 일반적인 Resilience4j 모델을 따른다.
-
-```
-[CLOSED] 정상
-    ↓ 실패율 50% 초과 또는 slow call(>1s) 80% 초과
-[OPEN] Redis 호출 시도 안 함, 작업별 fallback 즉시 반환
-    ↓ 30초 대기
-[HALF_OPEN] 3건 시험 통과 시 CLOSED 복귀
-```
-
-OPEN 상태에서 Redis 호출을 시도하지 않고 즉시 fallback을 반환한다는 점이 핵심. **fallback 정책은 작업별로 다르다**: 홀드 생성은 실패(0L 반환 → 사용자에게 실패 응답), 홀드/큐 조회는 "데이터 없음"(null·empty)으로 처리해 요청이 완전히 죽지 않게 한다. 설정값은 모두 `application.properties` 외부화.
-
-```properties
-resilience4j.circuitbreaker.instances.redisCircuitBreaker.sliding-window-size=10
-resilience4j.circuitbreaker.instances.redisCircuitBreaker.failure-rate-threshold=50
-resilience4j.circuitbreaker.instances.redisCircuitBreaker.wait-duration-in-open-state=30s
-resilience4j.circuitbreaker.instances.redisCircuitBreaker.permitted-number-of-calls-in-half-open-state=3
-resilience4j.circuitbreaker.instances.redisCircuitBreaker.slow-call-duration-threshold=1s
-resilience4j.circuitbreaker.instances.redisCircuitBreaker.slow-call-rate-threshold=80
-```
-
-> **잔여석 캐시는 CB 적용 범위 밖**이다. `SeatService.countAvailableSeatsForQueueStatus()`는 Spring `@Cacheable`로 `RedisCacheManager`를 직접 사용하며 `CacheErrorHandler`를 별도 구성하지 않았다 — Redis 캐시 자체 장애 시 예외가 전파되는 Spring Cache 기본 동작. CB가 보호하는 건 `HoldStore`·`QueueService`의 직접 Redis 호출까지다. 이는 인정한 한계이며, 캐시 read를 보호하려면 `CachingConfigurer`로 에러 핸들러를 추가하거나 캐시 read도 CB로 감싸는 별도 작업이 필요하다.
-
-> **read/write CB 분리하지 않은 이유**: 단일 Redis 인스턴스라 read·write path가 같은 노드를 공유한다. 분리해도 차단 트리거가 동일하다. read-replica가 도입되거나 캐시·락 인스턴스를 분리하는 시점에 두 개로 나누는 게 자연스럽다.
-
-### 2) 좌석 락 획득 실패 — 429 응답 + nginx 재시도
-
-`HoldService.createHold()`는 락 획득 실패 시 429 반환. `nginx.conf`에 `proxy_next_upstream error timeout http_502 http_503 http_504` + `proxy_next_upstream_tries 2`를 설정해 서버 장애 시 다른 인스턴스로 자동 재시도.
-
-> **k6 retry는 측정 도구 단의 패턴**이다. Phase 8 ablation에서 k6 스크립트(`queue-flow-with-retry.js`)에 지수 백오프(100→200ms, 총 3번 시도) retry를 넣어 사용자 단 재시도 효과를 측정했다 — 결과 20.77% → 11.05%. 다만 이는 **클라이언트 측 재시도가 도입된다면 기대 가능한 효과**의 측정이며, 현재 본 시스템 프론트엔드 클라이언트에 동일 retry 패턴이 구현돼 있지는 않다. 정직성을 위해 명시한다.
-
-### 3) 명시한 한계
-
-**사용자 노출 에러율을 5% 미만으로 잡는 SLO 목표**를 가지려면 nginx 무료판 passive HC로는 구조적으로 부족하다. **active health check(K8s, 클라우드 LB, nginx-plus 중 하나)** 도입이 필요한 시점이 명확하다. 본 프로젝트는 인프라 비용·운영 단순성을 우선한 트레이드오프 아래 **에러율 5% 미만은 의도적으로 비목표**에 두고, 에러 예산을 그보다 넉넉히(Failover 등급에서 ~20%까지) 허용한다.
+> **장애 대응 메커니즘**: Redis 직접 호출(`HoldStore`·`QueueService`)에 Resilience4j `redisCircuitBreaker` 적용 — OPEN 시 호출 차단 + 작업별 fallback(생성=실패, 조회=null/empty). **잔여석 캐시(`@Cacheable`)는 CB 적용 범위 밖**(Spring `RedisCacheManager` 기본 동작 — 인정한 한계). 락 실패는 429 + `nginx.conf proxy_next_upstream`로 자동 재시도. **에러율 5% 미만 SLO 목표**를 잡으려면 active HC(K8s·클라우드 LB·nginx-plus) 도입 필수.
 
 ---
 
@@ -90,80 +72,32 @@ resilience4j.circuitbreaker.instances.redisCircuitBreaker.slow-call-rate-thresho
 | Failover 회복 | passive HC + nginx `proxy_next_upstream` 재시도 | active HC (K8s 등) | 무료 nginx + 인프라 단순화 우선 | **에러율 5% 미만 목표는 미달성**(현재 Failover 등급 에러율 ~20%). 클라이언트 측 retry는 k6에서만 측정, 실 프론트엔드 미구현. active HC 필요 |
 | 운영 지표 | P95 + 에러율 분리 SLO | 단일 P99 또는 단일 임계 | 등급별로 요구가 달라 단일 지표로는 의사결정 불가 | P99·Max는 부수 추적만, 메인 SLO에서 제외 |
 
-> **이 표를 맨 앞에 둔 이유**
-> 면접에서 "왜 Redisson 안 썼어요?"가 나오면 답은 한 줄로 끝나기 쉽다. 그런데 그 한 줄은 보통 **다른 결정과 묶여 있다**. 단일 Redis 전제는 ALB 미사용·비용 우선이라는 더 큰 결정에서 나왔고, SLO도 그 위에 그려졌다. 그 연결을 한 화면에 펼쳐 놓는 게 이 표의 역할.
-
 ---
 
 # 🤝 AI 협업 분담
 
-AI 도구(Claude·Cursor)를 적극 활용한 바이브 코딩 방식으로 진행했다. 핵심은 "AI를 썼다/안 썼다"가 아니라 **단계마다 어디까지 위임하고 어디서부터 본인이 책임졌는지** 명시하는 것이다.
+AI(Claude·Cursor)를 적극 활용한 바이브 코딩 방식. 핵심은 "AI를 썼다/안 썼다"가 아니라 **AI가 만든 결과를 측정·코드로 역검증한 뒤 본인 이름으로 채택했는가**.
 
-## 1. 설계·의사결정
+## 영역별 위임/직접
 
-| 활동 | 담당 | 비고 |
-|------|------|------|
-| 도메인 요구사항 정의 | 본인 단독 | 좌석 동시성·트래픽 폭주 두 축 |
-| 아키텍처 옵션 발산 | AI 제안 → 본인 선택 | AI는 후보 나열, 채택 근거는 본인 |
-| 임계치·TTL 산정 | 본인 직접 | 락 3초·캐시 2초·pool 30 모두 실측 근거 |
-| 핵심 아키텍처 결정 | 본인 직접 | 위 트레이드오프 표 참조 |
+| 영역 | 위임(AI) | 직접(본인) |
+|------|---------|-----------|
+| **설계·의사결정** | 아키텍처 옵션 후보 나열 | 임계치·TTL 산정, 핵심 아키텍처 결정 (위 트레이드오프 표) |
+| **구현** | 보일러플레이트, 도메인 로직 초안, Lua 스크립트 초안, k6 스크립트 골격 | `nginx.conf` 튜닝, `application.properties` 외부화, Micrometer 카운터, Lua 원자성 검증 |
+| **검증** | — | Phase 1~8 부하 테스트 실행, 가설 기각, 변수 분리 매트릭스, 측정 인프라 진단 (**전부 본인 단독**) |
+| **문서화** | README·ADR·노션 본문 초안 | 부하 테스트 보고서, 한계·트레이드오프 명시 |
 
-## 2. 구현
+## AI 산출물 정정·거부 사례
 
-| 활동 | 담당 | 비고 |
-|------|------|------|
-| 보일러플레이트(DTO·Controller·Repository) | AI 생성 → 본인 검토 | 반복 작업 위임 |
-| 도메인 서비스 로직 | AI 초안 → 본인 수정 | 트랜잭션 경계·예외는 본인 재정의 |
-| Lua 스크립트(`UNLOCK_SCRIPT`, `CREATE_SCRIPT`) | AI 초안 → 본인 원자성 검증 | "GET/DEL 사이 race", "EXISTS+SET 사이 동시성" 분리 검증 |
-| 부하 테스트 스크립트(k6) | AI 골격 → 본인 시나리오 조정 | 4회차 시행착오 디버깅은 본인 |
-| `nginx.conf` 튜닝 | 본인 직접 | 변수 분리 측정 결과로 결정 |
-| `application.properties` 외부화 | 본인 직접 | 매직 넘버 금지 원칙 |
-| Micrometer 커스텀 카운터 | 본인 직접 | 비즈니스 메트릭 3종 |
-
-## 3. 검증 — 전부 본인 단독
-
-| 활동 | 결과 |
-|------|------|
-| 부하 테스트 실행 | Phase 1~8, 단계마다 최소 2회 반복, Part A는 20회 |
-| 가설 수립·기각 | B-1 두 가설 기각 후 폴링 빈도가 진짜 병목임을 발견 |
-| 변수 분리 매트릭스 | B-3 nginx 튜닝 단독 24.51% > baseline 20.77% 증명, retry가 주역 |
-| 측정 교차 검증 | Knee Point: k6 `WARN[0178] EOF` + Grafana RPS 평탄화 동시점 확인 |
-| 측정 인프라 진단 | Prometheus app2 누락 발견, Kafka 헬스 인디케이터 60s 타임아웃 진단 |
-| 코드 결함 부수 발견 | HoldController `@ResponseStatus` 누락 — 응답 코드 분포 검증 중 발견 |
-
-## 4. 문서화
-
-| 활동 | 담당 |
-|------|------|
-| README·ADR 1차 | AI 작성 → 본인 정확성 검증 |
-| 부하 테스트 보고서 | 본인 작성 |
-| 한계·트레이드오프 명시 | 본인 직접 |
-| 본 노션 본문 | AI 초안 → 본인 검수·정정 |
-
-## 5. AI 산출물 검증 — 실제 정정 사례
-
-AI 1차 산출물을 코드·스크립트와 대조해 정정한 사례. 모두 본문 검수 단계에서 발견.
-
-| 항목 | AI 1차 산출물 | 본인 정정 (근거) |
-|------|--------------|----------------|
-| 잔여석 캐시 evict 지점 | "이 네 지점" | **6곳** — grep으로 `HoldService` 2곳, `HoldCleanupScheduler`, `ReservationConfirmedEventListener`, `ReservationService`, `SellerService` 확인 |
-| retry 횟수 표현 | "최대 3회" | **"최초 시도 + 재시도 2회, 총 3번 시도"** — `queue-flow-with-retry.js:45` MAX_RETRIES=2 확인 |
-| Knee Point 시행착오 횟수 | 3회차 | **4회차** — 1회차(ramp 깨짐) 누락 복원 |
-| VT 기여도 | (언급 없음) | "캐시 후 환경은 pool=30 + VT on 한 조건만 측정. VT off 비교 미완성" 한계 추가 |
-| 단일 Redis 전제 | (언급 없음) | "Sentinel/Cluster 전환 시 Redlock 필요" 한계 추가 |
-
-## 6. AI 제안을 거부한 사례
-
-판단 근거가 약하거나 정직성을 해친다고 봤을 때 도입하지 않은 결정.
-
-- **무중단 배포 ADR 거부** — `deploy-prod.yml`은 blue-green/카나리가 아닌 "병렬 인-플레이스 재시작" 패턴. AI는 무중단 배포로 포장 가능하다고 제안했으나 실제와 다르므로 작성 안 함
-- **본문 수치 일괄 갱신 거부** — 재측정 시 본문 수치를 새로 덮어쓰자는 제안 대신 "재현성 검증" 인용문을 별도로 추가하는 방식 선택. 측정 시점이 분리되는 게 더 정직
-- **active HC 도입했다는 표현 거부** — "페일오버 개선했음" 톤 제안 거부. 무료 nginx 한계로 active HC 미도입을 명시하고 한계 그대로 기록
-- **테스트 코드 100% 통과 표현 거부** — 테스트 작성 경험이 적은 사실을 숨기지 않음. `test-code/` 디렉토리는 학습 산출물로 표시
-
-## 핵심
-
-코드 한 줄을 누가 썼는가가 아니라 **"AI가 만든 결과를 측정과 코드로 역검증한 뒤 본인 이름으로 채택했는가"** 가 핵심이다.
+| 사례 | AI 1차 | 본인 정정/거부 근거 |
+|------|--------|-------------------|
+| evict 지점 갯수 | "이 네 지점" | grep으로 **6곳** 확인 후 정정 |
+| retry 표현 | "최대 3회" | **"최초 + 재시도 2회 = 총 3번"** — `MAX_RETRIES=2` 코드 확인 |
+| Knee 시행착오 | 3회차 | **4회차** — 1회차(ramp 깨짐) 누락 복원 |
+| VT 기여도·단일 Redis 전제 | 언급 없음 | "분리 측정 미완성", "Sentinel 전환 시 재검토" 한계 추가 |
+| 무중단 배포 ADR | "무중단 배포로 포장 가능" | **거부** — 실제는 병렬 재시작 패턴, 실재와 다름 |
+| active HC 도입 표현 | "페일오버 개선했음" 톤 | **거부** — 무료 nginx 한계 그대로 기록 |
+| 테스트 코드 표현 | "100% 통과" | **거부** — `test-code/`는 학습 산출물로 표시 |
 
 ---
 
