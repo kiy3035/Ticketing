@@ -70,7 +70,7 @@ resilience4j.circuitbreaker.instances.redisCircuitBreaker.slow-call-rate-thresho
 
 ### 3) 명시한 한계
 
-5% 미만 SLO를 만족시키려면 nginx 무료판 passive HC로는 구조적으로 부족하다. **active health check(K8s, 클라우드 LB, nginx-plus 중 하나)** 도입이 필요한 시점이 명확하다. 본 프로젝트는 인프라 비용·운영 단순성을 우선한 트레이드오프 아래 5% 미만을 의도적으로 비목표에 둔다.
+**사용자 노출 에러율을 5% 미만으로 잡는 SLO 목표**를 가지려면 nginx 무료판 passive HC로는 구조적으로 부족하다. **active health check(K8s, 클라우드 LB, nginx-plus 중 하나)** 도입이 필요한 시점이 명확하다. 본 프로젝트는 인프라 비용·운영 단순성을 우선한 트레이드오프 아래 **에러율 5% 미만은 의도적으로 비목표**에 두고, 에러 예산을 그보다 넉넉히(Failover 등급에서 ~20%까지) 허용한다.
 
 ---
 
@@ -87,7 +87,7 @@ resilience4j.circuitbreaker.instances.redisCircuitBreaker.slow-call-rate-thresho
 | 메시지큐 | Kafka acks=all + idempotence + DLT 3회 | RabbitMQ | "한 번 이상 + 순서·재처리" 패턴에 적합 | DLT 모니터링 자동화 미구현 |
 | 트랜잭션 경계 | Saga + REQUIRES_NEW | 분산 트랜잭션(XA) | 결제 단계 격리, 외부 PG 호출과 DB 트랜잭션 분리 | 보상 로직 검증 배치 별도 필요 |
 | 락 TTL | 3초 (외부화) | 1초 / 10초 | 정상 흐름 1초 미만 측정 후 3배 마진 | 보유자 비정상 종료 시 3초간 자원 고립 |
-| Failover 회복 | passive HC + nginx `proxy_next_upstream` 재시도 | active HC (K8s 등) | 무료 nginx + 인프라 단순화 우선 | 5% 미만 SLO 미달성. 클라이언트 측 retry 도입은 k6에서만 측정, 실 프론트엔드 미구현. active HC 필요 |
+| Failover 회복 | passive HC + nginx `proxy_next_upstream` 재시도 | active HC (K8s 등) | 무료 nginx + 인프라 단순화 우선 | **에러율 5% 미만 목표는 미달성**(현재 Failover 등급 에러율 ~20%). 클라이언트 측 retry는 k6에서만 측정, 실 프론트엔드 미구현. active HC 필요 |
 | 운영 지표 | P95 + 에러율 분리 SLO | 단일 P99 또는 단일 임계 | 등급별로 요구가 달라 단일 지표로는 의사결정 불가 | P99·Max는 부수 추적만, 메인 SLO에서 제외 |
 
 > **이 표를 맨 앞에 둔 이유**
@@ -596,7 +596,7 @@ C가 baseline보다 좋아진(-47%) 결과만 봤다면 둘 다 효과적이었�
 
 #### 운영 SLO 결론 (다시 위 SLO 표와 연결)
 
-오픈소스 nginx + passive HC 단독으로는 30초 다운 시 사용자 에러 ~20%가 구조적 하한. 클라이언트 retry로 11%까지 흡수 가능하나 **5% 미만 SLO를 잡으려면 active health check(K8s, 클라우드 LB, nginx-plus 중 하나) 도입 필수**. 이 결론을 SLO 표의 Failover 등급(≤25%)과 "5% 미만은 비목표" 한계로 그대로 반영했다.
+오픈소스 nginx + passive HC 단독으로는 30초 다운 시 사용자 에러 ~20%가 구조적 하한. 클라이언트 retry로 11%까지 흡수 가능하나, **사용자 노출 에러율 5% 미만을 SLO 목표로 잡으려면 active health check(K8s, 클라우드 LB, nginx-plus 중 하나) 도입이 필수**다. 이 결론을 SLO 표의 Failover 등급 에러율(retry 미적용 시 ~20%)과 "에러율 5% 미만은 비목표" 한계로 그대로 반영했다.
 
 > 💭 **느낀점**
 > - 그럴듯한 가설과 맞는 가설 사이 거리. "nginx 공격적 튜닝 → 격리 빠름 → 에러 감소"는 누구나 끄덕일 만한데 측정 전까진 정답이 아니었다
