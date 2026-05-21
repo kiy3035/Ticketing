@@ -52,6 +52,11 @@
 
 > **가용성 퍼센티지(99.X%)는 산출하지 않는다.** 단발 부하 시나리오는 한 달 가용성 계산에 표본이 부족하다. 대신 **Failover 윈도우에서 사용자 노출 에러율**을 가용성 대리 지표로 정량화했다.
 
+> **P95를 메인 SLO로 쓴 이유 (P99 거부)**
+> - **표본 안정성**: P99는 가장 느린 1% 응답이라 GC 일시 정지·네트워크 지터(jitter) 1~2건에도 값이 크게 흔들린다. k6 1회 시행으로는 신뢰 구간이 너무 넓어, 캐시 도입 78% 개선처럼 단일 변수 효과를 측정할 때 노이즈가 결론을 가린다. P95는 상위 5%를 잘라낸 값이라 같은 환경에서 다시 재면 분산이 작다.
+> - **등급 분기 가능성**: Normal(< 500ms) / Degraded(< 2s) / Hard limit(timeout) 3등급 경계를 그어야 했는데, P99로 보면 모든 등급에서 한계치 근처라 등급별 차이가 안 갈린다.
+> - **인정한 한계**: 가장 느린 1% 사용자 경험은 P95로는 안 보인다. **P99·Max는 Grafana 패널에 같이 띄워 보조 지표로만 추적**, 메인 SLO에서는 제외. 실서비스 결제 흐름이라면 P99도 SLO에 포함시키는 게 맞다.
+
 > **장애 대응 메커니즘**: Redis 직접 호출(`HoldStore`·`QueueService`)에 Resilience4j `redisCircuitBreaker` 적용 — OPEN 시 호출 차단 + 작업별 fallback(생성=실패, 조회=null/empty). **잔여석 캐시(`@Cacheable`)는 CB 적용 범위 밖**(Spring `RedisCacheManager` 기본 동작 — 인정한 한계). 락 실패는 429 + `nginx.conf proxy_next_upstream`로 자동 재시도. **에러율 5% 미만 SLO 목표**를 잡으려면 active HC(K8s·클라우드 LB·nginx-plus) 도입 필수.
 
 ---
@@ -70,7 +75,26 @@
 | 트랜잭션 경계 | Saga + REQUIRES_NEW | 분산 트랜잭션(XA) | 결제 단계 격리, 외부 PG 호출과 DB 트랜잭션 분리 | 보상 로직 검증 배치 별도 필요 |
 | 락 TTL | 3초 (외부화) | 1초 / 10초 | 정상 흐름 1초 미만 측정 후 3배 마진 | 보유자 비정상 종료 시 3초간 자원 고립 |
 | Failover 회복 | passive HC + nginx `proxy_next_upstream` 재시도 | active HC (K8s 등) | 무료 nginx + 인프라 단순화 우선 | **에러율 5% 미만 목표는 미달성**(현재 Failover 등급 에러율 ~20%). 클라이언트 측 retry는 k6에서만 측정, 실 프론트엔드 미구현. active HC 필요 |
+| 서킷브레이커 | 단일 CB (read·write 공용) | read/write CB 분리 | 단일 Redis 노드 전제 — 장애 시 동시 영향이라 분리 실익 낮음. fallback은 호출 지점별로 이미 분리 | 정책 분리(read 빨리 열기 / write 보수적)는 미적용. Sentinel/Cluster 전환 시 재검토 |
 | 운영 지표 | P95 + 에러율 분리 SLO | 단일 P99 또는 단일 임계 | 등급별로 요구가 달라 단일 지표로는 의사결정 불가 | P99·Max는 부수 추적만, 메인 SLO에서 제외 |
+
+---
+
+# 🧱 기술 스택 버전 선택 근거
+
+스택 자체보다 **왜 그 버전인지**가 더 자주 묻는 질문이라 따로 정리했다. 출발점은 **Java 21 (Virtual Thread)**이고 나머지는 거기서 자연스럽게 따라온 선택이다.
+
+| 기술 | 버전 | 선택 근거 | 거부한 대안 |
+|------|------|----------|------------|
+| **Java** | **21 (LTS)** | Virtual Thread가 정식 안정화된 첫 LTS. IO-bound 폴링이 핵심 워크로드라 VT 효과 직접 측정 가능 (JVM threads 225→30 실측) | 17(VT가 preview 단계라 운영 투입 부담) / 25(출시 직후라 운영 사례 부족) |
+| **Spring Boot** | **3.4.1** | Java 21 + VT 자동 설정(`spring.threads.virtual.enabled=true`) 지원 안정판. Jakarta EE 9+ 기반 | 2.7.x(Java 17 미만 호환, EOL 임박) |
+| **MySQL** | **8.0** | `SKIP LOCKED`·CTE 등 동시성 쿼리 지원, RDS 호환성, 운영 사례 풍부 | 5.7(EOL) / 8.4 LTS(릴리스 직후라 운영 검증 부족) |
+| **Redis** | **7.2** | 락·캐시·rate-limit·대기열·JWT 블랙리스트를 1대로 처리. Functions·메모리 효율 개선 | 6.x(가능하나 7로 통일해 신기능 옵션 확보) |
+| **Kafka** | **3.8.1** (Confluent 7.6.1) | 결제 완료·홀드 이벤트 비동기 분리. **retention·리플레이** 필요한 시나리오라 Redis Stream보다 보관·재처리에 유리 | RabbitMQ(라우팅은 강하나 순서·재처리 패턴이 약함) |
+| **Resilience4j** | **2.2.0** | Hystrix는 maintenance mode. 함수형 API + Spring Boot Actuator 통합 | Hystrix(deprecated) |
+| **Flyway** | (Spring Boot 관리) | DB 스키마 버전 관리 표준. Spring Boot 자동 연동 | Liquibase(XML 중심이라 SQL 가시성 낮음) |
+
+> **한 줄 요약**: Java 21을 고른 게 출발점. VT를 쓰려면 21 LTS, 그러려면 Boot 3.x, 그러려면 Jakarta EE 9+ — 나머지는 자연스럽게 따라온 선택이다. 최신만 좇은 게 아니라 **워크로드(IO-bound 폴링 + 좌석 동시성)에 가장 직접적인 효과가 있는 버전 조합**을 골랐다.
 
 ---
 
