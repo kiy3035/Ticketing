@@ -62,7 +62,7 @@
 - **정답이 외부에 존재하는 일은 AI에 위임한다.** 스캐폴드 코드, 문법, 라이브러리 사용법, 표준 설계 패턴이 여기에 해당한다.
 - **정답이 이 프로젝트의 제약·측정·도메인 안에만 있는 일은 직접 수행한다.** 임계치 산정, 트레이드오프 결정, 측정 시나리오 설계, 가설 검증이 여기에 해당한다.
 
-전자는 검증 비용이 낮다. 컴파일·테스트·문서로 확인 가능하기 때문이다. 후자는 측정 데이터와 도메인 이해가 없으면 정답에 닿을 수 없다. AI가 후자에 답을 내놓을 때는 일반론에 가까웠고, 실제로 그중 한 답이 측정으로 뒤집힌 사례가 있다(아래 'AI 산출물에서 발견·수정한 사례' 3번).
+전자는 검증 비용이 낮다. 컴파일·테스트·문서로 확인 가능하기 때문이다. 후자는 측정 데이터와 도메인 이해가 없으면 정답에 닿을 수 없다. AI는 후자 영역에서 가설 후보를 빠르게 던지는 역할만 했고, 채택과 기각은 측정으로 직접 판단했다(부하 테스트 dropdown의 Part B-1·B-3 참조).
 
 ## 위임한 영역
 
@@ -77,18 +77,14 @@
 - 아키텍처 결정 — Redisson 미도입(단일 Redis 전제), nginx 단독(ALB 미사용), Saga + REQUIRES_NEW 적용
 - 임계치 산정 — 락 TTL 3초(정상 흐름 1초 측정 + 3배 마진), 캐시 TTL 2초, Hikari pool 30
 - 부하 테스트 설계와 실행 — k6 시나리오 4종 작성, 4회차 시행착오 디버깅
-- 가설 검증과 기각 — pool 증설·Virtual Thread 두 가설을 기각하고 실제 병목(폴링 빈도)을 도출
+- 가설 검증과 기각 — pool 증설·Virtual Thread 두 가설(B-1), nginx 공격적 튜닝 가설(B-3)을 변수 분리 측정으로 기각하고 실제 병목·개선 요인을 도출
 - 재현성 확보 — 핵심 측정은 최소 2회 반복, 정확성 검증은 20회 반복
 
 ## AI 산출물에서 발견·수정한 사례
 
-AI가 생성한 코드와 문서를 그대로 두지 않고 측정·코드 grep으로 확인한 결과 발견한 사례다.
+AI가 작성한 코드와 문서를 그대로 두지 않고 측정·코드 grep으로 확인한 결과 발견한 사례다.
 
-### 1. Lua 스크립트의 원자성 근거 재정리
-
-AI가 작성한 Lua 초안은 동작했지만, **"왜 원자적인가"** 라는 질문에 대한 근거가 코드 안에 명시되어 있지 않았다. Redis 공식 문서를 다시 확인해 Lua 실행이 단일 명령으로 큐잉된다는 사실에 근거를 두고, 좌석→토큰·토큰→홀드·만료 ZSET 등록 세 동작이 중간 개입 없이 끝나야 하는 이유를 주석에 정리했다. unlock 스크립트의 GET/DEL을 한 줄로 묶은 이유도 같은 논리에서 도출했다.
-
-### 2. HoldController 응답 코드 누락
+### 1. HoldController 응답 코드 누락
 
 부하 테스트 중 k6의 `201` 체크가 0건으로 잡혔는데, `http_req_failed` 역산 결과 비실패 응답이 존재했다. 컨트롤러를 확인하니 `ResponseEntity` 없이 `HoldResponse`만 반환하고 있었고, Spring이 기본 200 OK를 내고 있었다.
 
@@ -100,20 +96,15 @@ public HoldResponse createHold(...) { ... }
 
 응답 코드 분포까지 따로 집계하지 않았다면 발견하기 어려운 결함이었다.
 
-### 3. nginx 튜닝 가설의 측정 결과
+### 2. 노션 본문 초안에서 측정 데이터와 어긋난 표현 다섯 건 수정
 
-AI가 페일오버 개선책으로 제시한 답은 `max_fails=1`, `proxy_connect_timeout=1s`로 격리 임계를 공격적으로 낮추라는 것이었다. 직관과는 일치하는 방향이었기 때문에 그대로 적용해 측정했다.
+AI가 작성한 노션 트러블슈팅 본문 초안을 코드 grep과 측정 데이터로 대조해 다섯 건을 정정했다.
 
-실측 결과는 에러율이 오히려 +3.74%p 증가했다. 정상 부하 상황에서 false-positive 격리가 발생했고, 연쇄 격리로 이어졌기 때문이다. AI 답을 그대로 운영 가이드로 옮겼다면 잘못된 결론이 됐을 사례다. 직접 변수 분리 매트릭스(baseline / nginx 단독 / retry 결합)를 설계해 측정한 뒤, **실제 개선 효과는 클라이언트 retry에서 나오고 nginx 튜닝은 보조 역할**이라는 정반대 결론을 정리했다. 자세한 측정은 부하 테스트 dropdown의 Part B-3 참조.
-
-### 4. 문서 초안에서 측정 데이터와 어긋난 표현 다섯 건 수정
-
-AI가 작성한 문서 초안에는 측정 데이터와 어긋난 표현이 포함되어 있었다. 코드 grep과 k6 로그 대조로 확인한 항목은 다음과 같다.
-
-- "캐시 적용 후 Virtual Thread off 비교도 측정했다" → 실제로는 VT on 환경만 측정했다. 본문은 "VT 단독 기여도 분리 미완성"으로 정정했다.
-- "Resilience4j가 모든 Redis 호출을 보호한다" → `@Cacheable`은 Spring `RedisCacheManager`의 기본 동작 영역이라 CB 적용 범위 밖이다. "잔여석 캐시는 CB 적용 범위 밖"으로 한계를 명시했다.
-- "클라이언트 retry로 실서비스 에러율 11%로 흡수" → retry는 k6 시나리오에서만 동작했다. "실 프론트엔드 미구현"으로 정정했다.
-- 수치 반올림 차이 1건, evict 호출 지점 개수 1건 수정.
+- **캐시 evict 지점 "4곳" → "6곳"** — 본문은 "이 네 지점"으로 적혀 있었으나 실제 코드는 6곳에서 호출되고 있었다(HoldService 생성·해제, HoldCleanupScheduler 만료 정리, ReservationConfirmedEventListener 확정, ReservationService 환불, SellerService 좌석 추가).
+- **retry 표현 "최대 3회" → "최초 시도 + 재시도 2회, 총 3번"** — `queue-flow-with-retry.js`의 `MAX_RETRIES=2`는 재시도 횟수다. "최대 3회"는 재시도 3회로 오해될 수 있어 명확화했다.
+- **Knee Point 시행착오 "3회차" → "4회차"** — 1회차(ramp 단계 진행 안 됨)를 누락한 압축본을 발견해 4회차로 복원했다.
+- **Part B-1 끝에 VT ablation 미완성 한계 단락 추가** — 캐시 적용 후 환경은 `pool=30 + VT on` 한 조건만 측정했고 VT off 비교는 수행하지 않았다. "2.2배 RPS 증가에서 Virtual Thread 기여도는 본 데이터로 분리 불가"라는 한계를 본문에 명시했다.
+- **Part A 끝에 단일 Redis 전제 한계 단락 추가** — Redisson 미도입은 단일 Redis 인스턴스 전제에서만 유효하다. Sentinel/Cluster 전환 시 라이브러리 선택을 재검토해야 한다는 단서를 본문에 명시했다.
 
 문서 검수에서 얻은 결론은 단순했다. AI 산출물의 사실 정확성은 산출 도구가 아니라 사용자가 책임진다는 것이다.
 
@@ -143,6 +134,156 @@ AI가 작성한 문서 초안에는 측정 데이터와 어긋난 표현이 포�
 | 스레드 모델 | Virtual Thread (Java 21) | 플랫폼 스레드 + 풀 확대 | RAM 2GB — 풀 무한 확장 불가, IO-bound 워크로드 | VT 단독 기여도 분리 미완성 |
 | 락 TTL | 3초 (외부화) | 1초 / 10초 | 정상 흐름 TAT 1초 측정 + 3배 마진 | 비정상 종료 시 3초 자원 고립 |
 | 운영 지표 | P95 + 에러율 분리 SLO | 단일 P99 | 단발 부하 시나리오 노이즈 | P99·Max는 보조 추적만 |
+
+---
+
+# 트러블슈팅 — 데이터 정합성과 분산 환경
+
+부하 테스트 영역과 별도로, 데이터 정합성·메시지 유실·멀티 인스턴스 환경에서 마주친 문제와 그에 대응한 결정을 정리했다. 4건 모두 코드 주석에 고민 흐름이 그대로 남아 있다.
+
+<details>
+<summary><b>1. Saga 보상 트랜잭션 — 결제는 커밋됐는데 예약이 실패하면 포인트는 어디로 가는가</b></summary>
+
+### 문제 상황
+
+결제 흐름은 3단계로 나뉘어 있다.
+
+1. `approvePayment()` — 결제 승인. 포인트 차감 또는 PG 승인.
+2. `completePayment()` — 예약 확정. DB에 Reservation 저장.
+3. 이벤트 발행 — Kafka로 알림.
+
+1단계는 외부 호출(PG) 또는 포인트 차감을 포함해 빠르게 커밋되어야 하므로 별도 트랜잭션에서 처리된다. 여기서 문제가 생긴다. **1단계는 이미 커밋됐는데 2단계에서 예외가 발생하면, `@Transactional` 롤백은 2단계만 되돌리고 1단계 포인트 차감은 되돌릴 수 없다.** 포인트는 빠졌는데 예약은 없는 상태가 된다.
+
+### 결정 — REQUIRES_NEW로 분리한 보상 트랜잭션
+
+같은 트랜잭션 안에서 보상 코드를 실행하면 outer 트랜잭션 롤백 시 보상까지 함께 롤백된다. 그러면 보상이 의미가 없다. `Propagation.REQUIRES_NEW`로 기존 트랜잭션과 완전히 독립된 새 트랜잭션을 시작해 보상 결과(포인트 환불 + 결제 CANCELED)가 outer 롤백과 무관하게 DB에 반영되도록 했다.
+
+```java
+// PaymentCompensationService.java
+@Transactional(propagation = Propagation.REQUIRES_NEW)
+public void compensateAfterReservationFailure(Long paymentId) {
+    Payment payment = paymentRepository.findWithLockById(paymentId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Payment not found"));
+
+    if (payment.getStatus() == PaymentStatus.CANCELED) {
+        return;  // 멱등성 보장 — 중복 보상 방지
+    }
+    if (payment.getStatus() != PaymentStatus.APPROVED) {
+        return;  // APPROVED가 아니면 보상 대상 아님
+    }
+    if (payment.getPaymentMethod() == PaymentMethod.POINT) {
+        refundPoints(payment.getUserId(), payment.getAmount());
+    }
+    payment.setStatus(PaymentStatus.CANCELED);
+}
+```
+
+### 고려한 두 가지 디테일
+
+- **비관적 락(`findWithLockById`)** — 동시에 다른 트랜잭션이 같은 결제를 수정하지 못하게 막는다. 환불 도중 재시도 보상이 들어오면 잔액 계산이 깨질 수 있다.
+- **멱등성** — 이미 CANCELED 상태면 그냥 반환한다. 보상 호출이 재시도로 두 번 들어와도 포인트가 두 번 환불되지 않는다.
+
+### 인정한 한계
+
+CARD 결제의 PG 취소 API 호출은 샌드박스 환경 한계로 미구현 상태이고, 현재는 DB 상태만 CANCELED로 변경한다. 실 운영 환경에서는 Toss 취소 API 연동이 추가되어야 한다.
+
+</details>
+
+<details>
+<summary><b>2. JWT 즉시 무효화 — 멀티 인스턴스 환경에서 로그아웃은 어디에 기록해야 하는가</b></summary>
+
+### 문제 상황
+
+JWT는 기본적으로 stateless다. 서명만 맞으면 서버는 토큰을 신뢰한다. 그런데 로그아웃·비밀번호 변경 같은 상황에서는 **만료 전 토큰을 즉시 무효화**해야 한다. 앱 서버가 2대 이상이면 한 서버에 저장한 무효화 정보가 다른 서버에서는 보이지 않는다는 문제가 추가로 생긴다.
+
+### 결정 — Access는 Redis, Refresh는 DB로 분리
+
+토큰 종류에 따라 저장소를 다르게 선택했다.
+
+| 토큰 | 저장소 | 키/필드 | 이유 |
+|------|--------|--------|------|
+| Access | Redis (`jwt:bl:{jti}`) | jti, TTL = 토큰 남은 유효 시간 | 검증이 요청마다 발생 → 빠른 조회 필요. TTL 자동 삭제로 메모리 정리 불필요 |
+| Refresh | DB `refresh_tokens.revoked` | jti unique 인덱스 | 재발급 시에만 검증 → 빈도 낮음. 토큰 발급 이력 영구 추적 필요 |
+
+Access는 검증이 모든 요청에서 일어나므로 Redis에 두어 멀티 인스턴스 간 즉시 공유되도록 했다. Refresh는 발급·재발급 이력을 운영 측면에서 추적할 필요가 있어 DB에 영속 저장했다.
+
+```java
+// TokenBlacklistService.java — Access jti 블랙리스트
+public void blacklistAccessJti(String jti, Instant accessExpiresAt) {
+    long seconds = Duration.between(Instant.now(), accessExpiresAt).getSeconds();
+    if (seconds <= 0) return;  // 이미 만료된 토큰은 넣을 필요 없음
+    redisTemplate.opsForValue().set(PREFIX + jti, "1", Duration.ofSeconds(seconds));
+}
+```
+
+### 고려한 디테일
+
+- **TTL을 남은 유효 시간으로 설정** — 토큰이 자연 만료되는 시점에 블랙리스트도 함께 사라진다. 별도 정리 스케줄러가 필요 없다.
+- **이미 만료된 토큰은 블랙리스트에 넣지 않음** — `seconds <= 0` 가드. 만료된 토큰은 어차피 검증에서 거부되므로 메모리 낭비를 막는다.
+
+</details>
+
+<details>
+<summary><b>3. Transactional Outbox — DB 커밋은 됐는데 Kafka 발행이 실패하면 이벤트는 어떻게 보장하나</b></summary>
+
+### 문제 상황
+
+예약 확정 트랜잭션 안에서 DB 저장과 Kafka 이벤트 발행을 동시에 수행해야 한다. 그런데 두 작업의 원자성을 보장할 수 없다.
+
+- DB 커밋 성공 → Kafka 발행 실패: 예약은 확정됐는데 알림이 누락된다.
+- Kafka 발행 성공 → DB 커밋 실패(거의 없지만 이론상): 예약이 없는데 알림이 나간다.
+
+### 결정 — Outbox 테이블로 두 작업의 원자성을 DB 트랜잭션에 위임
+
+같은 트랜잭션 안에서 `kafka_outbox` 테이블에 INSERT를 함께 실행한다. DB가 커밋되면 Outbox 행도 반드시 함께 저장된다. 별도 스케줄러(`KafkaOutboxPublishScheduler`)가 PENDING 행을 폴링해 Kafka에 발행하고, 성공 시 PUBLISHED로 갱신한다.
+
+| 컬럼 | 역할 |
+|------|------|
+| `partition_key` | Kafka 파티션 키 (seatId). 같은 좌석 이벤트의 순서 보장 |
+| `payload_json` | LONGTEXT로 이벤트 직렬화 |
+| `status` | PENDING → PUBLISHED / FAILED |
+| `publish_attempts` | 발행 시도 횟수. 최대치 초과 시 FAILED로 전환되어 알람 대상 |
+| `last_error` | 마지막 실패 메시지 (length 1024) |
+
+### 인정한 트레이드오프
+
+- **중복 발행 가능성** — Kafka 발행 성공 후 status 업데이트 직전 장애 시 동일 메시지가 두 번 발행될 수 있다. **컨슈머 쪽 멱등성(paymentKey, idempotence=true) 처리가 전제 조건**이다.
+- **발행 지연** — 스케줄러 폴링 주기만큼 실시간성이 떨어진다. 알림 수준의 비동기 작업에는 허용 가능하다고 판단했다.
+- **테이블 적체** — `kafka_outbox`가 일시적으로 쌓일 수 있어 주기적 정리가 필요하다. 현재는 PUBLISHED 행의 별도 정리 배치는 미구현 상태다.
+
+</details>
+
+<details>
+<summary><b>4. Resilience4j 서킷브레이커 — 어디까지 보호되고 어디는 보호되지 않는가</b></summary>
+
+### 결정 — Redis 직접 호출 경로에만 CB 적용
+
+`HoldStore`, `QueueService` 등 Redis를 직접 호출하는 코드에 Resilience4j `redisCircuitBreaker`를 적용했다. 각 호출 지점마다 try-catch를 반복 작성하지 않기 위해 `RedisCircuitBreakerExecutor`로 공통 패턴을 한 곳에 모았다.
+
+```java
+// 사용 예시
+redisCb.execute(
+    "hold.getHold",                    // 로그용 작업 이름
+    () -> redisTemplate.get(tokenKey), // 실제 Redis 호출
+    () -> null                         // CB OPEN 시 fallback
+);
+```
+
+fallback 전략은 작업 성격에 따라 다르게 잡았다.
+
+| 작업 | fallback | 이유 |
+|------|---------|------|
+| 홀드 생성 | 0L (실패) | 락 획득은 명시적 실패가 안전. 임의 성공으로 처리하면 안 됨 |
+| 홀드 조회 | null | "홀드 없음"으로 폴백해 요청 자체는 완전 실패시키지 않음 |
+| 좌석 홀드 여부 | null | 동일 |
+
+### 인정한 한계 — `@Cacheable`은 CB 적용 범위 밖
+
+잔여석 캐시(`@Cacheable`)는 Spring `RedisCacheManager`의 기본 동작 영역이라 위 `RedisCircuitBreakerExecutor`를 거치지 않는다. 즉 **Redis 장애 시 잔여석 캐시 호출은 CB 보호를 받지 못한다.** 이력서에는 "Resilience4j로 Redis 장애 격리"라고 한 줄 적었지만, 정확히는 직접 호출 경로 한정이다.
+
+해결책은 두 방향이 있다. (1) `CacheManager`를 커스텀해 캐시 호출도 CB 안으로 묶거나, (2) Redis 캐시 실패 시 fallback으로 DB 직접 조회로 떨어지도록 명시적 처리. 현재 프로젝트에서는 잔여석 캐시 자체가 도메인상 1~2초 근사 허용이라 우선순위에서 밀려 미적용 상태로 두었고, 이 한계를 노션 본문에도 한계 항목으로 명시했다.
+
+</details>
 
 ---
 
