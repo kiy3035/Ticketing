@@ -96,7 +96,21 @@ public HoldResponse createHold(...) { ... }
 
 응답 코드 분포까지 따로 집계하지 않았다면 발견하기 어려운 결함이었다.
 
-### 2. 노션 본문 초안에서 측정 데이터와 어긋난 표현 다섯 건 수정
+### 2. 인프라 문서에서 실제 설정과 어긋난 사실 오류 일곱 건 정정
+
+부하 테스트 후속 작업 중 AI가 작성한 인프라 문서와 README를 실제 `nginx.conf`·docker-compose·인스턴스 사양과 대조한 결과 사실 오류 일곱 건이 확인됐다. 운영 환경 설명을 면접 자료로 쓰려는 상황이라 정확성이 중요했다.
+
+- **nginx 알고리즘 "round-robin" → "least_conn"** — 문서에는 round-robin으로 적혀 있었으나 `nginx.conf:21`은 `least_conn` 설정이다. 폴링·SSE·외부 PG 호출처럼 처리 시간 편차가 큰 워크로드에 적합한 선택이라는 근거까지 함께 본문에 추가했다.
+- **로드밸런서 "ALB" → "nginx" 전면 교체** — `deployment-ec2.md`에 ALB로 적힌 부분이 있었으나 실제 환경은 nginx 단독이다. 본 프로젝트의 "30초 다운 시 에러율 ~20% 구조적 하한"은 정확히 이 차이에서 나오는 결과라 표기 통일이 필요했다.
+- **서버 스펙 "t3.small" → "t3a.small"** — t3와 t3a는 다른 인스턴스 패밀리(Intel vs AMD). 부하 테스트 수치의 재현 조건이 달라지는 부분이라 정정했다. "현재 1대" 표기도 2대 구성과 어긋나 제거했다.
+- **부하 테스트 "7개 Phase" → "8개 Phase"** — Phase 8(페일오버) 추가 후 README가 갱신되지 않은 상태였다.
+- **정확성 검증 표현 "1회 단발 측정" → "20회 통계 표"** — 본문이 단일 시행으로 적혀 있었으나 실제 측정은 1대 직접 10회 + 2대 nginx 10회였다. 회차별 분포 표로 교체했다.
+- **선점 성공 표기 "201: 1건" → "모든 회차 1건"** — 한 회차의 결과를 전체로 일반화한 표현을 회차 단위로 정정했다.
+- **부하 결과 표에 Phase 8 행 누락 보완** — 표가 7개 Phase까지만 채워져 있어 페일오버 결과가 누락된 상태였다.
+
+이 검증 이후로는 인프라 문서 갱신 시 항상 실제 설정 파일을 함께 열어두고 grep으로 대조하는 절차를 추가했다.
+
+### 3. 노션 본문 초안에서 측정 데이터와 어긋난 표현 다섯 건 수정
 
 AI가 작성한 노션 트러블슈팅 본문 초안을 코드 grep과 측정 데이터로 대조해 다섯 건을 정정했다.
 
@@ -134,6 +148,117 @@ AI가 작성한 노션 트러블슈팅 본문 초안을 코드 grep과 측정 �
 | 스레드 모델 | Virtual Thread (Java 21) | 플랫폼 스레드 + 풀 확대 | RAM 2GB — 풀 무한 확장 불가, IO-bound 워크로드 | VT 단독 기여도 분리 미완성 |
 | 락 TTL | 3초 (외부화) | 1초 / 10초 | 정상 흐름 TAT 1초 측정 + 3배 마진 | 비정상 종료 시 3초 자원 고립 |
 | 운영 지표 | P95 + 에러율 분리 SLO | 단일 P99 | 단발 부하 시나리오 노이즈 | P99·Max는 보조 추적만 |
+
+---
+
+# 세부 의사결정 — 임계치와 패턴 선택
+
+핵심 트레이드오프 표가 큰 그림이라면, 이 섹션은 작은 단위 결정들을 모은 것이다. 각 항목은 코드·설정 파일에 근거가 명시되어 있다.
+
+<details>
+<summary><b>1. 비관적 락(PESSIMISTIC_WRITE) — 결제·예약에서 낙관적 락을 거부한 이유</b></summary>
+
+### 결정
+
+Payment와 Reservation 상태 변경 경로에서 `@Lock(LockModeType.PESSIMISTIC_WRITE)` 사용. 낙관적 락(`@Version`)은 거부.
+
+```java
+// PaymentRepository.java — 세 가지 락 조회 메서드 제공
+findWithLockByPaymentKey  // 결제 API 진입 시
+findWithLockByHoldToken   // Kafka 이벤트 처리 시
+findWithLockById          // 보상 트랜잭션에서
+```
+
+### 근거
+
+낙관적 락은 충돌이 드물다고 가정하는 패턴이다. 커밋 시점에 버전 비교로 충돌을 감지하고 예외를 던진다. 결제는 그와 반대로 충돌이 자주 발생할 수 있는 영역이다. 사용자가 결제 버튼을 두 번 클릭하는 단순한 시나리오만으로도 두 요청이 동시에 READY 상태를 읽고 둘 다 APPROVED로 변경하려 시도한다.
+
+낙관적 락을 쓰면 충돌이 감지된 두 번째 요청은 "이미 변경된 상태"를 다시 읽어 재처리해야 한다. 결제는 외부 PG 호출이 끼어 있어 **재처리 비용이 높다**. 비관적 락은 처음부터 배타 잠금으로 두 번째 요청을 차단해 재처리 자체가 발생하지 않는다.
+
+### 트레이드오프
+
+처리량은 비관적 락이 불리하다. SELECT FOR UPDATE로 행이 잠긴 동안 다른 트랜잭션은 대기한다. 결제·예약처럼 동일 행을 동시에 건드릴 일이 드물고 충돌 시 비용이 큰 영역에 한정해서 사용했고, 처리량이 중요한 좌석 가용성 조회는 분리된 캐시 경로로 처리했다.
+
+</details>
+
+<details>
+<summary><b>2. Hikari pool=30 / minimum-idle=5 — 멀티 인스턴스 환경에서 RDS 상한 역산</b></summary>
+
+### 결정
+
+```properties
+# application.properties:12
+spring.datasource.hikari.maximum-pool-size=30
+spring.datasource.hikari.minimum-idle=5
+```
+
+### 근거 — 두 단계 산정
+
+**상한(30) 산정.** 부하 테스트 Phase 1 실험으로 도출. pool=10에서 pending이 170까지 단조 적체되는 것을 확인하고 30으로 늘렸다. pool=30 자체로는 p95 개선이 거의 없었지만(병목은 풀이 아니라 쿼리 빈도였다, B-1 참조), 캐시 적용 후 환경에서는 30이 적정 상한이라는 결론이 유지됐다.
+
+**하한(5) 산정.** 여기가 멀티 인스턴스 환경의 핵심 고려 지점이다. **앱 서버 2대 × maximum-pool-size 30 = 최대 60개 상시 점유 가능성**이 있다. RDS `db.t4g.micro`의 `max_connections`는 기본 60~80 수준이라 두 앱이 풀을 최대까지 채우면 다른 클라이언트(Flyway, 관리 도구 등)가 연결을 못 받을 수 있다.
+
+minimum-idle을 5로 낮춰 평시 서버당 5개(총 10개)만 유지하고 부하 시 maximum-pool-size까지 동적 확장하도록 했다. 평시 RDS 리소스 낭비를 최소화하면서 부하 버스트는 수용한다.
+
+### 거부한 대안
+
+- **pool=10/idle=10(기본값)** — 부하 시 pending 적체 발생.
+- **pool=50/idle=20(극단값)** — 2대 × 50 = 100으로 RDS 상한 위협. 평시 idle 40개는 낭비.
+
+</details>
+
+<details>
+<summary><b>3. Kafka 컨슈머 FixedBackOff(1초, 3회) + DLT — 무한·지수 재시도를 거부한 이유</b></summary>
+
+### 결정
+
+```java
+// KafkaConfig.java:167
+DefaultErrorHandler errorHandler = new DefaultErrorHandler(recoverer, new FixedBackOff(1000L, 3L));
+```
+
+3회 재시도 후에도 실패하면 Dead Letter Topic으로 전송한다.
+
+### 근거
+
+이 프로젝트의 Kafka 메시지는 대부분 결제 완료 알림·외부 I/O 같은 **장기간 재시도해도 결국 실패할 가능성이 있는 작업**이다. 두 가지 대안을 거부했다.
+
+- **무한 재시도** — 불량 메시지가 일반 큐를 영구히 막는다(poison pill 문제). 컨슈머 스레드가 잠긴 동안 정상 메시지 처리가 지연된다.
+- **ExponentialBackOff** — 1초 → 2초 → 4초 → 8초로 늘리면 컨슈머가 잠긴 시간이 너무 길다. 알림은 1~2분 지연되면 가치가 떨어진다.
+
+FixedBackOff(1초, 3회)는 짧게 3번 시도해 일시적 네트워크 오류는 흡수하고, 그 이상은 DLT로 격리해 운영 수동 개입 지점을 만든다.
+
+### 인정한 한계
+
+DLT 자동 모니터링은 현재 미구현이다. DLT에 메시지가 쌓이면 알람으로 운영팀에 통보되는 파이프라인이 필요하지만 본 프로젝트에서는 DLT가 존재한다는 사실까지만 보장하고 정리 자동화는 미완성 상태다.
+
+</details>
+
+<details>
+<summary><b>4. Seat ID-only projection 쿼리 — 1,000행 가용성 집계에서 컬럼 최소화</b></summary>
+
+### 결정
+
+```java
+// SeatRepository.java:34
+@Query("SELECT s.id FROM Seat s WHERE s.concert.id = :concertId")
+List<Long> findSeatIdsByConcertId(@Param("concertId") Long concertId);
+```
+
+`findByConcertId()`로 전체 엔티티를 가져오지 않고 ID 컬럼만 SELECT하는 별도 메서드를 분리했다.
+
+### 근거
+
+큐 폴링 시 잔여석 계산은 **Redis에 현재 홀드된 좌석 ID 집합**과 **DB의 전체 좌석 ID 집합**의 차집합으로 구한다. 이 연산에는 좌석의 section·price·createdAt 같은 다른 컬럼이 필요 없다. 그런데 폴링은 빈도가 높아 매번 전체 엔티티를 끌어오면 네트워크 대역폭과 메모리가 낭비된다.
+
+ID 컬럼만 가져오면 1,000행 기준 행당 8바이트(Long) 정도라 전체 엔티티 대비 데이터 전송량이 크게 줄어든다. 이 차이는 단일 요청에서는 작지만 폴링 빈도(B-1에서 RPS 834/s까지 측정)와 곱하면 누적 효과가 크다.
+
+### 트레이드오프
+
+- **반환 타입이 Long** — 더 복잡한 프로젝션(여러 필드)이 필요해지면 DTO 프로젝션 또는 인터페이스 프로젝션으로 전환해야 한다.
+- **쿼리 중복** — `findByConcertId()`와 `findSeatIdsByConcertId()` 두 메서드가 공존한다. 사용 지점이 명확히 다르다는 전제에서 의도적으로 분리했다.
+
+</details>
 
 ---
 
