@@ -7,6 +7,20 @@
 > 정직성 원칙: 아래 정량 수치 중 일부는 추정치이며 그렇게 표기한다. AI가 만든 산출물은
 > 테스트·원본 데이터로 검증 가능하게 했고, AI 분석/리뷰는 항상 "1차 의견, 최종 판단은 사람"으로 둔다.
 
+> 👉 **이 문서가 AI 자동화의 진입점이다.** AI 자동화는 한 폴더가 아니라 여러 곳에 나뉘어 있다.
+
+## 구성 요소 — 어디를 보면 되나
+
+| 구성 요소 | 위치 | 무엇 |
+|-----------|------|------|
+| 부하 테스트 하네스 | [`loadtest-harness/`](../loadtest-harness/) | k6→수집→AI 진단→리포트 파이프라인 + pytest |
+| Claude Code 스킬 | [`.claude/skills/`](../.claude/skills/) | `loadtest-analyze` / `loadtest-compare` / `loadtest` / `commit` |
+| AI PR 리뷰 봇 | [`.github/scripts/ai_pr_review.py`](../.github/scripts/ai_pr_review.py), [`ai-pr-review.yml`](../.github/workflows/ai-pr-review.yml) | PR diff 자동 코드 리뷰 |
+| CI | [`.github/workflows/`](../.github/workflows/) | 하네스 pytest 자동, 배포 |
+| 직접 돌려보는 데모 | [`docs/ai-automation-demo.md`](ai-automation-demo.md) | 재현 명령 + 실제 출력 예시 |
+
+> 즉 `loadtest-harness/`만 읽으면 하네스 1개만 이해된다. 전체 그림은 이 문서 → 위 표의 링크 순으로 본다.
+
 ---
 
 ## 1. 부하 테스트 자동화 하네스 (`loadtest-harness/`)
