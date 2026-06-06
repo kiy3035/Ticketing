@@ -1,0 +1,58 @@
+name: Weekly Security Audit
+
+# 매주 의존성 취약점을 자동 점검하고, 발견 시 AI 요약과 함께 Issue로 보고한다.
+# 스케줄(cron) 기반 AI 자동화. ANTHROPIC_API_KEY 없으면 AI 요약만 생략하고 표는 게시.
+
+on:
+  schedule:
+    - cron: '0 0 * * 1'   # 매주 월요일 00:00 UTC
+  workflow_dispatch:        # 수동 실행도 가능
+
+permissions:
+  contents: read
+  issues: write             # 취약점 발견 시 Issue 생성
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # Spring Boot fat jar에 모든 의존성이 포함됨 → Trivy가 내부 라이브러리까지 스캔
+      - name: Build boot jar
+        run: |
+          chmod +x ./gradlew
+          ./gradlew bootJar -x test --no-daemon
+
+      - name: Install Trivy
+        run: curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
+
+      # 빌드된 jar의 의존성 취약점 스캔 (실패해도 잡은 계속 — 요약 단계에서 처리)
+      - name: Trivy scan
+        run: trivy fs --scanners vuln --severity HIGH,CRITICAL --format json -o trivy.json build/libs || true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install deps
+        run: pip install anthropic requests
+
+      - name: Summarize & report
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          MODEL: claude-opus-4-8
+        run: python .github/scripts/security_audit_summary.py
