@@ -1,0 +1,30 @@
+name: Harness CI
+
+# 하네스 코드 변경 시 단위 테스트 자동 실행 (앱/인프라 불필요 — 순수 로직 검증)
+on:
+  push:
+    paths:
+      - 'loadtest-harness/**'
+  pull_request:
+    paths:
+      - 'loadtest-harness/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install deps
+        run: pip install -r loadtest-harness/requirements-dev.txt
+
+      - name: Run pytest
+        working-directory: loadtest-harness
+        run: pytest -q

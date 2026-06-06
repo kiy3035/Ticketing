@@ -1,0 +1,42 @@
+# 부하 테스트 자동화 하네스 설정
+# 코드 규칙: 임계치·URL·반복횟수 등 모든 매직 값은 여기로 외부화 (하드코딩 금지)
+# __APP__ 토큰은 런타임에 prometheus.app_label 값으로 치환됨
+
+k6:
+  binary: k6                       # k6 실행 파일 (PATH에 있으면 그대로)
+  base_url: http://localhost:8080  # 부하 대상 (운영: nginx IP)
+  concert_id: 1                    # 테스트 콘서트 ID
+  repeat: 3                        # 회차 반복 — 기존 1회차/2회차/3회차 수동 작업을 자동화
+  # 시나리오 목록. script 경로는 이 config 파일 기준 상대경로
+  scenarios:
+    - name: knee-point
+      script: ../load-tests/knee-point.js
+      env:
+        K6_QUEUE_POLL_SLEEP_SEC: "0.005"
+        K6_QUEUE_MAX_POLL: "300"
+
+prometheus:
+  base_url: http://localhost:9090
+  app_label: ticketing             # management.metrics.tags.application 값
+  step: 15s                        # range query 해상도
+  settle_seconds: 5                # 테스트 종료 후 마지막 스크랩 반영 대기
+  # 수집 메트릭: 표시이름 → PromQL. docs/monitoring.md의 Golden Signals 기반
+  queries:
+    rps: 'sum(rate(http_server_requests_seconds_count{application="__APP__"}[30s]))'
+    latency_p95: 'histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{application="__APP__"}[1m])) by (le))'
+    error_rate: 'sum(rate(http_server_requests_seconds_count{application="__APP__",status=~"5.."}[1m])) / clamp_min(sum(rate(http_server_requests_seconds_count{application="__APP__"}[1m])), 1)'
+    hikari_active: 'sum(hikaricp_connections_active{application="__APP__"})'
+    hikari_pending: 'sum(hikaricp_connections_pending{application="__APP__"})'
+    hold_conflict: 'sum(rate(ticketing_hold_conflict_total{application="__APP__"}[1m]))'
+    lock_acquire_failures: 'sum(rate(ticketing_lock_acquire_failures_total{application="__APP__"}[1m]))'
+    queue_waiting: 'sum(ticketing_queue_waiting_count{application="__APP__"})'
+
+analyzer:
+  enabled: true
+  model: claude-opus-4-8           # 비용 절감 시 claude-sonnet-4-6
+  max_tokens: 2000
+  # API 키는 환경변수 ANTHROPIC_API_KEY 에서 읽음 (config에 절대 평문 저장 금지)
+
+report:
+  output_dir: reports              # 이 config 파일 기준 상대경로
+  charts: true                     # matplotlib PNG 생성 (Grafana 수동 스크린샷 대체)

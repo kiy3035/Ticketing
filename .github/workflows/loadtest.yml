@@ -1,0 +1,67 @@
+name: Load test (manual)
+
+# 부하 테스트 자동화 하네스를 수동 트리거로 실행.
+# k6 전용 서버(EC2)에 SSH 접속 → 하네스 실행 → 리포트를 아티팩트로 회수.
+# deploy-prod.yml의 SSH/secrets 패턴을 재사용한다.
+#
+# 필요한 GitHub Secrets:
+#   K6_HOST           : k6 서버 public IP/도메인 (ubuntu 계정 가정)
+#   K6_SSH_KEY        : k6 서버 SSH 개인키 (PEM 전문)
+#   ANTHROPIC_API_KEY : Claude API 키 (AI 보조 분석용 — 없으면 분석만 생략됨)
+# 전제: k6 서버에 k6 / python3 / git 설치 + Prometheus 접근 가능
+#       대상 URL·Prometheus URL 등은 loadtest-harness/config.yaml 에서 관리
+
+on:
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: '시나리오 이름 (config.yaml의 k6.scenarios)'
+        required: true
+        default: 'knee-point'
+      repeat:
+        description: '회차 반복 횟수'
+        required: true
+        default: '3'
+
+jobs:
+  loadtest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run harness on k6 server
+        env:
+          K6_HOST: ${{ secrets.K6_HOST }}
+          K6_KEY: ${{ secrets.K6_SSH_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SCENARIO: ${{ inputs.scenario }}
+          REPEAT: ${{ inputs.repeat }}
+        run: |
+          echo "$K6_KEY" > k6_key.pem
+          chmod 600 k6_key.pem
+          REMOTE="ubuntu@$K6_HOST"
+          SSHOPT="-o StrictHostKeyChecking=no -i k6_key.pem"
+
+          # 1) 하네스 + k6 스크립트를 k6 서버로 동기화
+          #    (config의 ../load-tests 상대경로가 유지되도록 같은 부모에 배치)
+          ssh $SSHOPT "$REMOTE" "rm -rf ~/ticketing-harness && mkdir -p ~/ticketing-harness"
+          scp $SSHOPT -r loadtest-harness load-tests "$REMOTE:~/ticketing-harness/"
+
+          # 2) 의존성 설치 후 실행. API 키는 원격 환경변수로만 전달
+          ssh $SSHOPT "$REMOTE" \
+            "cd ~/ticketing-harness/loadtest-harness && \
+             python3 -m venv .venv && \
+             .venv/bin/pip install -q -r requirements.txt && \
+             ANTHROPIC_API_KEY='${ANTHROPIC_API_KEY}' \
+             .venv/bin/python run.py --scenario '${SCENARIO}' --repeat '${REPEAT}'"
+
+          # 3) 생성된 리포트 회수
+          scp $SSHOPT -r "$REMOTE:~/ticketing-harness/loadtest-harness/reports" ./harness-reports
+
+      - name: Upload report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: loadtest-report-${{ inputs.scenario }}
+          path: harness-reports/
+          retention-days: 14
