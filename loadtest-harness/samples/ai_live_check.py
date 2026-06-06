@@ -5,7 +5,8 @@ AI 분석 실측 테스트 — analyzer가 실제 Claude API를 호출해 분석
   1) 이미 설정된 환경변수
   2) loadtest-harness/secrets.env 파일의 ANTHROPIC_API_KEY=... 줄 (gitignore됨)
 
-실행: python samples/test_ai_live.py
+실행: python samples/ai_live_check.py
+(파일명을 test_* 로 두지 말 것 — pytest가 테스트로 수집해 CI가 깨진다)
 """
 import os
 import sys
