@@ -86,6 +86,12 @@ def review_diff(diff: str) -> str:
 
 
 def main():
+    # 키가 없으면 실패가 아니라 정상 종료로 스킵 (secret 미등록 시 실패 알림 메일 방지)
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        print("ANTHROPIC_API_KEY 미설정 — AI 리뷰를 건너뜁니다(스킵). "
+              "활성화하려면 repo secret에 ANTHROPIC_API_KEY를 등록하세요.")
+        return
+
     token = os.environ["GITHUB_TOKEN"]
     repo = os.environ["REPO"]
     pr_number = os.environ["PR_NUMBER"]
