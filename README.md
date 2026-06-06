@@ -2,6 +2,8 @@
 
 백엔드 중심의 콘서트 예매 시스템입니다. Redis(JWT 블랙리스트/홀드/락/캐시)와 Kafka(이벤트 스트리밍)를 활용해 **동시성·정합성·확장성**을 고려한 설계를 구현했습니다. 로그인 기반 프론트까지 포함한 MVP이며, 실무 시나리오에 맞춘 흐름을 제공합니다.
 
+또한 **부하 테스트·코드 리뷰 등 반복 작업을 파이프라인·CI·LLM으로 자동화**해 개발 생산성을 끌어올렸습니다 (아래 [🤖 AI 활용 · 자동화](#-ai-활용--자동화-개발-생산성) 섹션).
+
 ## 🎯 프로젝트 개요
 
 대규모 트래픽이 예상되는 콘서트 예매 시나리오를 고려하여 설계된 시스템입니다. 특히 **동시 접속자 폭증**, **좌석 중복 예약 방지**, **실시간 알림** 등의 문제를 해결하기 위해 다양한 기술과 패턴을 적용했습니다.
@@ -11,6 +13,17 @@
 - **정합성**: 분산 락과 Redis TTL로 중복 예약 방지
 - **실시간성**: SSE를 통한 즉각적인 알림 전달
 - **확장성**: Redis 기반 상태 공유(JWT 블랙리스트·홀드 데이터 등)로 수평 확장 가능
+
+## 🤖 AI 활용 · 자동화 (개발 생산성)
+
+반복 작업을 **파이프라인·도구·CI로 자동화**하고, 판단이 필요한 지점(메트릭 해석, 코드 리뷰)에 Claude(LLM)를 **보조**로 붙였습니다. AI 산출물은 원본 데이터·테스트로 검증 가능하게 했습니다 — AI는 1차 의견, 최종 판단은 사람.
+
+- **부하 테스트 자동화 하네스** ([loadtest-harness/](loadtest-harness/)): `k6 실행 → Prometheus 수집 → AI가 knee point/bottleneck 보조 진단 → 차트·리포트 자동 생성`. 설정별 3회 수동 실행·Grafana 스크린샷·수기 분석(설정당 ~20–30분, 추정)을 **명령 1회**로 대체. pytest 11개로 회귀 검증.
+- **AI PR 리뷰 봇** ([.github/workflows/ai-pr-review.yml](.github/workflows/ai-pr-review.yml)): PR마다 Claude가 변경 diff를 **정확성·보안·성능** 관점으로 자동 리뷰·코멘트(심각도·확신도 표기).
+- **CI 자동화** ([.github/workflows/](.github/workflows/)): 하네스 변경 시 pytest 자동 실행, prod 푸시 시 앱 2대 병렬 배포.
+- **개발 워크플로우 자동화**: 부하 결과 분석·설정 비교(ablation)·`커밋→PR 작성`을 재사용 도구로 패키징.
+
+📄 상세·정량 효과: [docs/ai-productivity.md](docs/ai-productivity.md) · 직접 돌려보는 데모: [docs/ai-automation-demo.md](docs/ai-automation-demo.md)
 
 ## 🚀 포트폴리오 핵심 요약
 
@@ -260,71 +273,15 @@ docker compose up -d
 - Kafka UI: http://localhost:8081
 - Redis Insight: http://localhost:5540
 
-## 📖 데모 시나리오
+## 📖 데모 시나리오 (핵심 흐름)
 
-1. **회원가입/로그인**
-   - `/signup.html`에서 회원가입
-   - `/login.html`에서 ID/비밀번호 로그인 (JWT 발급 후 `sessionStorage`에 저장)
+```
+로그인(JWT) → 콘서트 탐색(Redis 캐시) → 대기열 진입(토큰·순번 폴링)
+→ 입장 허용(스케줄러 배치) → 좌석 홀드(분산 락 + 5분 TTL)
+→ 결제 완료 시 예약 확정(DB outbox → Kafka) → 홀드 만료/예약 알림(SSE)
+```
 
-2. **콘서트 탐색**
-   - `/app.html`에서 카테고리/검색으로 콘서트 탐색
-   - 콘서트 목록은 Redis 캐시로 빠르게 로드
-
-3. **대기열 진입**
-   - 콘서트 선택 시 `/queue.html?concertId={id}`로 대기열 진입
-   - 토큰 발급 및 순번 표시
-
-4. **순번 대기**
-   - 2초마다 폴링으로 순번 업데이트
-   - 예상 대기 시간 표시
-
-5. **입장 허용**
-   - 스케줄러가 상위 N명 입장 허용
-   - 입장 허용 시 `/concert.html?concertId={id}&queueToken={token}`로 자동 이동
-
-6. **좌석 선택**
-   - 좌석 선택 후 홀드 생성 (5분 TTL, 결제 진입 시 20분으로 연장)
-   - 홀드 생성 시 Kafka로 `HOLD_CREATED` 이벤트 발행
-
-7. **결제 완료 및 예약 확정**
-   - 결제 완료 API 호출 시 예약 확정 (DB 기록). `RESERVATION_CONFIRMED` 는 DB transactional outbox에 같은 트랜잭션으로 적재되고, 스케줄러가 Kafka로 발행한다. DB 커밋 후 리스너가 Redis 홀드를 제거한다.
-
-8. **홀드 만료 알림**
-   - 스케줄러가 만료된 홀드 스캔
-   - Kafka로 `HOLD_EXPIRED` 이벤트 발행
-   - SSE를 통해 실시간 알림 수신
-
-9. **예매 내역 조회**
-   - `/reservations.html`에서 예매 내역 조회
-   - `/mypage.html`에서 사용자 정보 및 예매 내역 확인
-
-## 📊 성능/캐시 전략 요약
-
-### 대기열 시스템
-- **Redis ZSet**: O(log N) 순번 조회로 성능 최적화
-- **배치 처리**: 2초마다 상위 50명 처리로 서버 부하 분산
-- **토큰 TTL**: `ticketing.queue.token-ttl-seconds` = 60초 (부하 테스트용 짧은 값. 실서비스 30분~1시간 권장)
-
-### 서버 캐시
-- **콘서트 목록**: Redis 캐시로 응답 속도 향상 및 DB 부하 최적화
-- **캐시 TTL**: 5분으로 데이터 신선도 유지
-
-### 클라이언트 캐시
-- **카테고리 전환**: 30초 TTL 메모리 캐시로 즉시 반응
-- **폴링 최적화**: 대기열 2초, 알림 30초로 서버 부하 최소화
-
-### JWT·Redis
-- **Access TTL**: 30분, **Refresh TTL**: 14일 (설정 가능)
-- **대기열 토큰 TTL**: `ticketing.queue.token-ttl-seconds` = 60초 (부하 테스트용. 실서비스 30분~1시간 권장)
-
-### 실시간 알림
-- **SSE**: 즉시 전달로 사용자 경험 향상
-- **폴링 백업**: SSE 연결 실패 시 대비
-
-### 배치/스케줄러
-- **대기열 입장**: 2초마다 상위 50명 입장 허용
-- **홀드 만료**: 60초마다 만료 홀드 스캔·정리 및 Kafka 이벤트 발행
-- **취소 공연 환불**: 5분마다 CANCELLED 공연의 완료 결제 청크 환불 (포인트 복원, 예약/좌석 해제)
+페이지: `/signup` · `/login` · `/app` · `/queue` · `/concert` · `/reservations` · `/mypage`
 
 ## 📁 프로젝트 구조
 
@@ -366,19 +323,6 @@ ticketing/
 
 요약 링크:
 - [백엔드 포트폴리오 (메인)](docs/ticketing-portfolio.md) | [부하 테스트](docs/load-test-portfolio.md) | [JWT 인증](docs/jwt-auth.md) | [시퀀스 다이어그램](docs/sequence-diagrams.md) | [데이터](docs/data.md) | [인프라](docs/infra.md) | [모니터링](docs/monitoring.md) | [배포](docs/deployment-ec2.md)
-
-## 🎓 학습 포인트
-
-이 프로젝트를 통해 학습한 내용:
-
-1. **대규모 트래픽 처리**: 대기열 시스템으로 트래픽 분산 및 공정한 순번 관리
-2. **동시성 제어**: 분산 락과 Redis TTL로 경쟁 상태 해결
-3. **이벤트 기반 아키텍처**: Kafka를 활용한 비동기 이벤트 처리
-4. **실시간 통신**: SSE를 활용한 서버 푸시 구현
-5. **캐싱 전략**: 서버/클라이언트 캐시 하이브리드 전략
-6. **JWT 인증**: Access/Refresh·블랙리스트로 Stateless API 보호
-7. **성능 최적화**: Redis ZSet으로 O(log N) 연산 활용
-8. **운영 관찰성**: 지표 API 및 로깅으로 운영 관찰 가능
 
 ## 📝 라이선스
 

@@ -1,0 +1,38 @@
+name: AI PR Review
+
+# PR가 열리거나 갱신되면 Claude가 변경 diff를 자동 리뷰하고 코멘트로 게시한다.
+# 필요한 Secret: ANTHROPIC_API_KEY
+# 모델은 기본 claude-opus-4-8. 비용 절감 시 env MODEL을 claude-sonnet-4-6 등으로 변경.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write   # 코멘트 게시 권한
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install deps
+        run: pip install anthropic requests
+
+      - name: AI review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          MODEL: claude-opus-4-8
+        run: python .github/scripts/ai_pr_review.py

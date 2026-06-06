@@ -42,5 +42,10 @@ out/
 .env
 
 ### Claude Code ###
-.claude/
+.claude/*
+!.claude/skills/
 CLAUDE.md
+
+# Python 캐시
+__pycache__/
+*.pyc

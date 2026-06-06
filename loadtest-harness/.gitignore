@@ -2,3 +2,7 @@ __pycache__/
 *.pyc
 .venv/
 ec2_key.pem
+# 로컬 비밀값 (API 키 등) — 절대 커밋 금지
+secrets.env
+*.env.local
+.env
