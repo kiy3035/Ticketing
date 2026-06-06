@@ -44,3 +44,7 @@ out/
 ### Claude Code ###
 .claude/
 CLAUDE.md
+
+# Python 캐시
+__pycache__/
+*.pyc
