@@ -99,7 +99,8 @@ python run.py
 ## MCP 연동 (GitHub MCP server)
 - [`.mcp.json`](../.mcp.json)에 공식 **GitHub MCP server**를 등록 → Claude Code에서 이슈/PR/
   Actions를 MCP로 직접 조회·조작.
-- 활성화: `GITHUB_PAT` 환경변수(레포 권한 토큰) 설정 + Docker 필요 + Claude Code 재시작.
+- 활성화: GitHub 공식 **원격(remote) MCP 서버**(`api.githubcopilot.com/mcp`) 사용 → Docker 불필요.
+  `GITHUB_PAT` 환경변수(레포 권한 토큰)만 설정하고 Claude Code 재시작하면 로드된다.
 - 트레이드오프: 기존 `gh` CLI와 기능이 겹치고, MCP는 Claude 쪽 설정이라 런타임 산출물은 아님
   (이 문서가 그 사실을 남기는 기록). 도메인 밀착도가 더 필요하면 Redis/MySQL MCP가 후보.
 
