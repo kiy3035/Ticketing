@@ -16,6 +16,8 @@
 | 부하 테스트 하네스 | [`loadtest-harness/`](../loadtest-harness/) | k6→수집→AI 진단→리포트 파이프라인 + pytest |
 | Claude Code 스킬 | [`.claude/skills/`](../.claude/skills/) | `loadtest-analyze` / `loadtest-compare` / `loadtest` / `commit` |
 | AI PR 리뷰 봇 | [`.github/scripts/ai_pr_review.py`](../.github/scripts/ai_pr_review.py), [`ai-pr-review.yml`](../.github/workflows/ai-pr-review.yml) | PR diff 자동 코드 리뷰 |
+| 주간 보안 점검(스케줄) | [`.github/scripts/security_audit_summary.py`](../.github/scripts/security_audit_summary.py), [`weekly-security-audit.yml`](../.github/workflows/weekly-security-audit.yml) | 매주 의존성 취약점 스캔(Trivy) → AI 요약 → Issue |
+| MCP 연동 | [`.mcp.json`](../.mcp.json) | GitHub MCP server — Claude가 이슈/PR/Actions 직접 조회·조작 |
 | CI | [`.github/workflows/`](../.github/workflows/) | 하네스 pytest 자동, 배포 |
 | 직접 돌려보는 데모 | [`docs/ai-automation-demo.md`](ai-automation-demo.md) | 재현 명령 + 실제 출력 예시 |
 
@@ -79,12 +81,27 @@ python run.py
 | `loadtest-harness-ci.yml` | 하네스 변경 PR/푸시 | pytest 자동 실행 (앱 불필요) |
 | `ai-pr-review.yml` | PR 열림/갱신 | **Claude가 변경 diff를 자동 코드 리뷰** → 코멘트 게시 |
 | `loadtest.yml` | 수동(dispatch) | k6 서버 SSH로 부하 테스트 실행 → 리포트 아티팩트 |
+| `weekly-security-audit.yml` | **매주 월요일(cron)** + 수동 | Trivy로 의존성 취약점 스캔 → AI 요약 → Issue 보고 |
 | `deploy-prod.yml` | prod 푸시 | 앱 2대 병렬 배포 (기존) |
 
 ### AI PR 리뷰 봇
 - PR을 올리면 `claude-opus-4-8`(env로 교체 가능)이 diff를 읽고 정확성/보안/성능/개선 관점으로 리뷰.
 - "1차 의견"으로 명시하고, 발견 사항에 심각도·확신도를 붙여 사람이 필터링하도록 했다.
 - 한계: GitHub 보안 정책상 포크 PR엔 secret이 없어 동작하지 않음(본인 레포 브랜치 PR에서 동작).
+
+### 주간 보안 점검 (스케줄 자동화)
+- 매주 boot jar를 빌드해 **Trivy**로 의존성 취약점(HIGH/CRITICAL)을 스캔하고, 발견 시
+  Claude가 우선순위 요약을 붙여 **GitHub Issue**로 보고한다. 취약점 0건이면 이슈를 만들지 않는다.
+- AI는 보조: `ANTHROPIC_API_KEY` 없으면 요약만 생략하고 원본 표는 그대로 게시.
+- 트레이드오프: GitHub 자체 Dependabot 대신 Trivy를 자체 실행 → CI 비용(빌드+스캔)이 들지만
+  스캐너/DB가 레포에 명시되어 재현·이식이 쉽다.
+
+## MCP 연동 (GitHub MCP server)
+- [`.mcp.json`](../.mcp.json)에 공식 **GitHub MCP server**를 등록 → Claude Code에서 이슈/PR/
+  Actions를 MCP로 직접 조회·조작.
+- 활성화: `GITHUB_PAT` 환경변수(레포 권한 토큰) 설정 + Docker 필요 + Claude Code 재시작.
+- 트레이드오프: 기존 `gh` CLI와 기능이 겹치고, MCP는 Claude 쪽 설정이라 런타임 산출물은 아님
+  (이 문서가 그 사실을 남기는 기록). 도메인 밀착도가 더 필요하면 Redis/MySQL MCP가 후보.
 
 ---
 
