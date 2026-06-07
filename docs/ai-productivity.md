@@ -17,7 +17,7 @@
 | Claude Code 스킬 | [`.claude/skills/`](../.claude/skills/) | `loadtest-analyze` / `loadtest-compare` / `loadtest` / `commit` |
 | AI PR 리뷰 봇 | [`.github/scripts/ai_pr_review.py`](../.github/scripts/ai_pr_review.py), [`ai-pr-review.yml`](../.github/workflows/ai-pr-review.yml) | PR diff 자동 코드 리뷰 |
 | 주간 보안 점검(스케줄) | [`.github/scripts/security_audit_summary.py`](../.github/scripts/security_audit_summary.py), [`weekly-security-audit.yml`](../.github/workflows/weekly-security-audit.yml) | 매주 의존성 취약점 스캔(Trivy) → AI 요약 → Issue |
-| MCP 연동 | [`.mcp.json`](../.mcp.json) | GitHub MCP server — Claude가 이슈/PR/Actions 직접 조회·조작 |
+| GitHub 연동 | `gh` CLI | 이슈/PR/Actions 조회·조작 (GitHub MCP 검토 후 CLI로 회귀 — 아래 참고) |
 | CI | [`.github/workflows/`](../.github/workflows/) | 하네스 pytest 자동, 배포 |
 | 직접 돌려보는 데모 | [`docs/ai-automation-demo.md`](ai-automation-demo.md) | 재현 명령 + 실제 출력 예시 |
 
@@ -96,13 +96,16 @@ python run.py
 - 트레이드오프: GitHub 자체 Dependabot 대신 Trivy를 자체 실행 → CI 비용(빌드+스캔)이 들지만
   스캐너/DB가 레포에 명시되어 재현·이식이 쉽다.
 
-## MCP 연동 (GitHub MCP server)
-- [`.mcp.json`](../.mcp.json)에 공식 **GitHub MCP server**를 등록 → Claude Code에서 이슈/PR/
-  Actions를 MCP로 직접 조회·조작.
-- 활성화: GitHub 공식 **원격(remote) MCP 서버**(`api.githubcopilot.com/mcp`) 사용 → Docker 불필요.
-  `GITHUB_PAT` 환경변수(레포 권한 토큰)만 설정하고 Claude Code 재시작하면 로드된다.
-- 트레이드오프: 기존 `gh` CLI와 기능이 겹치고, MCP는 Claude 쪽 설정이라 런타임 산출물은 아님
-  (이 문서가 그 사실을 남기는 기록). 도메인 밀착도가 더 필요하면 Redis/MySQL MCP가 후보.
+## GitHub 연동: MCP 검토 후 `gh` CLI로 회귀 (의사결정 기록)
+- 한때 공식 **GitHub MCP server**(원격 `api.githubcopilot.com/mcp`)를 `.mcp.json`에 등록해
+  Claude Code에서 이슈/PR/Actions를 다뤘다.
+- **회귀 결정**: MCP 서버는 연결만 해도 도구 수십 개의 스키마가 매 요청 컨텍스트에 상주해
+  **토큰을 상시 소모**한다. 그런데 이 프로젝트의 GitHub 작업(PR 생성·CI 조회·이슈)은
+  이미 `gh` CLI로 100% 커버되고, CLI 호출은 토큰 비용이 0에 가깝다.
+  기능 중복 대비 비용이 맞지 않아 GitHub MCP는 제거하고 `gh` CLI로 되돌렸다.
+- **트레이드오프**: MCP의 구조화된 응답(스키마 검증된 JSON)을 포기하는 대신, 상시 토큰 절감과
+  설정 단순화를 얻었다. MCP는 *CLI가 없는* 도메인(예: 사내 위키, 디자인 툴)이나
+  자연어로 다루기 까다로운 API에서 더 가치가 크다 — 이 프로젝트엔 해당 케이스가 없었다.
 
 ---
 
