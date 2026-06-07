@@ -1,6 +1,6 @@
 """분석기 검증 — 프롬프트 직렬화와 키 없을 때 graceful skip (API 호출 없음)."""
-from k6_runner import RunResult
 import analyzer
+from k6_runner import RunResult
 
 
 def _runs():

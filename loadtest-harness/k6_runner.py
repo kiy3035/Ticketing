@@ -8,7 +8,6 @@ k6 실행기 — 시나리오를 N회 반복 실행하고 회차별 요약 메�
 import json
 import logging
 import subprocess
-import tempfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path

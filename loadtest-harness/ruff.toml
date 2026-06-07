@@ -1,0 +1,14 @@
+# Python 린트/포맷 설정 (loadtest-harness)
+# 워크플로우: 작은 변경 → pytest → ruff → 커밋. (docs/dev-workflow.md 참고)
+# 실행: ruff check .   /  ruff format .   (수동 + CI에서 검증)
+line-length = 120
+target-version = "py312"
+
+[lint]
+# 보수적으로 시작: pyflakes(F)·pycodestyle(E/W)·import 정렬(I).
+# B(bugbear)·UP(pyupgrade) 등은 코드가 안정되면 점진적으로 확대.
+select = ["E", "F", "W", "I"]
+
+[lint.isort]
+# 하네스 모듈은 같은 디렉토리의 1st-party — import 정렬 오탐 방지
+known-first-party = ["k6_runner", "analyzer", "reporter", "prometheus_collector"]

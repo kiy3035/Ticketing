@@ -25,6 +25,10 @@ jobs:
       - name: Install deps
         run: pip install -r loadtest-harness/requirements-dev.txt
 
+      - name: Lint (ruff)
+        working-directory: loadtest-harness
+        run: ruff check .
+
       - name: Run pytest
         working-directory: loadtest-harness
         run: pytest -q

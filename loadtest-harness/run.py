@@ -18,8 +18,8 @@ from pathlib import Path
 
 import yaml
 
-import k6_runner
 import analyzer
+import k6_runner
 import reporter
 from prometheus_collector import PrometheusCollector
 
