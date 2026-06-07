@@ -1,0 +1,44 @@
+name: PR Merge Notify
+
+# PR이 main에 머지되면 Gmail SMTP로 알림 메일을 보낸다.
+# 1인 워크플로우(본인이 만들고 본인이 머지)에서는 GitHub 기본 알림이
+# "자기 행동"에 메일을 안 보내므로, 머지 확인 메일을 직접 발송한다.
+#
+# 필요한 secret (레포 Settings > Secrets and variables > Actions):
+#   MAIL_USERNAME : Gmail 주소 (예: kiy3035@gmail.com)
+#   MAIL_PASSWORD : Gmail "앱 비밀번호" 16자리 (일반 비번 아님, 2단계 인증 필요)
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    # 닫힘이 아니라 "머지됨"일 때만 발송
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: 머지 알림 메일 발송
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          from: GitHub Actions <${{ secrets.MAIL_USERNAME }}>
+          to: ${{ secrets.MAIL_USERNAME }}
+          subject: "[Ticketing] PR #${{ github.event.pull_request.number }} 머지됨 — ${{ github.event.pull_request.title }}"
+          body: |
+            PR이 ${{ github.event.pull_request.base.ref }} 에 머지되었습니다.
+
+            • 제목 : ${{ github.event.pull_request.title }}
+            • 번호 : #${{ github.event.pull_request.number }}
+            • 작성자 : ${{ github.event.pull_request.user.login }}
+            • 머지한 사람 : ${{ github.event.pull_request.merged_by.login }}
+            • 브랜치 : ${{ github.event.pull_request.head.ref }} → ${{ github.event.pull_request.base.ref }}
+            • 변경 : +${{ github.event.pull_request.additions }} / -${{ github.event.pull_request.deletions }} (${{ github.event.pull_request.changed_files }} files)
+            • 링크 : ${{ github.event.pull_request.html_url }}
