@@ -25,6 +25,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 import urllib.request
 import urllib.error
@@ -164,9 +165,54 @@ def mask_secrets(text: str) -> tuple[str, int]:
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# PR 모드: gh로 PR 본문+diff 가져오기
+# ──────────────────────────────────────────────────────────────────────────
+def _gh(*args: str) -> str:
+    """gh CLI 실행. GH_BIN 환경변수로 경로 지정 가능(기본 'gh')."""
+    gh = os.environ.get("GH_BIN", "gh")
+    try:
+        out = subprocess.run(
+            [gh, *args], capture_output=True, text=True, encoding="utf-8",
+        )
+    except FileNotFoundError as e:
+        raise RuntimeError(
+            "gh(GitHub CLI)를 찾지 못했습니다. PATH에 추가하거나 "
+            "GH_BIN 환경변수로 경로를 지정하세요."
+        ) from e
+    if out.returncode != 0:
+        raise RuntimeError(f"gh 오류: {out.stderr.strip() or out.stdout.strip()}")
+    return out.stdout
+
+
+def build_pr_text(pr: str, diff_limit: int) -> str:
+    """PR 번호/URL로 본문+변경파일+diff를 읽기 좋은 텍스트로 만든다."""
+    meta_raw = _gh(
+        "pr", "view", pr, "--json",
+        "number,title,author,body,baseRefName,headRefName,additions,deletions,changedFiles,files",
+    )
+    m = json.loads(meta_raw)
+    author = (m.get("author") or {}).get("login", "?")
+    files = "\n".join(
+        f"  - {f.get('path')} (+{f.get('additions', 0)}/-{f.get('deletions', 0)})"
+        for f in (m.get("files") or [])
+    )
+    diff = _gh("pr", "diff", pr)
+    if len(diff) > diff_limit:
+        diff = diff[:diff_limit] + f"\n…(diff {len(diff)}자 중 일부 생략)"
+    return (
+        f"# PR #{m.get('number')} — {m.get('title')}\n"
+        f"작성자: {author} | {m.get('headRefName')} → {m.get('baseRefName')} | "
+        f"+{m.get('additions',0)}/-{m.get('deletions',0)}, {m.get('changedFiles',0)} files\n\n"
+        f"## 본문\n{m.get('body') or '(본문 없음)'}\n\n"
+        f"## 변경 파일\n{files or '(없음)'}\n\n"
+        f"## Diff\n```diff\n{diff}\n```\n"
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # 4) OpenAI 호출
 # ──────────────────────────────────────────────────────────────────────────
-SYSTEM_PROMPT = (
+SYSTEM_PROMPT_CONV = (
     "너는 까다롭고 경험 많은 시니어 백엔드 엔지니어다. "
     "지금부터 다른 AI(Claude Code)와 사용자가 나눈 작업 대화 기록을 보게 된다. "
     "Claude의 편을 들지 말고, 제3자 검토자로서 냉정하게 평가하라. "
@@ -179,8 +225,20 @@ SYSTEM_PROMPT = (
     "확신이 없는 지적은 '추정'이라고 표시하라."
 )
 
+SYSTEM_PROMPT_PR = (
+    "너는 까다롭고 경험 많은 시니어 백엔드 엔지니어다. "
+    "지금부터 GitHub Pull Request의 본문과 diff를 보게 된다. 냉정하게 코드리뷰하라. "
+    "다음을 한국어로, 근거(파일·라인 단위면 더 좋음)와 함께 날카롭게 지적하라:\n"
+    "1) 버그·엣지케이스·동시성/트랜잭션 문제\n"
+    "2) 보안 취약점(비밀값 노출, 인젝션, 권한 등)\n"
+    "3) 성능·자원 누수 우려\n"
+    "4) 설계/가독성 개선점과 더 나은 대안\n"
+    "5) PR 본문 설명과 실제 diff의 불일치, 과장·미검증 주장\n"
+    "잘한 점은 짧게만. 막연한 칭찬 금지. 확신 없는 지적은 '추정'이라 표시하라."
+)
 
-def call_openai(text: str, model: str) -> str:
+
+def call_openai(text: str, model: str, system_prompt: str, user_prefix: str) -> str:
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         raise RuntimeError(
@@ -192,8 +250,8 @@ def call_openai(text: str, model: str) -> str:
     payload = {
         "model": model,
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": "다음은 Claude Code와의 작업 대화 기록이다.\n\n" + text},
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prefix + "\n\n" + text},
         ],
         "temperature": 0.4,
     }
@@ -219,6 +277,7 @@ def call_openai(text: str, model: str) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser(description="현재 Claude 대화를 GPT에게 보내 비평받기")
     ap.add_argument("--transcript", help="transcript .jsonl 경로(기본: 현재 프로젝트 최신 세션)")
+    ap.add_argument("--pr", help="PR 번호/URL — 지정 시 대화 대신 해당 PR(본문+diff)을 비평")
     ap.add_argument("--model", default=os.environ.get("OPENAI_REVIEW_MODEL", "gpt-4o"),
                     help="OpenAI 모델 (기본 gpt-4o 또는 OPENAI_REVIEW_MODEL)")
     ap.add_argument("--max-chars", type=int, default=240000,
@@ -229,10 +288,18 @@ def main() -> int:
     ap.add_argument("--no-mask", action="store_true", help="비밀값 마스킹 비활성화(권장 안 함)")
     args = ap.parse_args()
 
-    # 1) transcript 확보
-    path = args.transcript or find_latest_transcript(default_transcript_dir())
-    print(f"[i] transcript: {path}", file=sys.stderr)
-    text = transcript_to_text(path)
+    # 1) 비평 대상 확보 — PR 모드 vs 대화(transcript) 모드
+    if args.pr:
+        print(f"[i] PR 모드: #{args.pr}", file=sys.stderr)
+        text = build_pr_text(args.pr, diff_limit=args.max_chars)
+        system_prompt = SYSTEM_PROMPT_PR
+        user_prefix = f"다음은 리뷰할 GitHub Pull Request(#{args.pr})다."
+    else:
+        path = args.transcript or find_latest_transcript(default_transcript_dir())
+        print(f"[i] transcript: {path}", file=sys.stderr)
+        text = transcript_to_text(path)
+        system_prompt = SYSTEM_PROMPT_CONV
+        user_prefix = "다음은 Claude Code와의 작업 대화 기록이다."
 
     # 2) 마스킹
     if not args.no_mask:
@@ -256,7 +323,7 @@ def main() -> int:
 
     # 4) GPT 호출
     print(f"[i] GPT 호출 중 (model={args.model}) …", file=sys.stderr)
-    critique = call_openai(text, args.model)
+    critique = call_openai(text, args.model, system_prompt, user_prefix)
 
     header = f"# 🔍 외부 AI(GPT, {args.model}) 비평\n\n"
     result = header + critique

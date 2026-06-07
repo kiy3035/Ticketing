@@ -1,12 +1,16 @@
 ---
 name: review-with-gpt
-description: 현재 Claude Code와의 작업 대화를 외부 AI(OpenAI/GPT)에게 보내 "Claude가 놓친 것·잘못된 접근·더 나은 대안"을 비평받는다. 사용자가 "GPT한테 비평받아줘", "다른 AI한테 검토받아", "외부 AI 비평", "/review-with-gpt" 등을 말할 때 사용.
+description: 현재 Claude Code와의 작업 대화 또는 특정 PR을 외부 AI(OpenAI/GPT)에게 보내 "놓친 것·잘못된 접근·더 나은 대안"을 비평받는다. 사용자가 "GPT한테 비평받아줘", "다른 AI한테 검토받아", "외부 AI 비평", "/review-with-gpt", "/review-with-gpt 9"(PR 번호) 등을 말할 때 사용.
 ---
 
 # 다른 AI에게 비평받기 (review-with-gpt)
 
-막혔거나 한 번 더 검증하고 싶을 때, **현재 대화를 OpenAI(GPT)에게 보내 제3자 비평**을 받는다.
+막혔거나 한 번 더 검증하고 싶을 때, **현재 대화 또는 특정 PR을 OpenAI(GPT)에게 보내 제3자 비평**을 받는다.
 Claude가 스스로를 평가하면 편향되므로, 외부 모델의 시선을 빌리는 것이 목적이다.
+
+**두 가지 모드:**
+- **대화 모드**(기본): 현재 세션 대화를 비평 — 대화 중 이상함을 느꼈을 때.
+- **PR 모드**(`/review-with-gpt <PR번호>`): 해당 PR의 본문+diff를 비평 — PR을 읽다 이상할 때.
 
 ## ⚠️ 먼저 알릴 것 (외부 전송)
 - 이 스킬은 **현재 세션 대화 기록(transcript)을 OpenAI 서버로 전송**한다(코드·경로 포함).
@@ -24,13 +28,20 @@ Claude가 스스로를 평가하면 편향되므로, 외부 모델의 시선을 
    python .claude/skills/review-with-gpt/review_with_ai.py --dry-run --out /tmp/review_payload.md
    ```
    마스킹 결과를 확인시킨 뒤 진행한다.
-2. **비평 실행** (최신 세션 자동 탐지 → 마스킹 → GPT 호출):
-   ```bash
-   python .claude/skills/review-with-gpt/review_with_ai.py
-   ```
+2. **비평 실행**:
+   - **대화 모드** (최신 세션 자동 탐지 → 마스킹 → GPT 호출):
+     ```bash
+     python .claude/skills/review-with-gpt/review_with_ai.py
+     ```
+   - **PR 모드** (사용자가 PR 번호를 줬을 때 — 예: "PR 9 비평받아줘", "/review-with-gpt 9"):
+     ```bash
+     python .claude/skills/review-with-gpt/review_with_ai.py --pr 9
+     ```
+     `gh pr view`/`gh pr diff`로 PR 본문+diff를 가져온다. **`gh`(GitHub CLI)가 PATH에 있어야** 하며,
+     없으면 `GH_BIN` 환경변수로 경로 지정(예: `GH_BIN="/c/Program Files/GitHub CLI/gh.exe"`).
    - 모델 바꾸려면 `--model gpt-4o-mini` 등, 또는 `OPENAI_REVIEW_MODEL` 환경변수.
    - 특정 과거 세션을 보려면 `--transcript <경로.jsonl>`.
-   - 스크립트는 **현재 프로젝트의 가장 최근 .jsonl(=지금 이 세션)** 을 자동으로 고른다.
+   - 대화 모드는 **현재 프로젝트의 가장 최근 .jsonl(=지금 이 세션)** 을 자동으로 고른다.
 3. **결과 전달 (정직하게)**:
    - GPT의 비평을 **그대로 전달**한다. 불편한 지적이라고 누그러뜨리거나 숨기지 않는다.
    - 그다음 Claude의 입장을 덧붙인다: 타당한 지적은 **인정**하고 반영안을 제시,
