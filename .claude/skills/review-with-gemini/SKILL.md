@@ -43,7 +43,8 @@ Claude가 스스로를 평가하면 편향되므로, 외부 모델의 시선을 
      ```
      `gh pr view`/`gh pr diff`로 PR 본문+diff를 가져온다. **`gh`(GitHub CLI)가 PATH에 있어야** 하며,
      없으면 `GH_BIN` 환경변수로 경로 지정(예: `GH_BIN="/c/Program Files/GitHub CLI/gh.exe"`).
-   - 모델 바꾸려면 `--model gemini-1.5-flash` 등, 또는 `GEMINI_MODEL` 환경변수(기본 `gemini-2.0-flash`).
+   - 모델 바꾸려면 `--model gemini-2.5-flash`(품질↑) 등, 또는 `GEMINI_MODEL` 환경변수(기본 `gemini-2.5-flash-lite` — 무료 할당량 최대).
+     ⚠️ `gemini-2.0-flash`·`gemini-1.5-flash`는 2026-03-03 retire되어 사용 불가(429 limit:0 / 404 발생).
    - 특정 과거 세션을 보려면 `--transcript <경로.jsonl>`.
    - 대화 모드는 **현재 프로젝트의 가장 최근 .jsonl(=지금 이 세션)** 을 자동으로 고른다.
 3. **결과 전달 (정직하게)**:

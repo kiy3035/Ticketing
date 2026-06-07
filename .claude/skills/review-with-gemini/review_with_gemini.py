@@ -16,7 +16,7 @@ Gemini의 OpenAI 호환 엔드포인트를 사용한다(요청/응답이 OpenAI 
 환경변수:
   GEMINI_API_KEY    (필수) Google AI Studio에서 무료 발급한 Gemini API 키
                     (https://aistudio.google.com/apikey)
-  GEMINI_MODEL      (선택) 모델명. 기본 gemini-2.0-flash
+  GEMINI_MODEL      (선택) 모델명. 기본 gemini-2.5-flash-lite
   GEMINI_BASE_URL   (선택) 기본 https://generativelanguage.googleapis.com/v1beta/openai
 
 사용 예:
@@ -42,7 +42,10 @@ except Exception:
 
 # Gemini의 OpenAI 호환 엔드포인트 (요청/응답이 OpenAI chat/completions 형식과 동일)
 DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
-DEFAULT_MODEL = "gemini-2.0-flash"
+# 무료 티어가 있고 할당량이 가장 넉넉한 모델(2026-06 기준 1,500 req/day).
+# 주의: gemini-2.0-flash/1.5-flash는 2026-03-03자로 retire됨 → 사용 금지.
+# 품질이 더 필요하면 --model gemini-2.5-flash (무료 티어 있으나 할당량 적음).
+DEFAULT_MODEL = "gemini-2.5-flash-lite"
 
 
 # ──────────────────────────────────────────────────────────────────────────
