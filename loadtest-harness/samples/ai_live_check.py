@@ -31,8 +31,9 @@ if not os.environ.get("ANTHROPIC_API_KEY"):
     sys.exit(1)
 
 import yaml  # noqa: E402
-from k6_runner import RunResult  # noqa: E402
+
 import analyzer  # noqa: E402
+from k6_runner import RunResult  # noqa: E402
 
 # config의 analyzer 설정(모델 등) 사용 — 실제 모델 id 유효성도 함께 검증됨
 cfg = yaml.safe_load((HARNESS_DIR / "config.yaml").read_text(encoding="utf-8"))["analyzer"]

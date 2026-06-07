@@ -13,8 +13,8 @@ from pathlib import Path
 # 부모 디렉토리(하네스 루트)를 import path에 추가
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from k6_runner import RunResult  # noqa: E402
 import reporter  # noqa: E402
+from k6_runner import RunResult  # noqa: E402
 
 HARNESS_DIR = Path(__file__).resolve().parent.parent
 
