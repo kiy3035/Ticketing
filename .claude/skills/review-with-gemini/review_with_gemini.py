@@ -1,25 +1,28 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-review_with_ai.py — 현재 Claude Code 대화를 외부 AI(OpenAI/GPT)에게 보내 비평을 받는다.
+review_with_gemini.py — 현재 Claude Code 대화나 특정 PR을 Google Gemini에게 보내 비평을 받는다.
 
 흐름:
   1) 현재 프로젝트의 최신 transcript(.jsonl)를 자동 탐지해 읽기 좋은 텍스트로 변환
+     (또는 --pr 로 특정 PR의 본문+diff)
   2) API 키/토큰/비밀번호/JWT/PEM 등 비밀값을 정규식으로 마스킹
-  3) "Claude가 놓친 것·잘못된 접근·더 나은 대안을 날카롭게 지적하라"는 프롬프트로 GPT 호출
+  3) "Claude가 놓친 것·잘못된 접근·더 나은 대안을 날카롭게 지적하라"는 프롬프트로 Gemini 호출
   4) 비평을 stdout(+선택적 파일)으로 출력
 
+Gemini의 OpenAI 호환 엔드포인트를 사용한다(요청/응답이 OpenAI 형식과 동일).
 의존성 없음(표준 라이브러리 urllib만 사용). API 키는 환경변수에서만 읽는다(커밋 금지).
 
 환경변수:
-  OPENAI_API_KEY        (필수) OpenAI API 키
-  OPENAI_REVIEW_MODEL   (선택) 모델명. 기본 gpt-4o
-  OPENAI_BASE_URL       (선택) 기본 https://api.openai.com/v1
+  GEMINI_API_KEY    (필수) Google AI Studio에서 무료 발급한 Gemini API 키
+                    (https://aistudio.google.com/apikey)
+  GEMINI_MODEL      (선택) 모델명. 기본 gemini-2.0-flash
+  GEMINI_BASE_URL   (선택) 기본 https://generativelanguage.googleapis.com/v1beta/openai
 
 사용 예:
-  python review_with_ai.py                         # 최신 세션 자동 + GPT 호출
-  python review_with_ai.py --dry-run --out out.md  # 전송할 내용만 파일로(호출 안 함)
-  python review_with_ai.py --transcript path.jsonl --model gpt-4o
+  python review_with_gemini.py                         # 최신 세션 자동 + Gemini 호출
+  python review_with_gemini.py --pr 9                   # PR #9 비평
+  python review_with_gemini.py --dry-run --out out.md  # 전송할 내용만 파일로(호출 안 함)
 """
 import argparse
 import json
@@ -36,6 +39,10 @@ try:
     sys.stderr.reconfigure(encoding="utf-8")
 except Exception:
     pass
+
+# Gemini의 OpenAI 호환 엔드포인트 (요청/응답이 OpenAI chat/completions 형식과 동일)
+DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
+DEFAULT_MODEL = "gemini-2.0-flash"
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -136,7 +143,9 @@ def _mask_assignment(m: re.Match) -> str:
 MASK_PATTERNS = [
     # PEM 블록 (가장 먼저, DOTALL)
     (re.compile(r"-----BEGIN [^-]+-----.*?-----END [^-]+-----", re.DOTALL), "[MASKED:PEM]"),
-    # Anthropic / OpenAI 키
+    # Google(Gemini) API 키
+    (re.compile(r"AIza[0-9A-Za-z_\-]{35}"), "[MASKED:GOOGLE]"),
+    # Anthropic / OpenAI 키 (대화에 섞일 수 있어 함께 마스킹)
     (re.compile(r"sk-ant-[A-Za-z0-9_\-]{20,}"), "[MASKED:KEY]"),
     (re.compile(r"sk-[A-Za-z0-9_\-]{20,}"), "[MASKED:KEY]"),
     # GitHub 토큰
@@ -210,7 +219,7 @@ def build_pr_text(pr: str, diff_limit: int) -> str:
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# 4) OpenAI 호출
+# 4) Gemini 호출
 # ──────────────────────────────────────────────────────────────────────────
 SYSTEM_PROMPT_CONV = (
     "너는 까다롭고 경험 많은 시니어 백엔드 엔지니어다. "
@@ -238,14 +247,15 @@ SYSTEM_PROMPT_PR = (
 )
 
 
-def call_openai(text: str, model: str, system_prompt: str, user_prefix: str) -> str:
-    api_key = os.environ.get("OPENAI_API_KEY")
+def call_gemini(text: str, model: str, system_prompt: str, user_prefix: str) -> str:
+    api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         raise RuntimeError(
-            "OPENAI_API_KEY 환경변수가 없습니다. "
-            "PowerShell: $env:OPENAI_API_KEY=\"sk-...\" 로 설정 후 다시 실행하세요."
+            "GEMINI_API_KEY 환경변수가 없습니다. "
+            "https://aistudio.google.com/apikey 에서 무료 발급 후 "
+            "PowerShell: $env:GEMINI_API_KEY=\"AIza...\" 로 설정하고 다시 실행하세요."
         )
-    base = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
+    base = os.environ.get("GEMINI_BASE_URL", DEFAULT_BASE_URL).rstrip("/")
     url = f"{base}/chat/completions"
     payload = {
         "model": model,
@@ -269,19 +279,19 @@ def call_openai(text: str, model: str, system_prompt: str, user_prefix: str) -> 
             data = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", "replace")
-        raise RuntimeError(f"OpenAI API 오류 {e.code}: {body}") from e
+        raise RuntimeError(f"Gemini API 오류 {e.code}: {body}") from e
     return data["choices"][0]["message"]["content"]
 
 
 # ──────────────────────────────────────────────────────────────────────────
 def main() -> int:
-    ap = argparse.ArgumentParser(description="현재 Claude 대화를 GPT에게 보내 비평받기")
+    ap = argparse.ArgumentParser(description="현재 Claude 대화나 PR을 Gemini에게 보내 비평받기")
     ap.add_argument("--transcript", help="transcript .jsonl 경로(기본: 현재 프로젝트 최신 세션)")
     ap.add_argument("--pr", help="PR 번호/URL — 지정 시 대화 대신 해당 PR(본문+diff)을 비평")
-    ap.add_argument("--model", default=os.environ.get("OPENAI_REVIEW_MODEL", "gpt-4o"),
-                    help="OpenAI 모델 (기본 gpt-4o 또는 OPENAI_REVIEW_MODEL)")
+    ap.add_argument("--model", default=os.environ.get("GEMINI_MODEL", DEFAULT_MODEL),
+                    help=f"Gemini 모델 (기본 {DEFAULT_MODEL} 또는 GEMINI_MODEL)")
     ap.add_argument("--max-chars", type=int, default=240000,
-                    help="GPT에 보낼 최대 문자 수(초과 시 최근 대화 위주로 자름). 기본 240000")
+                    help="Gemini에 보낼 최대 문자 수(초과 시 최근 대화 위주로 자름). 기본 240000")
     ap.add_argument("--out", help="비평/전송내용을 저장할 파일 경로")
     ap.add_argument("--dry-run", action="store_true",
                     help="API 호출 없이 전송할 내용만 출력/저장(전송 전 검토용)")
@@ -312,7 +322,7 @@ def main() -> int:
         print(f"[i] 길이 초과로 최근 {args.max_chars}자만 전송", file=sys.stderr)
 
     if args.dry_run:
-        out = "# (DRY-RUN) GPT에 전송될 내용\n\n" + text
+        out = "# (DRY-RUN) Gemini에 전송될 내용\n\n" + text
         if args.out:
             with open(args.out, "w", encoding="utf-8") as f:
                 f.write(out)
@@ -321,11 +331,11 @@ def main() -> int:
             print(out)
         return 0
 
-    # 4) GPT 호출
-    print(f"[i] GPT 호출 중 (model={args.model}) …", file=sys.stderr)
-    critique = call_openai(text, args.model, system_prompt, user_prefix)
+    # 4) Gemini 호출
+    print(f"[i] Gemini 호출 중 (model={args.model}) …", file=sys.stderr)
+    critique = call_gemini(text, args.model, system_prompt, user_prefix)
 
-    header = f"# 🔍 외부 AI(GPT, {args.model}) 비평\n\n"
+    header = f"# 🔍 외부 AI(Gemini, {args.model}) 비평\n\n"
     result = header + critique
     if args.out:
         with open(args.out, "w", encoding="utf-8") as f:
