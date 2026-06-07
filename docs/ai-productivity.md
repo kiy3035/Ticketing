@@ -16,7 +16,8 @@
 | 부하 테스트 하네스 | [`loadtest-harness/`](../loadtest-harness/) | k6→수집→AI 진단→리포트 파이프라인 + pytest |
 | Claude Code 스킬 | [`.claude/skills/`](../.claude/skills/) | `loadtest-analyze` / `loadtest-compare` / `loadtest` / `commit` / `review-with-gemini` |
 | AI 교차검증 (Claude↔Gemini) | [`docs/ai-reviews/`](ai-reviews/), [`review-with-gemini`](../.claude/skills/review-with-gemini/) | Claude가 짠 코드를 Gemini로 비평 → 사람이 판단해 반영. 사례: [PR #1 하네스](ai-reviews/PR1-loadtest-harness.md) |
-| AI PR 리뷰 봇 | [`.github/scripts/ai_pr_review.py`](../.github/scripts/ai_pr_review.py), [`ai-pr-review.yml`](../.github/workflows/ai-pr-review.yml) | PR diff 자동 코드 리뷰 |
+| AI PR 리뷰 봇 | [`.github/scripts/ai_pr_review.py`](../.github/scripts/ai_pr_review.py), [`ai-pr-review.yml`](../.github/workflows/ai-pr-review.yml) | PR diff 자동 코드 리뷰 (범용) |
+| **도메인 가드레일** ⭐ | [`.github/scripts/domain_guard.py`](../.github/scripts/domain_guard.py), [`domain-guard.yml`](../.github/workflows/domain-guard.yml) | 이 프로젝트 **고유 불변식**(비밀값·하드코딩=결정적 / 락→트랜잭션 순서·@Transactional 범위=AI 보조)을 PR에서 강제 |
 | 주간 보안 점검(스케줄) | [`.github/scripts/security_audit_summary.py`](../.github/scripts/security_audit_summary.py), [`weekly-security-audit.yml`](../.github/workflows/weekly-security-audit.yml) | 매주 의존성 취약점 스캔(Trivy) → AI 요약 → Issue |
 | GitHub 연동 | `gh` CLI | 이슈/PR/Actions 조회·조작 (GitHub MCP 검토 후 CLI로 회귀 — 아래 참고) |
 | CI | [`.github/workflows/`](../.github/workflows/) | 하네스 pytest 자동, 배포 |
@@ -89,6 +90,15 @@ python run.py
 - PR을 올리면 `claude-opus-4-8`(env로 교체 가능)이 diff를 읽고 정확성/보안/성능/개선 관점으로 리뷰.
 - "1차 의견"으로 명시하고, 발견 사항에 심각도·확신도를 붙여 사람이 필터링하도록 했다.
 - 한계: GitHub 보안 정책상 포크 PR엔 secret이 없어 동작하지 않음(본인 레포 브랜치 PR에서 동작).
+
+### 도메인 가드레일 — 이 프로젝트만의 차별점 ⭐
+- 범용 AI 리뷰는 흔하다. 이건 **이 프로젝트 고유의 아키텍처 불변식**(CLAUDE.md 절대 규칙)을 강제한다.
+- **하이브리드**: 결정적 검사(신뢰의 핵심) + AI 보조(추정·확신도 표시).
+  - 결정적(정규식): 비밀값 커밋(CRITICAL→CI 차단), 임계치/타임아웃 하드코딩(WARNING)
+  - AI 보조(Gemini): **락→트랜잭션 순서 위반**, **@Transactional 과대 범위** — 동시성/분산락이라는 이 프로젝트의 정체성과 직결
+- 설계 원칙: **AI는 1차 의견, 최종 판단은 사람**. `GEMINI_API_KEY` 없으면 결정적 검사만(graceful).
+- 검증: 결정적 로직 pytest 4개 + 실제 위반 diff로 락-in-트랜잭션을 AI가 high 확신도로 탐지 확인.
+- 트레이드오프: 락 순서 같은 의미 판단은 AI라 오탐/미탐 가능 → 확신도 표시 + 사람 확인 전제. 비밀값만 CI를 막는다.
 
 ### 주간 보안 점검 (스케줄 자동화)
 - 매주 boot jar를 빌드해 **Trivy**로 의존성 취약점(HIGH/CRITICAL)을 스캔하고, 발견 시

@@ -1,0 +1,35 @@
+name: Domain Guard
+
+# 이 프로젝트의 '핵심 불변식'(CLAUDE.md 절대 규칙)을 PR diff에서 검사한다.
+# 범용 AI 리뷰(ai-pr-review)와 별개로, 동시성/락 등 도메인 특화 규칙에 집중:
+#   비밀값 커밋 · 임계치 하드코딩(결정적) / 락→트랜잭션 순서 · @Transactional 범위(AI 보조)
+#
+# 결정적 CRITICAL(비밀값)이면 스크립트가 exit 2 → 이 잡이 실패해 머지 전에 잡는다.
+# GEMINI_API_KEY secret이 없으면 AI 단계는 건너뛰고 결정적 검사만 수행(graceful).
+
+on:
+  pull_request:
+    paths:
+      - 'src/**/*.java'
+
+permissions:
+  contents: read
+  pull-requests: write   # 결과를 PR 코멘트로 게시
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run domain guard
+        env:
+          GH_TOKEN: ${{ github.token }}                 # gh pr diff / comment 인증
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }} # 없으면 AI 단계 자동 생략
+        run: python .github/scripts/domain_guard.py --pr ${{ github.event.pull_request.number }} --comment
