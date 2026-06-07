@@ -27,6 +27,25 @@ class RunResult:
     return_code: int = 0
 
 
+def _run_reset(reset_cmd: str) -> bool:
+    """각 k6 런 직전에 환경을 cold 상태로 되돌리는 명령(예: Redis flush) 실행.
+
+    "Redis cold 매 회차" 방법론 자동화용. 실패해도 파이프라인은 계속(경고만).
+    반환: 명령을 실제로 실행했으면 True, 비어 있어 건너뛰면 False.
+    """
+    if not reset_cmd:
+        return False
+    log.info("회차 리셋 실행: %s", reset_cmd)
+    try:
+        proc = subprocess.run(reset_cmd, shell=True, capture_output=True, text=True)
+        if proc.returncode != 0:
+            log.warning("리셋 명령 실패(rc=%d) — 잔여 상태로 진행 위험: %s",
+                        proc.returncode, (proc.stderr or "").strip()[:200])
+    except OSError as e:
+        log.warning("리셋 실행 예외: %s", e)
+    return True
+
+
 def _extract_metrics(summary_json: dict) -> dict:
     """k6 --summary-export JSON에서 포트폴리오에 필요한 핵심 지표만 추출.
 
@@ -67,7 +86,11 @@ def run_scenario(scenario: dict, k6_cfg: dict, harness_dir: Path) -> list[RunRes
     }
     base_env.update({k: str(v) for k, v in (scenario.get("env") or {}).items()})
 
+    reset_cmd = k6_cfg.get("reset_command")
     for i in range(1, repeat + 1):
+        # 회차 시작 전 환경 리셋(예: Redis flush) — "매 회차 cold" 방법론 자동화
+        _run_reset(reset_cmd)
+
         # 회차별 summary JSON을 별도 파일로 — 원본 보관 = 면접 시 검증 가능성 확보
         summary_path = harness_dir / "reports" / "_raw" / f"{name}_run{i}_summary.json"
         summary_path.parent.mkdir(parents=True, exist_ok=True)

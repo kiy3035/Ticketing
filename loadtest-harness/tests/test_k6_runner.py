@@ -1,5 +1,6 @@
-"""k6 summary JSON 파싱 검증 — 앱/ k6 없이 순수 함수만 테스트."""
-from k6_runner import _extract_metrics
+"""k6 summary JSON 파싱 + 리셋 훅 검증 — 앱/k6 없이 순수 함수만 테스트."""
+import k6_runner
+from k6_runner import _extract_metrics, _run_reset
 
 
 def test_extract_metrics_정상_요약_평탄화():
@@ -44,3 +45,40 @@ def test_extract_metrics_빈_요약():
 
     # then — 전부 None, 예외 없음
     assert all(v is None for v in m.values())
+
+
+class _FakeProc:
+    returncode = 0
+    stderr = ""
+
+
+def test_리셋_명령_있으면_실행(monkeypatch):
+    # given — reset_command 캡처용
+    captured = {}
+
+    def fake_run(cmd, shell, capture_output, text):
+        captured["cmd"] = cmd
+        captured["shell"] = shell
+        return _FakeProc()
+
+    monkeypatch.setattr(k6_runner.subprocess, "run", fake_run)
+
+    # when
+    ran = _run_reset("redis-cli flushdb")
+
+    # then — 셸로 그 명령을 실행
+    assert ran is True
+    assert captured["cmd"] == "redis-cli flushdb"
+    assert captured["shell"] is True
+
+
+def test_리셋_명령_비면_건너뜀(monkeypatch):
+    # given — subprocess.run이 호출되면 실패하도록
+    def boom(*a, **k):
+        raise AssertionError("빈 reset_command인데 명령이 실행됨")
+
+    monkeypatch.setattr(k6_runner.subprocess, "run", boom)
+
+    # when / then — 빈 값/None이면 실행 안 함
+    assert _run_reset("") is False
+    assert _run_reset(None) is False

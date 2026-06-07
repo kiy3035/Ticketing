@@ -7,6 +7,11 @@ k6:
   base_url: http://localhost:8080  # 부하 대상 (운영: nginx IP)
   concert_id: 1                    # 테스트 콘서트 ID
   repeat: 3                        # 회차 반복 — 기존 1회차/2회차/3회차 수동 작업을 자동화
+  # 각 회차(run) 시작 전에 실행할 리셋 명령 — "Redis cold 매 회차" 방법론 자동화.
+  # 비우면(기본) 리셋 없이 연속 실행 → run1 잔여 상태가 run2·3 오염 가능.
+  # 예) 전용 부하서버 Redis 비우기:  reset_command: "redis-cli -h <redis_ip> -p 6379 flushdb"
+  # 주의) JVM cold(run1만)는 하네스 밖 — 하네스 실행 '직전'에 앱서버를 재시작할 것.
+  reset_command: ""
   # 시나리오 목록. script 경로는 이 config 파일 기준 상대경로
   scenarios:
     - name: knee-point

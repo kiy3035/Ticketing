@@ -53,13 +53,20 @@ python run.py --repeat 1 --no-analyze  # 빠른 점검 (1회, AI 분석 생략)
 
 전제: k6 설치, 대상 앱 기동, Prometheus 접근 가능 (URL은 `config.yaml`).
 
+### 콜드/핫 방법론 (회차별 상태 제어)
+회차마다 동일 조건으로 재기 위해:
+- **Redis cold(매 회차)**: `config.yaml`의 `k6.reset_command`에 flush 명령을 넣으면 **매 런 직전 자동 실행**
+  (예: `redis-cli -h <redis_ip> flushdb`). 비우면 연속 실행이라 run1 잔여 상태가 run2·3을 오염시킬 수 있음.
+- **JVM cold(run1만)**: 하네스가 앱을 재시작하지 못하므로(앱은 별도 서버), **하네스 실행 직전 앱서버를 1회 재시작**.
+  이후 run2·3은 자연히 hot. (`knee-point.js`는 매 런 1분 워밍업 램프 내장)
+
 ## 테스트
 
-파싱·집계·메트릭 병합 등 순수 로직은 앱/인프라 없이 단위 테스트로 검증한다.
+파싱·집계·메트릭 병합·리셋 훅 등 순수 로직은 앱/인프라 없이 단위 테스트로 검증한다.
 
 ```bash
 pip install -r requirements-dev.txt
-pytest -q              # tests/ 11개 케이스
+pytest -q              # tests/ 13개 케이스
 ```
 
 `.github/workflows/loadtest-harness-ci.yml` 가 `loadtest-harness/**` 변경 시
