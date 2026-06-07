@@ -4,9 +4,14 @@ name: PR Merge Notify
 # 1인 워크플로우(본인이 만들고 본인이 머지)에서는 GitHub 기본 알림이
 # "자기 행동"에 메일을 안 보내므로, 머지 확인 메일을 직접 발송한다.
 #
-# 필요한 secret (레포 Settings > Secrets and variables > Actions):
-#   MAIL_USERNAME : Gmail 주소 (예: kiy3035@gmail.com)
-#   MAIL_PASSWORD : Gmail "앱 비밀번호" 16자리 (일반 비번 아님, 2단계 인증 필요)
+# 보안 권장: 발신 계정은 메인이 아닌 "전용/테스트 Gmail"을 쓴다.
+# 저장하는 앱 비밀번호가 버려도 되는 계정의 것이면, 유출 시 피해가 그 계정으로 격리된다.
+#
+# 필요한 secret (레포 Settings > Secrets and variables > Actions > Secrets):
+#   MAIL_USERNAME : 발신용 Gmail 주소 (전용/테스트 계정 권장)
+#   MAIL_PASSWORD : 그 발신 계정의 "앱 비밀번호" 16자리 (일반 비번 아님, 2단계 인증 필요)
+# 선택 variable (같은 화면 > Variables 탭, 비밀 아님):
+#   MAIL_TO : 알림을 받을 주소(메인 Gmail). 미설정 시 발신 계정으로 보냄.
 
 on:
   pull_request:
@@ -30,7 +35,7 @@ jobs:
           username: ${{ secrets.MAIL_USERNAME }}
           password: ${{ secrets.MAIL_PASSWORD }}
           from: GitHub Actions <${{ secrets.MAIL_USERNAME }}>
-          to: ${{ secrets.MAIL_USERNAME }}
+          to: ${{ vars.MAIL_TO || secrets.MAIL_USERNAME }}
           subject: "[Ticketing] PR #${{ github.event.pull_request.number }} 머지됨 — ${{ github.event.pull_request.title }}"
           body: |
             PR이 ${{ github.event.pull_request.base.ref }} 에 머지되었습니다.
