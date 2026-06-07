@@ -33,9 +33,10 @@ prometheus:
 
 analyzer:
   enabled: true
-  model: claude-opus-4-8           # 비용 절감 시 claude-sonnet-4-6
+  model: gemini-2.5-flash          # 무료 티어. 품질 더 필요하면 GEMINI_MODEL로 override
   max_tokens: 2000
-  # API 키는 환경변수 ANTHROPIC_API_KEY 에서 읽음 (config에 절대 평문 저장 금지)
+  # API 키는 환경변수 GEMINI_API_KEY 에서 읽음 (config에 절대 평문 저장 금지)
+  # 없으면 분석만 건너뛰고 원본 메트릭 표/차트는 그대로 생성됨
 
 report:
   output_dir: reports              # 이 config 파일 기준 상대경로

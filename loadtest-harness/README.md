@@ -24,7 +24,7 @@ k6 부하 테스트 실행 → 서버 메트릭 수집 → AI 보조 분석 → 
 python run.py
 → k6 N회 자동 실행 (회차별 summary JSON)
 → 회차별 실행 시간창의 Prometheus 메트릭 자동 수집 (p95 / 에러율 / 락경합 / 풀 / RPS)
-→ Claude API가 knee point·bottleneck 보조 진단
+→ Gemini API가 knee point·bottleneck 보조 진단 (무료 티어)
 → matplotlib 차트 + 회차 평균±표준편차 표 + 마크다운 리포트 자동 생성
 ```
 
@@ -36,7 +36,7 @@ python run.py
 | `run.py` | 오케스트레이터 (runner → collector → analyzer → reporter) |
 | `k6_runner.py` | k6 N회 실행 + summary JSON 파싱 + 시간창 기록 |
 | `prometheus_collector.py` | 시간창 동안 PromQL range query 수집 |
-| `analyzer.py` | Claude API 호출 → knee point/bottleneck 보조 분석 |
+| `analyzer.py` | Gemini API 호출 → knee point/bottleneck 보조 분석 (무료, 모델 교체 가능) |
 | `reporter.py` | matplotlib 차트 + 마크다운 리포트 생성 |
 | `reports/` | 생성된 리포트·차트·원본 summary JSON 보관 (커밋) |
 
@@ -44,7 +44,7 @@ python run.py
 
 ```bash
 pip install -r requirements.txt
-export ANTHROPIC_API_KEY=sk-...        # AI 분석용 (없으면 분석만 건너뛰고 진행)
+export GEMINI_API_KEY=...              # AI 분석용 (무료 티어, 없으면 분석만 건너뛰고 진행)
 
 python run.py                          # config의 모든 시나리오
 python run.py --scenario knee-point    # 특정 시나리오만
@@ -74,7 +74,7 @@ PR/푸시에서 자동으로 pytest를 돌린다 (앱 불필요).
 
 `.github/workflows/loadtest.yml` — `workflow_dispatch`로 시나리오·회차를 입력하면
 k6 서버에 SSH로 하네스를 실행하고 리포트를 아티팩트로 회수한다.
-필요한 Secrets: `K6_HOST`, `K6_SSH_KEY`, `ANTHROPIC_API_KEY` (워크플로우 상단 주석 참고).
+필요한 Secrets: `K6_HOST`, `K6_SSH_KEY`, `GEMINI_API_KEY` (워크플로우 상단 주석 참고).
 
 ## 설계 원칙
 

@@ -27,20 +27,20 @@ def test_프롬프트에_회차표와_서버메트릭_포함():
 
 def test_API키_없으면_분석_건너뜀(monkeypatch):
     # given — 키 미설정
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
 
     # when
     result = analyzer.analyze("knee-point", _runs(), _prom(),
-                              {"enabled": True, "model": "claude-opus-4-8"})
+                              {"enabled": True, "model": "gemini-2.5-flash"})
 
     # then — API 호출 없이 안내 문구 반환 (파이프라인 중단 안 함)
-    assert "ANTHROPIC_API_KEY" in result
+    assert "GEMINI_API_KEY" in result
 
 
 def test_비활성화시_건너뜀():
     # when — config에서 analyzer.enabled=false
     result = analyzer.analyze("knee-point", _runs(), _prom(),
-                              {"enabled": False, "model": "claude-opus-4-8"})
+                              {"enabled": False, "model": "gemini-2.5-flash"})
 
     # then
     assert "비활성화" in result
