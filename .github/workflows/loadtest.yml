@@ -5,9 +5,9 @@ name: Load test (manual)
 # deploy-prod.yml의 SSH/secrets 패턴을 재사용한다.
 #
 # 필요한 GitHub Secrets:
-#   K6_HOST           : k6 서버 public IP/도메인 (ubuntu 계정 가정)
-#   K6_SSH_KEY        : k6 서버 SSH 개인키 (PEM 전문)
-#   ANTHROPIC_API_KEY : Claude API 키 (AI 보조 분석용 — 없으면 분석만 생략됨)
+#   K6_HOST        : k6 서버 public IP/도메인 (ubuntu 계정 가정)
+#   K6_SSH_KEY     : k6 서버 SSH 개인키 (PEM 전문)
+#   GEMINI_API_KEY : Gemini API 키 (AI 보조 분석용 — 무료 티어, 없으면 분석만 생략됨)
 # 전제: k6 서버에 k6 / python3 / git 설치 + Prometheus 접근 가능
 #       대상 URL·Prometheus URL 등은 loadtest-harness/config.yaml 에서 관리
 
@@ -34,7 +34,7 @@ jobs:
         env:
           K6_HOST: ${{ secrets.K6_HOST }}
           K6_KEY: ${{ secrets.K6_SSH_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           SCENARIO: ${{ inputs.scenario }}
           REPEAT: ${{ inputs.repeat }}
         run: |
@@ -53,7 +53,7 @@ jobs:
             "cd ~/ticketing-harness/loadtest-harness && \
              python3 -m venv .venv && \
              .venv/bin/pip install -q -r requirements.txt && \
-             ANTHROPIC_API_KEY='${ANTHROPIC_API_KEY}' \
+             GEMINI_API_KEY='${GEMINI_API_KEY}' \
              .venv/bin/python run.py --scenario '${SCENARIO}' --repeat '${REPEAT}'"
 
           # 3) 생성된 리포트 회수

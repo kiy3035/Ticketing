@@ -1,9 +1,9 @@
 """
-AI 분석 실측 테스트 — analyzer가 실제 Claude API를 호출해 분석을 생성하는지 확인.
+AI 분석 실측 테스트 — analyzer가 실제 Gemini API를 호출해 분석을 생성하는지 확인.
 
-키는 화면에 노출하지 않는다. 아래 우선순위로 ANTHROPIC_API_KEY를 읽는다:
+키는 화면에 노출하지 않는다. 아래 우선순위로 GEMINI_API_KEY를 읽는다:
   1) 이미 설정된 환경변수
-  2) loadtest-harness/secrets.env 파일의 ANTHROPIC_API_KEY=... 줄 (gitignore됨)
+  2) loadtest-harness/secrets.env 파일의 GEMINI_API_KEY=... 줄 (gitignore됨)
 
 실행: python samples/ai_live_check.py
 (파일명을 test_* 로 두지 말 것 — pytest가 테스트로 수집해 CI가 깨진다)
@@ -13,11 +13,18 @@ import sys
 import time
 from pathlib import Path
 
+# Windows 콘솔(cp949)에서도 한글·기호가 깨지지 않도록 UTF-8 강제
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
 HARNESS_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(HARNESS_DIR))
 
 # secrets.env 로드 (환경변수에 없을 때만)
-if not os.environ.get("ANTHROPIC_API_KEY"):
+if not os.environ.get("GEMINI_API_KEY"):
     secrets = HARNESS_DIR / "secrets.env"
     if secrets.exists():
         for line in secrets.read_text(encoding="utf-8").splitlines():
@@ -26,8 +33,8 @@ if not os.environ.get("ANTHROPIC_API_KEY"):
                 k, v = line.split("=", 1)
                 os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
-if not os.environ.get("ANTHROPIC_API_KEY"):
-    print("❌ ANTHROPIC_API_KEY 없음. loadtest-harness/secrets.env 에 키를 넣거나 환경변수로 설정하세요.")
+if not os.environ.get("GEMINI_API_KEY"):
+    print("❌ GEMINI_API_KEY 없음. loadtest-harness/secrets.env 에 키를 넣거나 환경변수로 설정하세요.")
     sys.exit(1)
 
 import yaml  # noqa: E402
@@ -57,7 +64,7 @@ prom = [
     {"rps": {"max": 980.0, "mean": 840.0}, "hikari_pending": {"max": 11, "mean": 4}},
 ]
 
-print(f"▶ 모델: {cfg['model']} — Claude API 호출 중...\n")
+print(f"▶ 모델: {cfg['model']} — Gemini API 호출 중...\n")
 result = analyzer.analyze("knee-point", runs, prom, cfg)
 print("===== AI 분석 결과 =====\n")
 print(result)
