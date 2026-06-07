@@ -21,7 +21,12 @@ class PrometheusCollector:
         self.queries = prom_cfg["queries"]
 
     def _query_range(self, promql: str, start_ts: float, end_ts: float) -> list[tuple[float, float]]:
-        """range query 1건 실행 → [(ts, value)] 시계열 반환. 멀티시리즈는 동일 ts끼리 합산."""
+        """range query 1건 실행 → [(ts, value)] 시계열 반환. 멀티시리즈는 동일 ts끼리 합산.
+
+        주의: 합산은 인스턴스 분리 gauge를 합칠 때만 의도된 동작이다. 평균/개별값이
+        필요한 메트릭은 PromQL에서 미리 집계(sum()/avg() by ...)해 단일 시리즈로 만들 것.
+        여러 시리즈가 그대로 들어오면 합산되며, 의도치 않은 합산을 막기 위해 경고를 남긴다.
+        """
         resp = requests.get(
             f"{self.base_url}/api/v1/query_range",
             params={"query": promql, "start": start_ts, "end": end_ts, "step": self.step},
@@ -37,7 +42,11 @@ class PrometheusCollector:
         if not results:
             return []
 
-        # 여러 시리즈가 오면 timestamp 기준 합산 (instance 분리된 gauge 등)
+        # 여러 시리즈가 오면 timestamp 기준 합산 (instance 분리된 gauge 등).
+        # 합산이 의도와 다를 수 있으므로(예: 인스턴스별로 봐야 하는 메트릭) 가시화 경고.
+        if len(results) > 1:
+            log.warning("멀티시리즈 %d개를 timestamp별 합산함 — 개별값이 필요하면 "
+                        "PromQL에서 by(...)로 미리 집계할 것: %s", len(results), promql)
         merged: dict[float, float] = {}
         for series in results:
             for ts, val in series["values"]:

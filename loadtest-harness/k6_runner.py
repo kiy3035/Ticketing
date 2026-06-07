@@ -89,6 +89,14 @@ def run_scenario(scenario: dict, k6_cfg: dict, harness_dir: Path) -> list[RunRes
             # threshold 미달 시 k6는 rc=99로 끝남 — knee point 탐지에선 정상 상황이라 경고만
             log.warning("[%s] %d/%d k6 비정상 종료 — stderr 일부: %s",
                         name, i, repeat, (proc.stderr or "")[-300:])
+            # 300자 미리보기로는 원인 파악이 어려울 수 있어 stderr 전체를 파일로 보관(검증용)
+            if proc.stderr:
+                stderr_path = summary_path.with_name(f"{name}_run{i}_stderr.txt")
+                try:
+                    stderr_path.write_text(proc.stderr, encoding="utf-8")
+                    log.info("[%s] %d/%d stderr 전체 저장: %s", name, i, repeat, stderr_path)
+                except OSError as e:
+                    log.warning("[%s] %d/%d stderr 저장 실패: %s", name, i, repeat, e)
 
         summary = {}
         if summary_path.exists():

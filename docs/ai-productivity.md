@@ -14,7 +14,8 @@
 | 구성 요소 | 위치 | 무엇 |
 |-----------|------|------|
 | 부하 테스트 하네스 | [`loadtest-harness/`](../loadtest-harness/) | k6→수집→AI 진단→리포트 파이프라인 + pytest |
-| Claude Code 스킬 | [`.claude/skills/`](../.claude/skills/) | `loadtest-analyze` / `loadtest-compare` / `loadtest` / `commit` |
+| Claude Code 스킬 | [`.claude/skills/`](../.claude/skills/) | `loadtest-analyze` / `loadtest-compare` / `loadtest` / `commit` / `review-with-gemini` |
+| AI 교차검증 (Claude↔Gemini) | [`docs/ai-reviews/`](ai-reviews/), [`review-with-gemini`](../.claude/skills/review-with-gemini/) | Claude가 짠 코드를 Gemini로 비평 → 사람이 판단해 반영. 사례: [PR #1 하네스](ai-reviews/PR1-loadtest-harness.md) |
 | AI PR 리뷰 봇 | [`.github/scripts/ai_pr_review.py`](../.github/scripts/ai_pr_review.py), [`ai-pr-review.yml`](../.github/workflows/ai-pr-review.yml) | PR diff 자동 코드 리뷰 |
 | 주간 보안 점검(스케줄) | [`.github/scripts/security_audit_summary.py`](../.github/scripts/security_audit_summary.py), [`weekly-security-audit.yml`](../.github/workflows/weekly-security-audit.yml) | 매주 의존성 취약점 스캔(Trivy) → AI 요약 → Issue |
 | GitHub 연동 | `gh` CLI | 이슈/PR/Actions 조회·조작 (GitHub MCP 검토 후 CLI로 회귀 — 아래 참고) |
