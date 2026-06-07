@@ -32,6 +32,7 @@ import subprocess
 import sys
 import urllib.request
 import urllib.error
+from datetime import datetime
 
 # Windows 콘솔(cp949)에서도 이모지/한글이 깨지지 않도록 UTF-8 강제
 try:
@@ -296,10 +297,21 @@ def main() -> int:
     ap.add_argument("--max-chars", type=int, default=240000,
                     help="Gemini에 보낼 최대 문자 수(초과 시 최근 대화 위주로 자름). 기본 240000")
     ap.add_argument("--out", help="비평/전송내용을 저장할 파일 경로")
+    ap.add_argument("--save", action="store_true",
+                    help="docs/ai-reviews/ 아래에 날짜 파일로 자동 저장 (--out 없을 때 경로 자동 생성)")
     ap.add_argument("--dry-run", action="store_true",
                     help="API 호출 없이 전송할 내용만 출력/저장(전송 전 검토용)")
     ap.add_argument("--no-mask", action="store_true", help="비밀값 마스킹 비활성화(권장 안 함)")
     args = ap.parse_args()
+
+    # 저장 경로 결정: --out 우선, 없고 --save면 docs/ai-reviews/ 아래 날짜 파일 자동 생성
+    out_path = args.out
+    if args.save and not out_path:
+        stamp = datetime.now().strftime("%Y-%m-%d-%H%M")
+        label = f"PR{args.pr}" if args.pr else "session"
+        out_dir = os.path.join("docs", "ai-reviews")
+        os.makedirs(out_dir, exist_ok=True)
+        out_path = os.path.join(out_dir, f"{label}-{stamp}.md")
 
     # 1) 비평 대상 확보 — PR 모드 vs 대화(transcript) 모드
     if args.pr:
@@ -326,10 +338,10 @@ def main() -> int:
 
     if args.dry_run:
         out = "# (DRY-RUN) Gemini에 전송될 내용\n\n" + text
-        if args.out:
-            with open(args.out, "w", encoding="utf-8") as f:
+        if out_path:
+            with open(out_path, "w", encoding="utf-8") as f:
                 f.write(out)
-            print(f"[i] dry-run 내용 저장: {args.out}", file=sys.stderr)
+            print(f"[i] dry-run 내용 저장: {out_path}", file=sys.stderr)
         else:
             print(out)
         return 0
@@ -340,10 +352,10 @@ def main() -> int:
 
     header = f"# 🔍 외부 AI(Gemini, {args.model}) 비평\n\n"
     result = header + critique
-    if args.out:
-        with open(args.out, "w", encoding="utf-8") as f:
+    if out_path:
+        with open(out_path, "w", encoding="utf-8") as f:
             f.write(result)
-        print(f"[i] 비평 저장: {args.out}", file=sys.stderr)
+        print(f"[i] 비평 저장: {out_path}", file=sys.stderr)
     print(result)
     return 0
 
