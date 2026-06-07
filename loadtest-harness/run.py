@@ -64,28 +64,45 @@ def main():
     settle = int(cfg["prometheus"].get("settle_seconds", 5))
 
     reports = []
+    failed = []
+    # 시나리오 단위로 격리: 한 시나리오가 실패해도 나머지는 계속 진행한다.
     for scenario in scenarios:
-        log.info("===== 시나리오 시작: %s =====", scenario["name"])
-        runs = k6_runner.run_scenario(scenario, k6_cfg, HARNESS_DIR)
+        name = scenario["name"]
+        log.info("===== 시나리오 시작: %s =====", name)
+        try:
+            runs = k6_runner.run_scenario(scenario, k6_cfg, HARNESS_DIR)
 
-        # 마지막 스크랩이 Prometheus에 반영되도록 잠깐 대기 후 회차별 수집
-        time.sleep(settle)
-        prom_per_run = []
-        for r in runs:
-            log.info("[%s] %d회차 Prometheus 수집 (%.0f~%.0f)",
-                     scenario["name"], r.run_index, r.start_ts, r.end_ts)
-            prom_per_run.append(collector.collect(r.start_ts, r.end_ts))
+            # 마지막 스크랩이 Prometheus에 반영되도록 잠깐 대기 후 회차별 수집
+            time.sleep(settle)
+            prom_per_run = []
+            for r in runs:
+                log.info("[%s] %d회차 Prometheus 수집 (%.0f~%.0f)",
+                         name, r.run_index, r.start_ts, r.end_ts)
+                # 회차별 수집 실패가 시나리오 전체를 죽이지 않도록 격리 (빈 결과로 진행)
+                try:
+                    prom_per_run.append(collector.collect(r.start_ts, r.end_ts))
+                except Exception as e:
+                    log.error("[%s] %d회차 Prometheus 수집 실패 — 빈 결과로 진행: %s",
+                              name, r.run_index, e)
+                    prom_per_run.append({})
 
-        ai = analyzer.analyze(scenario["name"], runs, prom_per_run, cfg["analyzer"])
-        report_path = reporter.write_report(
-            scenario["name"], runs, prom_per_run, ai, cfg["report"], HARNESS_DIR
-        )
-        reports.append(report_path)
-        log.info("===== 시나리오 완료: %s =====", scenario["name"])
+            ai = analyzer.analyze(name, runs, prom_per_run, cfg["analyzer"])
+            report_path = reporter.write_report(
+                name, runs, prom_per_run, ai, cfg["report"], HARNESS_DIR
+            )
+            reports.append(report_path)
+            log.info("===== 시나리오 완료: %s =====", name)
+        except Exception as e:
+            log.error("===== 시나리오 실패, 건너뜀: %s — %s =====", name, e)
+            failed.append(name)
+            continue
 
     print("\n생성된 리포트:")
     for p in reports:
         print(f"  - {p}")
+    if failed:
+        print(f"\n실패해 건너뛴 시나리오 ({len(failed)}): {', '.join(failed)}")
+        sys.exit(1)  # 일부라도 실패하면 CI가 알 수 있도록 비정상 종료
 
 
 if __name__ == "__main__":
