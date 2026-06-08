@@ -59,9 +59,25 @@ jobs:
           # 3) 생성된 리포트 회수
           scp $SSHOPT -r "$REMOTE:~/ticketing-harness/loadtest-harness/reports" ./harness-reports
 
+      # 리포트는 게이트 결과와 무관하게 항상 업로드 (회귀로 실패해도 결과는 받아본다)
       - name: Upload report artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: loadtest-report-${{ inputs.scenario }}
           path: harness-reports/
           retention-days: 14
+
+      # 성능 회귀 게이트 — 기준선 대비 p95/RPS/에러율 퇴행 시 워크플로우 실패(차단)
+      - name: Performance regression gate
+        env:
+          K6_HOST: ${{ secrets.K6_HOST }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SCENARIO: ${{ inputs.scenario }}
+        run: |
+          REMOTE="ubuntu@$K6_HOST"
+          SSHOPT="-o StrictHostKeyChecking=no -i k6_key.pem"   # 이전 스텝에서 생성된 키 재사용
+          ssh $SSHOPT "$REMOTE" \
+            "cd ~/ticketing-harness/loadtest-harness && \
+             GEMINI_API_KEY='${GEMINI_API_KEY}' \
+             .venv/bin/python regression_gate.py --baseline 'baselines/${SCENARIO}.json' --explain"

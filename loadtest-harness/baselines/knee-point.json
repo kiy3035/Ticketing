@@ -1,0 +1,9 @@
+{
+  "scenario": "knee-point",
+  "_note": "수기 Phase 6(hot 2·3·재측정) 기반 기준선. AWS 본 측정 후 실측값으로 갱신 권장.",
+  "metrics": {
+    "rps":        {"baseline": 2360,  "direction": "higher_better", "max_regression_pct": 15},
+    "p95_ms":     {"baseline": 490,   "direction": "lower_better",  "max_regression_pct": 25},
+    "error_rate": {"baseline": 0.04,  "direction": "lower_better",  "max_abs_increase": 0.03}
+  }
+}
