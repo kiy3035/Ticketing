@@ -66,7 +66,7 @@ python run.py --repeat 1 --no-analyze  # 빠른 점검 (1회, AI 분석 생략)
 
 ```bash
 pip install -r requirements-dev.txt
-pytest -q              # tests/ 13개 케이스
+pytest -q              # tests/ 18개 케이스
 ```
 
 `.github/workflows/loadtest-harness-ci.yml` 가 `loadtest-harness/**` 변경 시
@@ -77,11 +77,24 @@ PR/푸시에서 자동으로 pytest를 돌린다 (앱 불필요).
 `reports/example/report.md` 는 하네스 출력 **형식**을 보여주는 합성 예시다
 (실측 아님, `samples/generate_sample.py`로 재생성). 회차 표·차트·AI 분석 자리를 확인할 수 있다.
 
+## 성능 회귀 게이트 (regression_gate.py)
+
+`run.py`가 회차 집계를 `reports/<ts>/summary.json`(run1 cold 제외, hot 평균)으로 남기면,
+게이트가 **기준선(`baselines/<scenario>.json`)과 비교**해 p95/RPS/에러율이 임계 이상
+퇴행하면 **exit 1**로 차단한다. CI에 붙이면 "성능이 나빠진 변경"을 머지 전에 잡는다.
+
+```bash
+python regression_gate.py --baseline baselines/knee-point.json            # reports/ 최신 자동
+python regression_gate.py --baseline baselines/knee-point.json --explain  # 회귀 시 Gemini 원인 가설
+```
+- 임계는 baseline JSON에서 외부화 (`max_regression_pct` / `max_abs_increase`).
+- 비교 로직(`evaluate`)은 순수 함수라 단위 테스트로 검증됨. AI(`--explain`)는 보조(없어도 동작).
+
 ## 실행 자동화 (수동 트리거)
 
 `.github/workflows/loadtest.yml` — `workflow_dispatch`로 시나리오·회차를 입력하면
-k6 서버에 SSH로 하네스를 실행하고 리포트를 아티팩트로 회수한다.
-필요한 Secrets: `K6_HOST`, `K6_SSH_KEY`, `GEMINI_API_KEY` (워크플로우 상단 주석 참고).
+k6 서버에 SSH로 하네스를 실행하고 리포트를 아티팩트로 회수한 뒤, **성능 회귀 게이트**까지 돌린다
+(회귀면 워크플로우 실패). 필요한 Secrets: `K6_HOST`, `K6_SSH_KEY`, `GEMINI_API_KEY`.
 
 ## 설계 원칙
 

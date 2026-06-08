@@ -11,7 +11,9 @@
   python run.py --repeat 1 --no-analyze  # 빠른 점검 (1회, AI 분석 생략)
 """
 import argparse
+import json
 import logging
+import statistics
 import sys
 import time
 from pathlib import Path
@@ -31,6 +33,29 @@ logging.basicConfig(
 log = logging.getLogger("harness")
 
 HARNESS_DIR = Path(__file__).resolve().parent
+
+
+def _write_summary(scenario: str, runs: list, report_path: Path) -> None:
+    """성능 회귀 게이트(regression_gate.py)가 비교할 집계 메트릭을 summary.json으로 저장.
+
+    수기 방법론과 맞춰 run1(JVM cold)은 제외하고 hot 회차 평균을 쓴다(회차 2개 이상일 때).
+    """
+    hot = runs[1:] if len(runs) > 1 else runs
+
+    def agg(key):
+        vals = [r.summary.get(key) for r in hot if isinstance(r.summary.get(key), (int, float))]
+        return round(statistics.fmean(vals), 4) if vals else None
+
+    summary = {
+        "scenario": scenario,
+        "runs_used": [r.run_index for r in hot],
+        "rps": agg("http_reqs_rate"),
+        "p95_ms": agg("http_req_duration_p95"),
+        "error_rate": agg("http_req_failed_rate"),
+    }
+    (report_path.parent / "summary.json").write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+    log.info("[%s] 집계 메트릭 저장 → summary.json (회차 %s)", scenario, summary["runs_used"])
 
 
 def load_config(path: Path) -> dict:
@@ -91,6 +116,7 @@ def main():
                 name, runs, prom_per_run, ai, cfg["report"], HARNESS_DIR
             )
             reports.append(report_path)
+            _write_summary(name, runs, report_path)   # 성능 회귀 게이트용 집계
             log.info("===== 시나리오 완료: %s =====", name)
         except Exception as e:
             log.error("===== 시나리오 실패, 건너뜀: %s — %s =====", name, e)
