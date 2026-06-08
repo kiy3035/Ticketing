@@ -58,6 +58,11 @@ def _build_user_prompt(scenario: str, runs: list, prom_per_run: list) -> str:
         ))
 
     lines.append("")
+    lines.append("## 단위 (반드시 이대로 해석할 것)")
+    lines.append("- 서버 `latency_p95`는 **초(s)** 단위다. 예: 1.22 = 1.22초(=1220ms). (k6 표의 p95/max는 ms)")
+    lines.append("- `rps`=req/s · `hikari_active`/`hikari_pending`=커넥션 수 · "
+                 "`queue_waiting`=대기 인원 · `*_conflict`/`*_failures`=초당 건수")
+    lines.append("")
     lines.append("## 서버측 Prometheus 메트릭 (회차별 윈도우 통계: max / mean)")
     for r, prom in zip(runs, prom_per_run):
         lines.append(f"### {r.run_index}회차")
