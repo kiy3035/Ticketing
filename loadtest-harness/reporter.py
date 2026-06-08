@@ -107,7 +107,7 @@ def write_report(scenario: str, runs: list, prom_per_run: list,
             md.append(f"\n### {p.stem}\n\n![{p.stem}]({rel})")
         md.append("")
 
-    md.append("## AI 보조 분석 (Claude)")
+    md.append("## AI 보조 분석 (Gemini)")
     md.append(ai_analysis + "\n")
 
     md.append("## 부록 — 원본 데이터")
