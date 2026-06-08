@@ -39,7 +39,9 @@ prometheus:
 analyzer:
   enabled: true
   model: gemini-2.5-flash          # 무료 티어. 품질 더 필요하면 GEMINI_MODEL로 override
-  max_tokens: 2000
+  # gemini-2.5-flash는 thinking(사고) 토큰을 쓰므로 출력이 잘리지 않게 넉넉히.
+  # (2000이면 thinking이 예산을 먹어 분석이 중간에 끊겼음)
+  max_tokens: 8000
   # API 키는 환경변수 GEMINI_API_KEY 에서 읽음 (config에 절대 평문 저장 금지)
   # 없으면 분석만 건너뛰고 원본 메트릭 표/차트는 그대로 생성됨
 
