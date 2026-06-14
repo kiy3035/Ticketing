@@ -70,3 +70,14 @@ tuning:
       min: 8
       max: 64
       desc: "Lettuce(Redis) 최대 활성 커넥션 (락/홀드 경로 병목 노브)"
+  # 전후(BEFORE→AFTER) 채택/롤백 판정 임계 — tuning_loop.decide()가 사용(하드코딩 금지)
+  decide:
+    improve_pct: 5.0     # rps↑ 또는 p95↓ 가 이 % 이상이면 '개선'으로 인정 → ADOPT 후보
+    regress_pct: 5.0     # 어떤 지표든 이 % 이상 악화면 무조건 ROLLBACK
+    error_abs: 0.01      # error_rate 절대 증가 허용폭(초과 시 ROLLBACK)
+  # --apply(실험적 적용) 설정 — 소스가 아니라 env override로만 적용한다.
+  apply:
+    # 제안 적용 후 앱을 재기동하는 명령(환경마다 다름 → 외부화). {env}/{value} 치환 가능.
+    # 비우면 --apply 불가(dry-run만). 예) "ssh app 'EXPORT {env}={value} && sudo systemctl restart app'"
+    restart_command: ""
+    warmup_seconds: 20   # 재기동 후 측정 전 워밍업(JVM/풀 안정화) 대기

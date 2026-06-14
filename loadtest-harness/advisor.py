@@ -188,14 +188,19 @@ def _call_gemini(system: str, user: str, model: str, max_tokens: int) -> str:
     return data["choices"][0]["message"]["content"]
 
 
-def advise(metrics: dict, cfg: dict) -> str:
-    """메트릭 → dry-run 제안 리포트(마크다운). 키 없거나 오류여도 graceful."""
+def propose(metrics: dict, cfg: dict) -> dict:
+    """메트릭 → 구조화 제안(가드레일 통과 후). tuning_loop가 적용에 쓸 수 있게 데이터로 반환.
+
+    반환: {scenario, accepted, rejected, ai_skipped, error}
+      error="disabled": 비활성화 / error=<msg>: AI 호출 실패 / None: 정상(키 없으면 ai_skipped=True)
+    """
     params = cfg.get("params") or {}
     scenario = metrics.get("scenario", "?")
+    base = {"scenario": scenario, "accepted": [], "rejected": [], "ai_skipped": False, "error": None}
     if not cfg.get("enabled", True):
-        return f"## 🔧 AI 튜닝 제안 — {scenario}\n\n_튜닝 어드바이저 비활성화(config.tuning.enabled=false)._"
+        return {**base, "error": "disabled"}
     if not os.environ.get("GEMINI_API_KEY"):
-        return render_md(scenario, [], [], ai_skipped=True)
+        return {**base, "ai_skipped": True}
     model = os.environ.get("GEMINI_MODEL") or cfg.get("model") or DEFAULT_MODEL
     prompt = _build_user_prompt(metrics, params)
     log.info("[%s] 튜닝 제안 요청 (model=%s)", scenario, model)
@@ -203,9 +208,21 @@ def advise(metrics: dict, cfg: dict) -> str:
         raw = _call_gemini(_SYSTEM, prompt, model, int(cfg.get("max_tokens", 4000)))
     except (urllib.error.URLError, KeyError, TimeoutError) as e:
         log.error("[%s] Gemini 호출 실패: %s", scenario, e)
-        return f"## 🔧 AI 튜닝 제안 — {scenario}\n\n_AI 호출 실패: {e}. 화이트리스트를 참고해 수동 검토._"
+        return {**base, "error": str(e)}
     accepted, rejected = sanitize(parse_proposals(raw), params)
-    return render_md(scenario, accepted, rejected, ai_skipped=False)
+    return {**base, "accepted": accepted, "rejected": rejected}
+
+
+def advise(metrics: dict, cfg: dict) -> str:
+    """메트릭 → dry-run 제안 리포트(마크다운). 키 없거나 오류여도 graceful."""
+    p = propose(metrics, cfg)
+    if p["error"] == "disabled":
+        return (f"## 🔧 AI 튜닝 제안 — {p['scenario']}\n\n"
+                "_튜닝 어드바이저 비활성화(config.tuning.enabled=false)._")
+    if p["error"]:
+        return (f"## 🔧 AI 튜닝 제안 — {p['scenario']}\n\n"
+                f"_AI 호출 실패: {p['error']}. 화이트리스트를 참고해 수동 검토._")
+    return render_md(p["scenario"], p["accepted"], p["rejected"], p["ai_skipped"])
 
 
 def _load_yaml(path: Path) -> dict:
