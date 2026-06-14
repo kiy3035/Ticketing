@@ -1,0 +1,14 @@
+{
+  "_note": "advisor.py dry-run 데모용 합성 메트릭(앱 불필요). knee-point AWS 기준선 수치 + 풀 고갈 신호를 의도적으로 섞음.",
+  "scenario": "knee-point",
+  "rps": 2503,
+  "p95_ms": 462,
+  "error_rate": 0.0342,
+  "signals": {
+    "hikari_active": {"max": 30, "mean": 29.6},
+    "hikari_pending": {"max": 18, "mean": 9.4},
+    "lock_acquire_failures": {"max": 0.8, "mean": 0.2},
+    "hold_conflict": {"max": 1.5, "mean": 0.6},
+    "queue_waiting": {"max": 1800, "mean": 1100}
+  }
+}

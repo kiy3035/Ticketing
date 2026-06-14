@@ -14,6 +14,7 @@
 | 구성 요소 | 위치 | 무엇 |
 |-----------|------|------|
 | 부하 테스트 하네스 | [`loadtest-harness/`](../loadtest-harness/) | k6→수집→AI 진단→리포트 파이프라인 + pytest |
+| **AI 튜닝 어드바이저** ⭐ | [`loadtest-harness/advisor.py`](../loadtest-harness/advisor.py) | 부하 결과→**구조화 튜닝 제안(JSON)**. 화이트리스트·범위 clamp를 코드가 강제(AI 신뢰 안 함). 현재 Step 1: dry-run 제안+가드레일. 자동 적용·전후 검증은 다음 단계 |
 | Claude Code 스킬 | [`.claude/skills/`](../.claude/skills/) | `loadtest-analyze` / `loadtest-compare` / `loadtest` / `commit` / `review-with-gemini` |
 | AI 교차검증 (Claude↔Gemini) | [`docs/ai-reviews/`](ai-reviews/), [`review-with-gemini`](../.claude/skills/review-with-gemini/) | Claude가 짠 코드를 Gemini로 비평 → 사람이 판단해 반영. 사례: [PR #1 하네스](ai-reviews/PR1-loadtest-harness.md) |
 | AI PR 리뷰 봇 | [`.github/scripts/ai_pr_review.py`](../.github/scripts/ai_pr_review.py), [`ai-pr-review.yml`](../.github/workflows/ai-pr-review.yml) | PR diff 자동 코드 리뷰 (범용) |
