@@ -48,3 +48,25 @@ analyzer:
 report:
   output_dir: reports              # 이 config 파일 기준 상대경로
   charts: true                     # matplotlib PNG 생성 (Grafana 수동 스크린샷 대체)
+
+# AI 튜닝 어드바이저 (advisor.py) — 부하 결과를 보고 '구조화된' 튜닝 제안을 낸다.
+# 가드레일: AI는 제안만, 적용 가능한 파라미터는 아래 화이트리스트뿐. 범위 밖 값은 코드가 clamp.
+# 의도적 제외: lock.ttl / hold.ttl 등 '정확성·UX'에 영향 주는 값은 자동 튜닝 대상이 아니다.
+#            (성능 안전 노브 = 커넥션 풀만 둔다.)
+tuning:
+  enabled: true
+  model: gemini-2.5-flash          # 분석기와 동일 무료 티어. GEMINI_MODEL로 override 가능
+  max_tokens: 4000
+  # 화이트리스트: env 이름(Spring relaxed binding) → 현재값/허용범위.
+  # current는 application.properties 값을 미러링한다(앱 코드 수정 없이 env override로 적용).
+  params:
+    SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE:
+      current: 30
+      min: 10
+      max: 80
+      desc: "HikariCP 최대 커넥션 풀 크기 (DB 커넥션 병목 노브)"
+    SPRING_DATA_REDIS_LETTUCE_POOL_MAX_ACTIVE:
+      current: 20
+      min: 8
+      max: 64
+      desc: "Lettuce(Redis) 최대 활성 커넥션 (락/홀드 경로 병목 노브)"
